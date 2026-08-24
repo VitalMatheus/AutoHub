@@ -1,0 +1,58 @@
+import { INestApplication } from '@nestjs/common';
+import { Test } from '@nestjs/testing';
+import request from 'supertest';
+import * as argon2 from 'argon2';
+import { AppModule } from '../../src/app.module';
+import { configureApplication } from '../../src/bootstrap';
+import { PrismaService } from '../../src/prisma/prisma.service';
+
+describe('Platform Organizations and activation (e2e)', () => {
+  let app: INestApplication;
+  let prisma: PrismaService;
+  const superEmail = `platform-${Date.now()}@example.com`;
+  const superPassword = 'correct horse battery staple';
+
+  beforeAll(async () => {
+    const moduleRef = await Test.createTestingModule({ imports: [AppModule] }).compile();
+    app = moduleRef.createNestApplication(); configureApplication(app); await app.init(); prisma = app.get(PrismaService);
+    await prisma.user.create({ data: { name: 'Platform Operator', email: superEmail, role: 'SUPER_ADMIN', status: 'ACTIVE', passwordHash: await argon2.hash(superPassword, { type: argon2.argon2id }) } });
+  });
+
+  afterAll(async () => { await prisma.user.delete({ where: { email: superEmail } }); await app.close(); });
+
+  it('provisions an Organization and a pending first admin transactionally', async () => {
+    const login = await request(app.getHttpServer()).post('/api/v1/auth/login').send({ email: superEmail, password: superPassword }).expect(201);
+    const email = `first-admin-${Date.now()}@example.com`;
+    const response = await request(app.getHttpServer()).post('/api/v1/platform/organizations').set('Authorization', `Bearer ${login.body.accessToken}`).send({ name: ' Oficina Central ', admin: { name: 'First Admin', email } }).expect(201);
+    expect(response.body.activationToken).toEqual(expect.any(String));
+    expect(response.body.organization.name).toBe('Oficina Central');
+    const admin = await prisma.user.findUnique({ where: { email } });
+    expect(admin).toEqual(expect.objectContaining({ status: 'PENDING_ACTIVATION', role: 'ADMIN' }));
+    const token = await prisma.actionToken.findFirst({ where: { userId: admin!.id } });
+    expect(token).toEqual(expect.objectContaining({ usedAt: null }));
+    expect(token!.tokenHash).not.toBe(response.body.activationToken);
+
+    await request(app.getHttpServer()).post('/api/v1/auth/activate').send({ token: response.body.activationToken, password: 'new secure password 123' }).expect(201);
+    await request(app.getHttpServer()).post('/api/v1/auth/activate').send({ token: response.body.activationToken, password: 'another secure password' }).expect(401);
+    expect((await prisma.user.findUnique({ where: { email } }))!.status).toBe('ACTIVE');
+  });
+
+  it('returns 403 to an Organization Admin on platform endpoints', async () => {
+    const organization = await prisma.organization.create({ data: { name: `Tenant-${Date.now()}` } });
+    const email = `tenant-admin-${Date.now()}@example.com`;
+    await prisma.user.create({ data: { organizationId: organization.id, name: 'Tenant Admin', email, role: 'ADMIN', status: 'ACTIVE', passwordHash: await argon2.hash(superPassword, { type: argon2.argon2id }) } });
+    const login = await request(app.getHttpServer()).post('/api/v1/auth/login').send({ email, password: superPassword }).expect(201);
+    await request(app.getHttpServer()).get('/api/v1/platform/organizations').set('Authorization', `Bearer ${login.body.accessToken}`).expect(403);
+  });
+
+  it('suspending an Organization revokes sessions and blocks the next request', async () => {
+    const organization = await prisma.organization.create({ data: { name: `Suspended-${Date.now()}` } });
+    const email = `suspended-admin-${Date.now()}@example.com`;
+    await prisma.user.create({ data: { organizationId: organization.id, name: 'Suspended Admin', email, role: 'ADMIN', status: 'ACTIVE', passwordHash: await argon2.hash(superPassword, { type: argon2.argon2id }) } });
+    const adminLogin = await request(app.getHttpServer()).post('/api/v1/auth/login').send({ email, password: superPassword }).expect(201);
+    const platformLogin = await request(app.getHttpServer()).post('/api/v1/auth/login').send({ email: superEmail, password: superPassword }).expect(201);
+    await request(app.getHttpServer()).post(`/api/v1/platform/organizations/${organization.id}/deactivate`).set('Authorization', `Bearer ${platformLogin.body.accessToken}`).expect(201);
+    await request(app.getHttpServer()).get('/api/v1/auth/me').set('Authorization', `Bearer ${adminLogin.body.accessToken}`).expect(401);
+    expect(await prisma.session.count({ where: { user: { email }, revokedAt: { not: null } } })).toBe(1);
+  });
+});

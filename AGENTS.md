@@ -12,6 +12,14 @@ Use the five default Matt Pocock triage labels. See `docs/agents/triage-labels.m
 
 Use the single-context domain-document layout. See `docs/agents/domain.md`.
 
+### Subagents
+
+- When implementing code, decompose the work into concrete tasks and create one subagent for each task that can be performed independently.
+- Give each subagent a focused scope, the relevant files and constraints, and a clear completion criterion.
+- Keep shared sequencing, integration, conflict resolution, and the final decision in the main agent. Do not delegate dependent tasks before their prerequisites are complete.
+- Ask subagents to report changed files, assumptions, checks run, and unresolved issues. Inspect their results before incorporating them.
+- After all subagents finish, run the relevant checks for the integrated change and verify that the implementation satisfies the original request and repository instructions.
+
 ## Working agreement
 
 ### Before changing code
