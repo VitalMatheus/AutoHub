@@ -1,0 +1,76 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_DB: autohub_test
+          POSTGRES_USER: autohub
+          POSTGRES_PASSWORD: ci-only-password
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U autohub -d autohub_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 12
+
+    env:
+      NODE_ENV: test
+      DATABASE_URL: postgresql://autohub:ci-only-password@localhost:5432/autohub_test?schema=public
+      CORS_ORIGINS: http://localhost:5173
+      JWT_ACCESS_SECRET: ci-only-jwt-access-secret-with-at-least-32-chars
+      JWT_ACCESS_TTL: 15m
+      REFRESH_TOKEN_TTL_DAYS: 30
+      ACTIVATION_TOKEN_TTL_DAYS: 3
+      ARGON2_MEMORY_COST: 65536
+      ARGON2_TIME_COST: 3
+      ARGON2_PARALLELISM: 1
+      THROTTLE_TTL: 60000
+      THROTTLE_LIMIT: 100
+      SWAGGER_ENABLED: true
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Generate Prisma client
+        run: npm run prisma:generate
+
+      - name: Validate Prisma schema
+        run: npm run prisma:validate
+
+      - name: Apply database migrations
+        run: npm run prisma:migrate:deploy
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Build
+        run: npm run build
+
+      - name: Run unit tests
+        run: npm test
+
+      - name: Run end-to-end tests
+        run: npm run test:e2e
