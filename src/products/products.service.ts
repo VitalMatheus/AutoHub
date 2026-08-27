@@ -1,6 +1,7 @@
 import { ConflictException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import type { AuthenticatedPrincipal } from '../auth/authenticated-principal';
+import { formatMoney } from '../common/money/format-money';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateProductDto } from './dto/create-product.dto';
 import { ListProductsDto } from './dto/list-products.dto';
@@ -10,6 +11,12 @@ const productSelect = {
   id: true, organizationId: true, name: true, description: true, sku: true, salePrice: true,
   active: true, createdAt: true, updatedAt: true,
 } as const;
+
+type ProductRecord = Prisma.ProductGetPayload<{ select: typeof productSelect }>;
+
+function serializeProduct(product: ProductRecord) {
+  return { ...product, salePrice: formatMoney(product.salePrice) };
+}
 
 @Injectable()
 export class ProductsService {
@@ -31,7 +38,7 @@ export class ProductsService {
   async create(principal: AuthenticatedPrincipal, dto: CreateProductDto) {
     const organizationId = this.tenant(principal);
     try {
-      return await this.prisma.product.create({
+      const product = await this.prisma.product.create({
         data: {
           organizationId,
           name: dto.name.trim(),
@@ -41,6 +48,7 @@ export class ProductsService {
         },
         select: productSelect,
       });
+      return serializeProduct(product);
     } catch (error) {
       this.mapConflict(error);
       throw error;
@@ -68,14 +76,14 @@ export class ProductsService {
       this.prisma.product.findMany({ where, select: productSelect, orderBy, skip: (page - 1) * pageSize, take: pageSize }),
       this.prisma.product.count({ where }),
     ]);
-    return { data, meta: { page, pageSize, total, totalPages: Math.ceil(total / pageSize) } };
+    return { data: data.map(serializeProduct), meta: { page, pageSize, total, totalPages: Math.ceil(total / pageSize) } };
   }
 
   async findOne(principal: AuthenticatedPrincipal, id: string) {
     const organizationId = this.tenant(principal);
     const product = await this.prisma.product.findFirst({ where: { id, organizationId }, select: productSelect });
     if (!product) throw new NotFoundException('Product not found');
-    return product;
+    return serializeProduct(product);
   }
 
   async update(principal: AuthenticatedPrincipal, id: string, dto: UpdateProductDto) {

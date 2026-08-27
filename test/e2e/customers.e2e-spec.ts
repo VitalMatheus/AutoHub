@@ -42,8 +42,13 @@ describe('Customers (e2e)', () => {
   });
 
   it('creates with the authenticated tenant and normalizes the document', async () => {
+    const before = await prisma.customer.count({ where: { organizationId } });
+    await request(app.getHttpServer()).post('/api/v1/customers').set('Authorization', `Bearer ${adminToken}`)
+      .send({ name: 'Injected tenant', document: '123.456.789-00', phone: '(85) 99999-0000', organizationId: otherOrganizationId }).expect(400);
+    expect(await prisma.customer.count({ where: { organizationId } })).toBe(before);
+
     const response = await request(app.getHttpServer()).post('/api/v1/customers').set('Authorization', `Bearer ${adminToken}`)
-      .send({ name: 'Maria Silva', document: '123.456.789-00', phone: '(85) 99999-0000', organizationId: otherOrganizationId }).expect(201);
+      .send({ name: 'Maria Silva', document: '123.456.789-00', phone: '(85) 99999-0000' }).expect(201);
     expect(response.body).toMatchObject({ organizationId, document: '12345678900', name: 'Maria Silva' });
   });
 

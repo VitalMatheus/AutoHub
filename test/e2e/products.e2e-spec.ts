@@ -42,9 +42,16 @@ describe('Products (e2e)', () => {
   });
 
   it('creates a tenant-scoped Product and returns its Decimal price as a string', async () => {
+    const before = await prisma.product.count({ where: { organizationId } });
+    await request(app.getHttpServer()).post('/api/v1/products')
+      .set('Authorization', `Bearer ${adminToken}`)
+      .send({ name: 'Injected tenant', salePrice: '149.90', organizationId: otherOrganizationId })
+      .expect(400);
+    expect(await prisma.product.count({ where: { organizationId } })).toBe(before);
+
     const response = await request(app.getHttpServer()).post('/api/v1/products')
       .set('Authorization', `Bearer ${adminToken}`)
-      .send({ name: 'Oil filter', description: 'Engine part', sku: ' of-001 ', salePrice: '149.90', organizationId: otherOrganizationId })
+      .send({ name: 'Oil filter', description: 'Engine part', sku: ' of-001 ', salePrice: '149.90' })
       .expect(201);
     expect(response.body).toMatchObject({ organizationId, name: 'Oil filter', sku: 'OF-001', salePrice: '149.90', active: true });
   });

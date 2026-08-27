@@ -42,9 +42,16 @@ describe('Services (e2e)', () => {
   });
 
   it('creates a tenant-scoped Service and returns its Decimal price as a string', async () => {
+    const before = await prisma.service.count({ where: { organizationId } });
+    await request(app.getHttpServer()).post('/api/v1/services')
+      .set('Authorization', `Bearer ${adminToken}`)
+      .send({ name: 'Injected tenant', price: '149.90', organizationId: otherOrganizationId })
+      .expect(400);
+    expect(await prisma.service.count({ where: { organizationId } })).toBe(before);
+
     const response = await request(app.getHttpServer()).post('/api/v1/services')
       .set('Authorization', `Bearer ${adminToken}`)
-      .send({ name: 'Oil change', description: 'Labor', price: '149.90', organizationId: otherOrganizationId })
+      .send({ name: 'Oil change', description: 'Labor', price: '149.90' })
       .expect(201);
     expect(response.body).toMatchObject({ organizationId, name: 'Oil change', price: '149.90', active: true });
   });

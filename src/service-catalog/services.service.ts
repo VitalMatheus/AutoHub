@@ -1,6 +1,7 @@
 import { ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import type { AuthenticatedPrincipal } from '../auth/authenticated-principal';
+import { formatMoney } from '../common/money/format-money';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateServiceDto } from './dto/create-service.dto';
 import { ListServicesDto } from './dto/list-services.dto';
@@ -10,6 +11,12 @@ const serviceSelect = {
   id: true, organizationId: true, name: true, description: true, price: true,
   active: true, createdAt: true, updatedAt: true,
 } as const;
+
+type ServiceRecord = Prisma.ServiceGetPayload<{ select: typeof serviceSelect }>;
+
+function serializeService(service: ServiceRecord) {
+  return { ...service, price: formatMoney(service.price) };
+}
 
 @Injectable()
 export class ServicesService {
@@ -24,10 +31,11 @@ export class ServicesService {
 
   async create(principal: AuthenticatedPrincipal, dto: CreateServiceDto) {
     const organizationId = this.tenant(principal);
-    return this.prisma.service.create({
+    const service = await this.prisma.service.create({
       data: { organizationId, name: dto.name.trim(), description: dto.description?.trim(), price: dto.price },
       select: serviceSelect,
     });
+    return serializeService(service);
   }
 
   async list(principal: AuthenticatedPrincipal, query: ListServicesDto) {
@@ -47,14 +55,14 @@ export class ServicesService {
       this.prisma.service.findMany({ where, select: serviceSelect, orderBy, skip: (page - 1) * pageSize, take: pageSize }),
       this.prisma.service.count({ where }),
     ]);
-    return { data, meta: { page, pageSize, total, totalPages: Math.ceil(total / pageSize) } };
+    return { data: data.map(serializeService), meta: { page, pageSize, total, totalPages: Math.ceil(total / pageSize) } };
   }
 
   async findOne(principal: AuthenticatedPrincipal, id: string) {
     const organizationId = this.tenant(principal);
     const service = await this.prisma.service.findFirst({ where: { id, organizationId }, select: serviceSelect });
     if (!service) throw new NotFoundException('Service not found');
-    return service;
+    return serializeService(service);
   }
 
   async update(principal: AuthenticatedPrincipal, id: string, dto: UpdateServiceDto) {

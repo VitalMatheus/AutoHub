@@ -51,8 +51,13 @@ describe('Vehicles (e2e)', () => {
   });
 
   it('creates with tenant Customer and normalizes the plate', async () => {
+    const before = await prisma.vehicle.count({ where: { organizationId } });
+    await request(app.getHttpServer()).post('/api/v1/vehicles').set('Authorization', `Bearer ${adminToken}`)
+      .send({ customerId, plate: 'abc-1d23', brand: 'Ford', model: 'Ka', mileage: 1000, organizationId: otherOrganizationId }).expect(400);
+    expect(await prisma.vehicle.count({ where: { organizationId } })).toBe(before);
+
     const response = await request(app.getHttpServer()).post('/api/v1/vehicles').set('Authorization', `Bearer ${adminToken}`)
-      .send({ customerId, plate: 'abc-1d23', brand: 'Ford', model: 'Ka', mileage: 1000, organizationId: otherOrganizationId }).expect(201);
+      .send({ customerId, plate: 'abc-1d23', brand: 'Ford', model: 'Ka', mileage: 1000 }).expect(201);
     expect(response.body).toMatchObject({ organizationId, customerId, plate: 'ABC1D23', mileage: 1000 });
   });
 
