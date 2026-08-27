@@ -33,6 +33,23 @@ describe('Quotes (e2e)', () => {
     const fetched = await request(app.getHttpServer()).get(`/api/v1/quotes/${quote.body.id}`).set('Authorization', `Bearer ${token}`).expect(200); expect(fetched.body.items[0]).toMatchObject({ description: 'Alignment service', unitPrice: '100.00' });
   });
 
+  it('allocates unique sequential numbers when drafts are created concurrently in one Organization', async () => {
+    const amount = 12;
+    const responses = await Promise.all(Array.from({ length: amount }, () =>
+      request(app.getHttpServer())
+        .post('/api/v1/quotes')
+        .set('Authorization', `Bearer ${token}`)
+        .send({ customerId, vehicleId })
+        .expect(201),
+    ));
+
+    const numbers = responses.map(({ body }) => body.number).sort((a, b) => a - b);
+    expect(new Set(numbers).size).toBe(amount);
+    expect(numbers).toEqual(Array.from({ length: amount }, (_, index) => index + 2));
+    await expect(prisma.organization.findUnique({ where: { id: organizationId }, select: { nextQuoteNumber: true } }))
+      .resolves.toMatchObject({ nextQuoteNumber: amount + 2 });
+  });
+
   it('rejects cross-tenant relationships and edits after leaving draft', async () => {
     const otherCustomer = await prisma.customer.create({ data: { organizationId: otherOrganizationId, name: 'Other', phone: '222' } }); const otherVehicle = await prisma.vehicle.create({ data: { organizationId: otherOrganizationId, customerId: otherCustomer.id, plate: `O${suffix}`, brand: 'VW', model: 'Golf' } });
     await request(app.getHttpServer()).post('/api/v1/quotes').set('Authorization', `Bearer ${token}`).send({ customerId: otherCustomer.id, vehicleId: otherVehicle.id }).expect(404);
