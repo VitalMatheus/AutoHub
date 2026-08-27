@@ -82,9 +82,13 @@ export class ProblemDetailsFilter implements ExceptionFilter {
     const customProblem = typeof exceptionResponse === 'object' && exceptionResponse !== null
       ? exceptionResponse as Record<string, unknown>
       : {};
-    if (status === HttpStatus.UNAUTHORIZED || status === HttpStatus.FORBIDDEN || status >= 500) {
+    if (status === HttpStatus.UNAUTHORIZED || status === HttpStatus.FORBIDDEN || status === HttpStatus.TOO_MANY_REQUESTS || status >= 500) {
       this.securityLogger.record({
-        event: status === HttpStatus.FORBIDDEN ? 'authorization.failure' : status >= 500 ? 'request.failure' : 'authentication.failure',
+        event: status === HttpStatus.FORBIDDEN
+          ? 'authorization.failure'
+          : status === HttpStatus.TOO_MANY_REQUESTS
+            ? 'rate_limit.failure'
+            : status >= 500 ? 'request.failure' : 'authentication.failure',
         method: request.method,
         path: request.route?.path ?? request.path,
         status,

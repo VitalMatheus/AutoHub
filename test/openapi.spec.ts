@@ -4,7 +4,7 @@ process.env.JWT_ACCESS_SECRET = 'test-only-jwt-access-secret-32-chars';
 
 import { Test } from '@nestjs/testing';
 import { AppModule } from '../src/app.module';
-import { configureApplication, createOpenApiDocument } from '../src/bootstrap';
+import { configureApplication, createOpenApiDocument, validateOpenApiContract } from '../src/bootstrap';
 
 describe('OpenAPI structure', () => {
   it('generates the required local contract without starting PostgreSQL', async () => {
@@ -26,7 +26,15 @@ describe('OpenAPI structure', () => {
     expect(JSON.stringify(document)).toEqual(expect.stringContaining('CONFIRMED'));
     expect(JSON.stringify(document)).toEqual(expect.stringContaining('SERVICE'));
     expect(JSON.stringify(document)).toEqual(expect.stringContaining('PENDING'));
+    expect(document.paths['/api/v1/customers']?.get?.responses['401']).toBeDefined();
+    expect(document.paths['/api/v1/customers']?.get?.responses['404']).toBeDefined();
+    expect(() => validateOpenApiContract(document)).not.toThrow();
 
     await app.close();
+  });
+
+  it('rejects an incomplete contract before it can be published', () => {
+    expect(() => validateOpenApiContract({ openapi: '2.0', info: { title: 'bad', version: '1' }, paths: {} } as never))
+      .toThrow('OpenAPI 3 document required');
   });
 });

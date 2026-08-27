@@ -1,4 +1,4 @@
-import { BadRequestException, ConflictException } from '@nestjs/common';
+import { BadRequestException, ConflictException, HttpException } from '@nestjs/common';
 import { ProblemDetailsFilter } from './problem-details.filter';
 
 describe('ProblemDetailsFilter', () => {
@@ -44,6 +44,15 @@ describe('ProblemDetailsFilter', () => {
       status: 409,
       code: 'PAYMENT_EXCEEDS_BALANCE',
       detail: 'Payment exceeds the Work Order balance.',
+    }));
+  });
+
+  it('records rate-limit failures as structured security events', () => {
+    const securityLogger = { record: jest.fn() };
+    const { host } = makeHost();
+    new ProblemDetailsFilter(securityLogger as never).catch(new HttpException('Too many requests', 429), host);
+    expect(securityLogger.record).toHaveBeenCalledWith(expect.objectContaining({
+      event: 'rate_limit.failure', status: 429,
     }));
   });
 });
