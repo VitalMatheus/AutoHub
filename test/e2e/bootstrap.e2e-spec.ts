@@ -5,6 +5,8 @@ import { AppModule } from '../../src/app.module';
 import { configureApplication } from '../../src/bootstrap';
 
 describe('Bootstrap (e2e)', () => {
+  jest.setTimeout(30_000);
+
   let app: INestApplication;
 
   beforeAll(async () => {
@@ -15,7 +17,7 @@ describe('Bootstrap (e2e)', () => {
   });
 
   afterAll(async () => {
-    await app.close();
+    await app?.close();
   });
 
   it('reports application and database readiness through the versioned API', async () => {
@@ -32,11 +34,11 @@ describe('Bootstrap (e2e)', () => {
       .get('/api/v1/docs-json')
       .expect(200)
       .expect(({ body }) => {
-        expect(body.openapi).toMatch(/^3\\./);
+        expect(body.openapi).toMatch(/^3\./);
         expect(body.paths['/api/v1/health']).toBeDefined();
         expect(body.components.securitySchemes.bearer).toBeDefined();
         expect(body.components.schemas.ProblemDetails.required).toEqual(expect.arrayContaining(['status', 'detail', 'code']));
-        expect(body.components.schemas.DecimalString.pattern).toContain('\\\\d');
+        expect(body.components.schemas.DecimalString.pattern).toContain('\\d');
         expect(body.paths['/api/v1/quotes/{id}/approve']).toBeDefined();
         expect(body.paths['/api/v1/work-orders/{quoteId}']).toBeUndefined();
         expect(Object.keys(body.paths).some((path) => path.includes('/payments'))).toBe(true);

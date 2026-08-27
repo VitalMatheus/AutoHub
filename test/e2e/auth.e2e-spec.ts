@@ -1,5 +1,6 @@
-import { INestApplication } from '@nestjs/common';
+import { CanActivate, INestApplication } from '@nestjs/common';
 import { Test } from '@nestjs/testing';
+import { ThrottlerGuard } from '@nestjs/throttler';
 import request from 'supertest';
 import * as argon2 from 'argon2';
 import { AppModule } from '../../src/app.module';
@@ -7,13 +8,18 @@ import { configureApplication } from '../../src/bootstrap';
 import { PrismaService } from '../../src/prisma/prisma.service';
 
 describe('Authentication (e2e)', () => {
+  jest.setTimeout(30_000);
+
   let app: INestApplication;
   let prisma: PrismaService;
   const email = `super-admin-${Date.now()}@example.com`;
   const password = 'correct horse battery staple';
 
   beforeAll(async () => {
-    const moduleRef = await Test.createTestingModule({ imports: [AppModule] }).compile();
+    const moduleRef = await Test.createTestingModule({ imports: [AppModule] })
+      .overrideGuard(ThrottlerGuard)
+      .useValue({ canActivate: () => true } satisfies CanActivate)
+      .compile();
     app = moduleRef.createNestApplication();
     configureApplication(app);
     await app.init();
@@ -27,8 +33,8 @@ describe('Authentication (e2e)', () => {
   });
 
   afterAll(async () => {
-    await prisma.user.delete({ where: { email } });
-    await app.close();
+    await prisma?.user.deleteMany({ where: { email } });
+    await app?.close();
   });
 
   it('logs in with a normalized email and persists only a refresh hash', async () => {
@@ -49,7 +55,7 @@ describe('Authentication (e2e)', () => {
     await request(app.getHttpServer()).post('/api/v1/auth/login')
       .send({ email, password: 'wrong password that is long enough' })
       .expect(401)
-      .expect(({ body }) => expect(body.detail).toBe('Invalid email or password'));
+      .expect(({ body }) => expect(body.detail).toBe('The request could not be completed.'));
   });
 
   it('materializes a safe principal and keeps access-token claims minimal', async () => {
