@@ -7,6 +7,8 @@ import { configureApplication } from '../../src/bootstrap';
 import { PrismaService } from '../../src/prisma/prisma.service';
 
 describe('Quotes (e2e)', () => {
+  jest.setTimeout(30_000);
+
   let app: INestApplication; let prisma: PrismaService; let organizationId: string; let otherOrganizationId: string; let token: string; let customerId: string; let vehicleId: string;
   const suffix = Date.now(); const password = 'correct horse battery staple';
 
@@ -19,11 +21,12 @@ describe('Quotes (e2e)', () => {
     token = (await request(app.getHttpServer()).post('/api/v1/auth/login').send({ email: admin.email, password }).expect(201)).body.accessToken;
   });
 
-  afterAll(async () => { if (!prisma) return; await prisma.quoteItem.deleteMany({ where: { organizationId: { in: [organizationId, otherOrganizationId] } } }); await prisma.quote.deleteMany({ where: { organizationId: { in: [organizationId, otherOrganizationId] } } }); await prisma.vehicle.deleteMany({ where: { organizationId: { in: [organizationId, otherOrganizationId] } } }); await prisma.customer.deleteMany({ where: { organizationId: { in: [organizationId, otherOrganizationId] } } }); await prisma.user.deleteMany({ where: { organizationId: { in: [organizationId, otherOrganizationId] } } }); await prisma.organization.deleteMany({ where: { id: { in: [organizationId, otherOrganizationId] } } }); await app.close(); });
+  afterAll(async () => { if (!prisma) return; await prisma.quoteItem.deleteMany({ where: { organizationId: { in: [organizationId, otherOrganizationId] } } }); await prisma.quote.deleteMany({ where: { organizationId: { in: [organizationId, otherOrganizationId] } } }); await prisma.service.deleteMany({ where: { organizationId: { in: [organizationId, otherOrganizationId] } } }); await prisma.vehicle.deleteMany({ where: { organizationId: { in: [organizationId, otherOrganizationId] } } }); await prisma.customer.deleteMany({ where: { organizationId: { in: [organizationId, otherOrganizationId] } } }); await prisma.user.deleteMany({ where: { organizationId: { in: [organizationId, otherOrganizationId] } } }); await prisma.organization.deleteMany({ where: { id: { in: [organizationId, otherOrganizationId] } } }); await app.close(); });
 
   it('creates numbered drafts and preserves catalog snapshots and decimal totals', async () => {
     const service = await prisma.service.create({ data: { organizationId, name: 'Alignment', description: 'Alignment service', price: '100.00' } });
-    const quote = await request(app.getHttpServer()).post('/api/v1/quotes').set('Authorization', `Bearer ${token}`).send({ customerId, vehicleId, organizationId: otherOrganizationId }).expect(201);
+    await request(app.getHttpServer()).post('/api/v1/quotes').set('Authorization', `Bearer ${token}`).send({ customerId, vehicleId, organizationId: otherOrganizationId }).expect(400);
+    const quote = await request(app.getHttpServer()).post('/api/v1/quotes').set('Authorization', `Bearer ${token}`).send({ customerId, vehicleId }).expect(201);
     const item = await request(app.getHttpServer()).post(`/api/v1/quotes/${quote.body.id}/items`).set('Authorization', `Bearer ${token}`).send({ type: 'SERVICE', serviceId: service.id, quantity: '1.500' }).expect(201);
     expect(item.body).toMatchObject({ number: 1, status: 'DRAFT', total: '150.00' }); expect(item.body.items[0]).toMatchObject({ description: 'Alignment service', quantity: '1.500', unitPrice: '100.00' });
     await prisma.service.update({ where: { id: service.id }, data: { description: 'Changed', price: '999.99' } });

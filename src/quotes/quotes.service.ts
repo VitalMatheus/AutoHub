@@ -7,7 +7,7 @@ import { CreateQuoteItemDto } from './dto/create-quote-item.dto';
 import { ListQuotesDto } from './dto/list-quotes.dto';
 import { UpdateQuoteDto } from './dto/update-quote.dto';
 import { UpdateQuoteItemDto } from './dto/update-quote-item.dto';
-import { sumTotals } from './decimal';
+import { fixedScale, sumTotals } from './decimal';
 
 type ItemInput = CreateQuoteItemDto | UpdateQuoteItemDto;
 type QuoteAction = 'submit' | 'approve' | 'reject' | 'cancel';
@@ -61,7 +61,7 @@ export class QuotesService {
   }
 
   private format(quote: any) {
-    const items = quote.items.map((item: any) => ({ ...item, quantity: item.quantity.toString(), unitPrice: item.unitPrice.toString() }));
+    const items = quote.items.map((item: any) => ({ ...item, quantity: fixedScale(item.quantity, 3), unitPrice: fixedScale(item.unitPrice, 2) }));
     return { ...quote, items, total: sumTotals(items) };
   }
 

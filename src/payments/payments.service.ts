@@ -28,7 +28,7 @@ export class PaymentsService {
   private async lockedWorkOrder(tx: Prisma.TransactionClient, organizationId: string, workOrderId: string) {
     const locked = await tx.$queryRaw<Array<{ id: string; status: string }>>`
       SELECT "id", "status" FROM "WorkOrder"
-      WHERE "id" = ${workOrderId} AND "organizationId" = ${organizationId}
+      WHERE "id" = ${workOrderId}::uuid AND "organizationId" = ${organizationId}::uuid
       FOR UPDATE
     `;
     if (locked.length === 0) throw new NotFoundException('Work Order not found');
@@ -48,7 +48,7 @@ export class PaymentsService {
   private format(payment: PaymentRecord, state: { total: bigint; paid: bigint; balance: bigint; status: string }) {
     return {
       ...payment,
-      amount: payment.amount.toString(),
+      amount: money(cents(payment.amount.toString())),
       paidAt: payment.paidAt instanceof Date ? payment.paidAt.toISOString() : payment.paidAt,
       financial: { total: money(state.total), paid: money(state.paid), balance: money(state.balance), status: state.status },
     };

@@ -57,6 +57,6 @@ describe('Payments (e2e)', () => {
     expect(results.filter((result) => result.status === 201)).toHaveLength(1);
     expect(results.filter((result) => result.status === 409 && result.body.code === 'PAYMENT_EXCEEDS_BALANCE')).toHaveLength(1);
     const confirmed = await prisma.payment.aggregate({ where: { organizationId, workOrderId, status: 'CONFIRMED' }, _sum: { amount: true } });
-    expect(confirmed._sum.amount?.toString()).toBe('60.00');
+    expect(confirmed._sum.amount?.toFixed(2)).toBe('60.00');
   });
 });

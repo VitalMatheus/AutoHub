@@ -2,7 +2,7 @@ import { BadRequestException, ConflictException, ForbiddenException, Injectable,
 import { Prisma } from '@prisma/client';
 import type { AuthenticatedPrincipal } from '../auth/authenticated-principal';
 import { PrismaService } from '../prisma/prisma.service';
-import { sumTotals, totalOf } from '../quotes/decimal';
+import { fixedScale, sumTotals, totalOf } from '../quotes/decimal';
 import { CreateWorkOrderDto } from './dto/create-work-order.dto';
 import { CreateWorkOrderItemDto } from './dto/create-work-order-item.dto';
 import { ListWorkOrdersDto } from './dto/list-work-orders.dto';
@@ -54,7 +54,7 @@ export class WorkOrdersService {
   }
 
   private format(workOrder: any) {
-    const items = (workOrder.items ?? []).map((item: any) => ({ ...item, quantity: item.quantity.toString(), unitPrice: item.unitPrice.toString(), total: totalOf(item.quantity.toString(), item.unitPrice.toString()) }));
+    const items = (workOrder.items ?? []).map((item: any) => ({ ...item, quantity: fixedScale(item.quantity, 3), unitPrice: fixedScale(item.unitPrice, 2), total: totalOf(item.quantity.toString(), item.unitPrice.toString()) }));
     return { ...workOrder, items, total: sumTotals(items) };
   }
 
@@ -80,7 +80,7 @@ export class WorkOrdersService {
         // Serialize conversions for this Quote before checking its current Work Order.
         const lockedQuote = await tx.$queryRaw<Array<{ id: string }>>`
           SELECT "id" FROM "Quote"
-          WHERE "id" = ${quoteId} AND "organizationId" = ${organizationId}
+          WHERE "id" = ${quoteId}::uuid AND "organizationId" = ${organizationId}::uuid
           FOR UPDATE
         `;
         if (lockedQuote.length === 0) throw new NotFoundException('Quote not found');
