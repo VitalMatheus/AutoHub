@@ -10,3 +10,12 @@ export async function getCurrentPrincipal(): Promise<Principal> {
   const response = await httpClient.get<Principal>('/auth/me');
   return response.data;
 }
+
+export async function refresh(): Promise<AccessTokens> {
+  const response = await httpClient.post<AccessTokens>('/auth/refresh');
+  return response.data;
+}
+
+export async function logout(): Promise<void> {
+  await httpClient.post('/auth/logout');
+}

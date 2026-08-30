@@ -5,7 +5,9 @@ export type AuthContextValue = {
   principal: Principal | null;
   isAuthenticated: boolean;
   isSigningIn: boolean;
+  isRestoring: boolean;
   signIn: (email: string, password: string) => Promise<void>;
+  signOut: () => Promise<void>;
 };
 
 export const AuthContext = createContext<AuthContextValue | null>(null);

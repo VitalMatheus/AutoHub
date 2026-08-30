@@ -1,12 +1,47 @@
-import { useState, type PropsWithChildren } from 'react';
-import { ApiError, setAccessToken } from '@/shared/api/http';
+import { useEffect, useRef, useState, type PropsWithChildren } from 'react';
+import { ApiError, setAccessToken, setRefreshAccessTokenHandler, setRefreshFailureHandler } from '@/shared/api/http';
 import type { Principal } from '@/shared/types/auth';
-import { getCurrentPrincipal, login } from './api/auth-api';
+import { getCurrentPrincipal, login, logout, refresh } from './api/auth-api';
 import { AuthContext } from './auth-context';
 
 export function AuthProvider({ children }: PropsWithChildren) {
   const [principal, setPrincipal] = useState<Principal | null>(null);
   const [isSigningIn, setIsSigningIn] = useState(false);
+  const [isRestoring, setIsRestoring] = useState(true);
+  const restorationStarted = useRef(false);
+
+  useEffect(() => {
+    const refreshAccessToken = async (): Promise<string> => {
+      const tokens = await refresh();
+      setAccessToken(tokens.accessToken);
+      return tokens.accessToken;
+    };
+
+    setRefreshAccessTokenHandler(refreshAccessToken);
+    setRefreshFailureHandler(() => {
+      setAccessToken(null);
+      setPrincipal(null);
+    });
+    if (restorationStarted.current) return () => {
+      setRefreshAccessTokenHandler(null);
+      setRefreshFailureHandler(null);
+    };
+    restorationStarted.current = true;
+
+    void refreshAccessToken()
+      .then(() => getCurrentPrincipal())
+      .then(setPrincipal)
+      .catch(() => {
+        setAccessToken(null);
+        setPrincipal(null);
+      })
+      .finally(() => setIsRestoring(false));
+
+    return () => {
+      setRefreshAccessTokenHandler(null);
+      setRefreshFailureHandler(null);
+    };
+  }, []);
 
   async function signIn(email: string, password: string): Promise<void> {
     setIsSigningIn(true);
@@ -25,5 +60,15 @@ export function AuthProvider({ children }: PropsWithChildren) {
     }
   }
 
-  return <AuthContext.Provider value={{ principal, isAuthenticated: principal !== null, isSigningIn, signIn }}>{children}</AuthContext.Provider>;
+  async function signOut(): Promise<void> {
+    setAccessToken(null);
+    setPrincipal(null);
+    try {
+      await logout();
+    } catch {
+      // Local state is cleared even if the network request cannot complete.
+    }
+  }
+
+  return <AuthContext.Provider value={{ principal, isAuthenticated: principal !== null, isSigningIn, isRestoring, signIn, signOut }}>{children}</AuthContext.Provider>;
 }
