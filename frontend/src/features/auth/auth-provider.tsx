@@ -62,12 +62,13 @@ export function AuthProvider({ children }: PropsWithChildren) {
   }
 
   async function signOut(): Promise<void> {
-    setAccessToken(null);
-    setPrincipal(null);
     try {
       await logout();
     } catch {
       // Local state is cleared even if the network request cannot complete.
+    } finally {
+      setAccessToken(null);
+      setPrincipal(null);
     }
   }
 

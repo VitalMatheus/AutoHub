@@ -134,6 +134,27 @@ describe('Organization Admin frontend shell', () => {
     expect(getAccessToken()).toBeNull();
   });
 
+  it('attempts logout while the access token is still available', async () => {
+    const user = userEvent.setup();
+    const post = vi.spyOn(httpClient, 'post').mockImplementation((url) => {
+      if (url === '/auth/refresh') return Promise.reject(new ApiError({ status: 401, detail: 'Sessão inválida.', code: 'HTTP_401' }));
+      if (url === '/auth/login') return Promise.resolve({ data: { accessToken: 'access-token', expiresIn: 900, tokenType: 'Bearer' } }) as never;
+      return Promise.resolve({ data: { success: true } }) as never;
+    });
+    vi.spyOn(httpClient, 'get').mockResolvedValue({ data: principal } as never);
+
+    render(<AppProviders />);
+    await screen.findByRole('heading', { name: 'Entrar na oficina' });
+    await user.type(screen.getByLabelText('E-mail'), 'ana@example.com');
+    await user.type(screen.getByLabelText('Senha'), 'correct horse battery staple');
+    await user.click(screen.getByRole('button', { name: 'Entrar' }));
+    await screen.findByRole('heading', { name: 'Sua oficina está pronta' });
+    await user.click(screen.getByRole('button', { name: 'Sair' }));
+
+    expect(post).toHaveBeenCalledWith('/auth/logout');
+    expect(getAccessToken()).toBeNull();
+  });
+
   it('sends a restored Super Admin to the separate platform shell', async () => {
     vi.spyOn(httpClient, 'post').mockResolvedValue({ data: { accessToken: 'restored-token', expiresIn: 900, tokenType: 'Bearer' } } as never);
     vi.spyOn(httpClient, 'get').mockResolvedValue({ data: superAdmin } as never);

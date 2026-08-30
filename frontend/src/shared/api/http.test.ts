@@ -62,4 +62,26 @@ describe('HTTP authentication boundary', () => {
     await expect(httpClient.post('/auth/refresh')).rejects.toThrow('refresh failed');
     expect(post).toHaveBeenCalledTimes(1);
   });
+
+  it('does not start another refresh after the retried request receives 401', async () => {
+    let refreshRequests = 0;
+    const adapter = httpClient.defaults.adapter;
+    httpClient.defaults.adapter = async (config) => {
+      throw new AxiosError('expired', 'ERR_BAD_RESPONSE', config, undefined, {
+        status: 401,
+        statusText: 'Unauthorized',
+        headers: {},
+        config,
+        data: { status: 401, detail: 'Sessão expirada.', code: 'HTTP_401' },
+      });
+    };
+    setRefreshAccessTokenHandler(async () => {
+      refreshRequests += 1;
+      return 'fresh-token';
+    });
+
+    await expect(httpClient.get('/customers')).rejects.toThrow('Sessão expirada.');
+    expect(refreshRequests).toBe(1);
+    httpClient.defaults.adapter = adapter;
+  });
 });
