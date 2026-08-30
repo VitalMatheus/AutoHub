@@ -44,11 +44,17 @@ describe('Authentication (e2e)', () => {
 
     expect(response.body).toEqual(expect.objectContaining({
       tokenType: 'Bearer', expiresIn: 900,
-      accessToken: expect.any(String), refreshToken: expect.any(String),
+      accessToken: expect.any(String),
     }));
+    expect(response.body).not.toHaveProperty('refreshToken');
+    expect(response.headers['set-cookie']).toHaveLength(1);
+    expect(response.headers['set-cookie'][0]).toMatch(/^autohub_refresh=[^;]+;/);
+    expect(response.headers['set-cookie'][0]).toContain('HttpOnly');
+    expect(response.headers['set-cookie'][0]).toContain('Path=/api/v1/auth');
+    expect(response.headers['set-cookie'][0]).toContain('SameSite=Lax');
     const sessions = await prisma.session.findMany({ where: { user: { email } } });
     expect(sessions).toHaveLength(1);
-    expect(sessions[0].refreshTokenHash).not.toBe(response.body.refreshToken);
+    expect(sessions[0].refreshTokenHash).toMatch(/^[a-f0-9]{64}$/);
   });
 
   it('returns the same safe error for an invalid password', async () => {
@@ -79,28 +85,61 @@ describe('Authentication (e2e)', () => {
   it('rotates refresh credentials and rejects the previous one', async () => {
     const login = await request(app.getHttpServer()).post('/api/v1/auth/login')
       .send({ email, password }).expect(201);
+    const oldCookie = login.headers['set-cookie'][0].split(';')[0];
     const refreshed = await request(app.getHttpServer()).post('/api/v1/auth/refresh')
-      .send({ refreshToken: login.body.refreshToken }).expect(201);
+      .set('Cookie', oldCookie).set('Origin', 'http://localhost:5173').expect(201);
 
-    expect(refreshed.body.refreshToken).not.toBe(login.body.refreshToken);
+    expect(refreshed.body).toEqual(expect.objectContaining({ tokenType: 'Bearer', expiresIn: 900, accessToken: expect.any(String) }));
+    expect(refreshed.body).not.toHaveProperty('refreshToken');
+    expect(refreshed.headers['set-cookie'][0]).not.toBe(oldCookie);
     await request(app.getHttpServer()).post('/api/v1/auth/refresh')
-      .send({ refreshToken: login.body.refreshToken }).expect(401);
+      .set('Cookie', oldCookie).set('Origin', 'http://localhost:5173').expect(401);
     await request(app.getHttpServer()).get('/api/v1/auth/me')
       .set('Authorization', `Bearer ${refreshed.body.accessToken}`).expect(200);
   });
 
-  it('allows multiple sessions, then logs out only the current session', async () => {
-    const first = await request(app.getHttpServer()).post('/api/v1/auth/login')
+  it('requires an allowed Origin for cookie-authenticated refresh', async () => {
+    const login = await request(app.getHttpServer()).post('/api/v1/auth/login')
       .send({ email, password }).expect(201);
-    const second = await request(app.getHttpServer()).post('/api/v1/auth/login')
-      .send({ email, password }).expect(201);
+    const cookie = login.headers['set-cookie'][0].split(';')[0];
 
-    await request(app.getHttpServer()).post('/api/v1/auth/logout')
-      .set('Authorization', `Bearer ${first.body.accessToken}`).expect(201);
+    await request(app.getHttpServer()).post('/api/v1/auth/refresh')
+      .set('Cookie', cookie).set('Origin', 'https://attacker.example').expect(403);
+  });
+
+  it('allows multiple sessions, then logs out only the current session', async () => {
+    const firstAgent = request.agent(app.getHttpServer());
+    const first = await firstAgent.post('/api/v1/auth/login')
+      .send({ email, password }).expect(201);
+    const secondAgent = request.agent(app.getHttpServer());
+    const second = await secondAgent.post('/api/v1/auth/login').send({ email, password }).expect(201);
+
+    await firstAgent.post('/api/v1/auth/logout')
+      .set('Authorization', `Bearer ${first.body.accessToken}`).set('Origin', 'http://localhost:5173').expect(201);
     await request(app.getHttpServer()).get('/api/v1/auth/me')
       .set('Authorization', `Bearer ${first.body.accessToken}`).expect(401);
     await request(app.getHttpServer()).get('/api/v1/auth/me')
       .set('Authorization', `Bearer ${second.body.accessToken}`).expect(200);
+    await secondAgent.post('/api/v1/auth/refresh').set('Origin', 'http://localhost:5173').expect(201);
+  });
+
+  it('clears the current refresh cookie on logout', async () => {
+    const agent = request.agent(app.getHttpServer());
+    const login = await agent.post('/api/v1/auth/login')
+      .send({ email, password }).expect(201);
+
+    const logout = await agent.post('/api/v1/auth/logout')
+      .set('Authorization', `Bearer ${login.body.accessToken}`).set('Origin', 'http://localhost:5173').expect(201);
+    expect(logout.headers['set-cookie'][0]).toMatch(/^autohub_refresh=;/);
+    await agent.post('/api/v1/auth/refresh').set('Origin', 'http://localhost:5173').expect(401);
+  });
+
+  it('keeps bearer-only logout compatible without a refresh cookie', async () => {
+    const login = await request(app.getHttpServer()).post('/api/v1/auth/login')
+      .send({ email, password }).expect(201);
+
+    await request(app.getHttpServer()).post('/api/v1/auth/logout')
+      .set('Authorization', `Bearer ${login.body.accessToken}`).expect(201);
   });
 
   it('removes access when an organization is disabled', async () => {

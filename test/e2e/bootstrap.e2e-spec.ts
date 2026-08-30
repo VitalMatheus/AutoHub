@@ -38,6 +38,9 @@ describe('Bootstrap (e2e)', () => {
         expect(body.openapi).toMatch(/^3\./);
         expect(body.paths['/api/v1/health']).toBeDefined();
         expect(body.components.securitySchemes.bearer).toBeDefined();
+        expect(body.components.securitySchemes.refreshCookie).toEqual(expect.objectContaining({ type: 'apiKey', in: 'cookie', name: 'autohub_refresh' }));
+        expect(body.paths['/api/v1/auth/refresh'].post.security).toEqual([{ refreshCookie: [] }]);
+        expect(body.paths['/api/v1/auth/refresh'].post.requestBody).toBeUndefined();
         expect(body.components.schemas.ProblemDetails.required).toEqual(expect.arrayContaining(['status', 'detail', 'code']));
         expect(body.components.schemas.DecimalString.pattern).toContain('\\d');
         expect(body.paths['/api/v1/health'].get.responses['401']).toBeUndefined();
@@ -72,6 +75,7 @@ describe('Bootstrap (e2e)', () => {
   it('enforces the configured CORS allowlist and records sensitive-route throttling', async () => {
     const allowed = await request(app.getHttpServer()).get('/api/v1/health').set('Origin', 'http://localhost:5173').expect(200);
     expect(allowed.headers['access-control-allow-origin']).toBe('http://localhost:5173');
+    expect(allowed.headers['access-control-allow-credentials']).toBe('true');
     const rejected = await request(app.getHttpServer()).get('/api/v1/health').set('Origin', 'https://attacker.example').expect(200);
     expect(rejected.headers['access-control-allow-origin']).toBeUndefined();
 

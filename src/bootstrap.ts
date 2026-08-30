@@ -4,6 +4,7 @@ import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 import helmet from 'helmet';
 import { ProblemDetailsFilter } from './common/problem-details.filter';
 import { SecurityLogger } from './common/security.logger';
+import { REFRESH_COOKIE_NAME } from './auth/refresh-cookie';
 import type { OpenAPIObject, OperationObject, ResponseObject } from '@nestjs/swagger';
 
 export const DECIMAL_STRING_SCHEMA = {
@@ -78,6 +79,7 @@ export function createOpenApiDocument(app: INestApplication): OpenAPIObject {
   const document = SwaggerModule.createDocument(app, swaggerConfig);
   document.components ??= {};
   document.components.schemas ??= {};
+  document.components.securitySchemes ??= {};
   document.components.schemas.ProblemDetails = {
     type: 'object',
     required: ['type', 'title', 'status', 'detail', 'instance', 'code'],
@@ -91,6 +93,15 @@ export function createOpenApiDocument(app: INestApplication): OpenAPIObject {
     },
   };
   document.components.schemas.DecimalString = DECIMAL_STRING_SCHEMA;
+  document.components.securitySchemes.refreshCookie = {
+    type: 'apiKey',
+    in: 'cookie',
+    name: REFRESH_COOKIE_NAME,
+    description: 'Rotating HttpOnly refresh cookie.',
+  };
+  const refreshPath = Object.keys(document.paths).find((path) => path.endsWith('/auth/refresh'));
+  const refreshOperation = refreshPath ? document.paths[refreshPath]?.post : undefined;
+  if (refreshOperation) refreshOperation.security = [{ refreshCookie: [] }];
   publishCommonResponses(document);
   validateOpenApiContract(document);
   return document;
@@ -105,6 +116,7 @@ export function configureApplication(app: INestApplication): void {
   app.use(helmet());
   app.enableCors({
     origin: config.getOrThrow<string>('CORS_ORIGINS').split(',').map((origin) => origin.trim()),
+    credentials: true,
   });
   app.useGlobalPipes(new ValidationPipe({
     transform: true,
