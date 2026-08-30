@@ -16,5 +16,6 @@
     "strictPropertyInitialization": false,
     "noImplicitAny": true,
     "esModuleInterop": true
-  }
+  },
+  "include": ["src"]
 }
