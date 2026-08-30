@@ -6,9 +6,13 @@ export type AuthContextValue = {
   isAuthenticated: boolean;
   isSigningIn: boolean;
   isRestoring: boolean;
-  signIn: (email: string, password: string) => Promise<void>;
+  signIn: (email: string, password: string) => Promise<Principal>;
   signOut: () => Promise<void>;
 };
+
+export function getHomePath(role: Principal['role']): '/app' | '/platform' {
+  return role === 'SUPER_ADMIN' ? '/platform' : '/app';
+}
 
 export const AuthContext = createContext<AuthContextValue | null>(null);
 

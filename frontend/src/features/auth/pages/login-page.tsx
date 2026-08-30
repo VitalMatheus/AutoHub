@@ -1,7 +1,7 @@
 import { FormEvent, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { ApiError } from '@/shared/api/http';
-import { useAuth } from '../auth-context';
+import { getHomePath, useAuth } from '../auth-context';
 
 export function LoginPage() {
   const navigate = useNavigate();
@@ -14,8 +14,8 @@ export function LoginPage() {
     event.preventDefault();
     setErrorMessage(null);
     try {
-      await signIn(email, password);
-      navigate('/app', { replace: true });
+      const signedInPrincipal = await signIn(email, password);
+      navigate(getHomePath(signedInPrincipal.role), { replace: true });
     } catch (error) {
       setErrorMessage(error instanceof ApiError ? error.message : 'Não foi possível entrar agora.');
     }

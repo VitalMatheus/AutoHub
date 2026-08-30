@@ -5,6 +5,7 @@ import { AppProviders } from './providers/app-providers';
 import { ApiError, getAccessToken, httpClient, setAccessToken } from '@/shared/api/http';
 
 const principal = { id: 'user-1', name: 'Ana Admin', email: 'ana@example.com', role: 'ADMIN' as const, organizationId: 'org-1' };
+const superAdmin = { id: 'user-2', name: 'Sofia Platform', email: 'sofia@example.com', role: 'SUPER_ADMIN' as const, organizationId: null };
 
 describe('Organization Admin frontend shell', () => {
   beforeEach(() => {
@@ -12,6 +13,7 @@ describe('Organization Admin frontend shell', () => {
     setAccessToken(null);
     localStorage.clear();
     sessionStorage.clear();
+    window.history.pushState({}, '', '/');
   });
 
   it('restores the browser session before rendering protected content', async () => {
@@ -130,5 +132,50 @@ describe('Organization Admin frontend shell', () => {
 
     expect(await screen.findByRole('heading', { name: 'Entrar na oficina' })).toBeInTheDocument();
     expect(getAccessToken()).toBeNull();
+  });
+
+  it('sends a restored Super Admin to the separate platform shell', async () => {
+    vi.spyOn(httpClient, 'post').mockResolvedValue({ data: { accessToken: 'restored-token', expiresIn: 900, tokenType: 'Bearer' } } as never);
+    vi.spyOn(httpClient, 'get').mockResolvedValue({ data: superAdmin } as never);
+
+    render(<AppProviders />);
+
+    expect(await screen.findByRole('heading', { name: 'Painel da plataforma' })).toBeInTheDocument();
+    expect(screen.getByText('Área da plataforma')).toBeInTheDocument();
+    expect(screen.queryByRole('heading', { name: 'Sua oficina está pronta' })).not.toBeInTheDocument();
+  });
+
+  it('redirects an Organization Admin away from the platform area without rendering its content', async () => {
+    window.history.pushState({}, '', '/platform');
+    vi.spyOn(httpClient, 'post').mockResolvedValue({ data: { accessToken: 'restored-token', expiresIn: 900, tokenType: 'Bearer' } } as never);
+    vi.spyOn(httpClient, 'get').mockResolvedValue({ data: principal } as never);
+
+    render(<AppProviders />);
+
+    expect(await screen.findByRole('heading', { name: 'Sua oficina está pronta' })).toBeInTheDocument();
+    expect(screen.queryByRole('heading', { name: 'Painel da plataforma' })).not.toBeInTheDocument();
+  });
+
+  it('redirects a Super Admin away from the organization area without rendering its content', async () => {
+    window.history.pushState({}, '', '/app');
+    vi.spyOn(httpClient, 'post').mockResolvedValue({ data: { accessToken: 'restored-token', expiresIn: 900, tokenType: 'Bearer' } } as never);
+    vi.spyOn(httpClient, 'get').mockResolvedValue({ data: superAdmin } as never);
+
+    render(<AppProviders />);
+
+    expect(await screen.findByRole('heading', { name: 'Painel da plataforma' })).toBeInTheDocument();
+    expect(screen.queryByRole('heading', { name: 'Sua oficina está pronta' })).not.toBeInTheDocument();
+  });
+
+  it('lets a Super Admin sign out from the platform shell', async () => {
+    const user = userEvent.setup();
+    vi.spyOn(httpClient, 'post').mockResolvedValue({ data: { accessToken: 'restored-token', expiresIn: 900, tokenType: 'Bearer' } } as never);
+    vi.spyOn(httpClient, 'get').mockResolvedValue({ data: superAdmin } as never);
+
+    render(<AppProviders />);
+    await screen.findByRole('heading', { name: 'Painel da plataforma' });
+    await user.click(screen.getByRole('button', { name: 'Sair' }));
+
+    expect(await screen.findByRole('heading', { name: 'Entrar na oficina' })).toBeInTheDocument();
   });
 });

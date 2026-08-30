@@ -43,13 +43,14 @@ export function AuthProvider({ children }: PropsWithChildren) {
     };
   }, []);
 
-  async function signIn(email: string, password: string): Promise<void> {
+  async function signIn(email: string, password: string): Promise<Principal> {
     setIsSigningIn(true);
     try {
       const tokens = await login(email, password);
       setAccessToken(tokens.accessToken);
       const currentPrincipal = await getCurrentPrincipal();
       setPrincipal(currentPrincipal);
+      return currentPrincipal;
     } catch (error) {
       setAccessToken(null);
       setPrincipal(null);
