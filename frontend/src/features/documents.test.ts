@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { httpClient } from '@/shared/api/http';
 import { decimalMultiply } from './shared/document-components';
+import { formatMoney, normalizeMoney } from './shared/money';
 import { addQuoteItem, quoteAction } from './quotes/api/quotes-api';
 import { convertQuote, createWorkOrder, workOrderAction } from './work-orders/api/work-orders-api';
 
@@ -10,12 +11,19 @@ describe('document frontend contracts', () => {
   it('calculates item totals with decimal strings', () => {
     expect(decimalMultiply('1.500', '149.90')).toBe('224.85');
     expect(decimalMultiply('3', '0.10')).toBe('0.30');
+    expect(decimalMultiply('1,500', '149,90')).toBe('224.85');
+  });
+
+  it('normalizes and displays Brazilian monetary strings without floating point', () => {
+    expect(normalizeMoney('5,50')).toBe('5.50');
+    expect(formatMoney('1234.5')).toBe('R$ 1.234,50');
+    expect(formatMoney('5,50')).toBe('R$ 5,50');
   });
 
   it('sends quote item and lifecycle requests to the tenant-scoped API', async () => {
     const post = vi.spyOn(httpClient, 'post').mockResolvedValue({ data: {} } as never);
 
-    await addQuoteItem('quote-1', { type: 'MANUAL', description: 'Troca', quantity: '1', unitPrice: '100.00' });
+    await addQuoteItem('quote-1', { type: 'MANUAL', description: 'Troca', quantity: '1', unitPrice: '100,00' });
     await quoteAction('quote-1', 'approve');
 
     expect(post).toHaveBeenNthCalledWith(1, '/quotes/quote-1/items', { type: 'MANUAL', description: 'Troca', quantity: '1', unitPrice: '100.00' });

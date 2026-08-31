@@ -24,7 +24,7 @@ describe('Finance payment registration', () => {
     const post = vi.spyOn(httpClient, 'post').mockResolvedValue({ data: { id: 'payment-1', amount: '35.10', method: 'PIX', status: 'CONFIRMED', paidAt: '2026-01-01T10:00:00.000Z', createdAt: '2026-01-01T10:00:00.000Z', financial: { total: '100.00', paid: '35.10', balance: '64.90', status: 'PARTIAL' } } } as never);
     renderPage();
 
-    await user.type(await screen.findByLabelText('Valor'), '35.10');
+    await user.type(await screen.findByLabelText('Valor'), '35,10');
     await user.selectOptions(screen.getByLabelText('Método'), 'PIX');
     await user.click(screen.getByRole('button', { name: 'Registrar pagamento' }));
 

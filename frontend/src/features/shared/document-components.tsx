@@ -5,11 +5,13 @@ import type { Customer } from '@/features/customers/api/customers-api';
 import type { Vehicle } from '@/features/vehicles/api/vehicles-api';
 import type { DocumentItem, ItemInput, ItemType } from '@/features/quotes/api/quotes-api';
 import { httpClient } from '@/shared/api/http';
+import { formatMoney, normalizeMoney } from './money';
 
 export const inputClass = 'w-full rounded-xl border border-slate-300 bg-white px-3 py-2.5 text-sm outline-none focus:ring-2 focus:ring-blue-500';
-function decimalParts(value: string): [bigint, number] { const [whole, fraction = ''] = value.split('.'); return [BigInt(`${whole}${fraction}` || '0'), fraction.length]; }
+function decimalParts(value: string): [bigint, number] { const [whole, fraction = ''] = normalizeMoney(value).split('.'); return [BigInt(`${whole}${fraction}` || '0'), fraction.length]; }
 export function decimalMultiply(quantity: string, unitPrice: string): string { const [q, qs] = decimalParts(quantity); const [p, ps] = decimalParts(unitPrice); const scale = 10n ** BigInt(qs + ps); const raw = q * p; const cents = (raw * 100n + scale / 2n) / scale; return `${cents / 100n}.${(cents % 100n).toString().padStart(2, '0')}`; }
-export const money = (value: string) => { const [whole, fraction = ''] = value.split('.'); const cents = `${fraction}00`.slice(0, 2); return `R$ ${whole.replace(/\B(?=(\d{3})+(?!\d))/g, '.')},${cents}`; };
+export { formatMoney };
+export const money = formatMoney;
 export const statusLabels: Record<string, string> = { DRAFT: 'Rascunho', PENDING: 'Aguardando aprovação', APPROVED: 'Aprovado', REJECTED: 'Rejeitado', CANCELLED: 'Cancelado', OPEN: 'Aberta', WAITING_APPROVAL: 'Aguardando aprovação', IN_PROGRESS: 'Em execução', WAITING_PARTS: 'Aguardando peças', COMPLETED: 'Concluída', DELIVERED: 'Entregue' };
 export function Status({ value }: { value: string }) { return <span className="rounded-full bg-blue-50 px-2.5 py-1 text-xs font-semibold text-blue-700">{statusLabels[value] ?? value}</span>; }
 export function Pager({ page, totalPages, onPage }: { page: number; totalPages: number; onPage: (page: number) => void }) { return <div className="flex items-center justify-between border-t border-slate-100 pt-4 text-sm text-slate-500"><span>Página {page} de {Math.max(1, totalPages)}</span><div className="flex gap-2"><button disabled={page <= 1} onClick={() => onPage(page - 1)} className="rounded-lg border px-3 py-1.5 disabled:opacity-40">Anterior</button><button disabled={page >= totalPages} onClick={() => onPage(page + 1)} className="rounded-lg border px-3 py-1.5 disabled:opacity-40">Próxima</button></div></div>; }

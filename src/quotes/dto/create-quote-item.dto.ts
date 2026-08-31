@@ -1,5 +1,7 @@
 import { IsDecimal, IsIn, IsNotEmpty, IsOptional, IsString, IsUUID, Length, Matches } from 'class-validator';
+import { Transform } from 'class-transformer';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
+import { normalizeMoneyTransform } from '../../common/money/normalize-money';
 
 const decimal = /^\d+(\.\d{1,3})?$/;
 
@@ -15,5 +17,5 @@ export class CreateQuoteItemDto {
   @ApiProperty({ type: String, pattern: '^\\d+(\\.\\d{1,3})?$', example: '1.500' })
   @IsDecimal({ decimal_digits: '1,3' }) @Matches(decimal) quantity!: string;
   @ApiPropertyOptional({ type: String, pattern: '^\\d+(\\.\\d{1,2})?$', example: '149.90' })
-  @IsOptional() @IsDecimal({ decimal_digits: '0,2' }) @Matches(/^\d+(\.\d{1,2})?$/) unitPrice?: string;
+  @IsOptional() @Transform(normalizeMoneyTransform) @IsDecimal({ decimal_digits: '0,2' }) @Matches(/^\d+(\.\d{1,2})?$/) unitPrice?: string;
 }

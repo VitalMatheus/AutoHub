@@ -1,5 +1,6 @@
 import { httpClient } from '@/shared/api/http';
 import type { DocumentItem, ItemInput, Page } from '@/features/quotes/api/quotes-api';
+import { normalizeMoney } from '@/features/shared/money';
 export type WorkOrderStatus = 'OPEN' | 'WAITING_APPROVAL' | 'IN_PROGRESS' | 'WAITING_PARTS' | 'COMPLETED' | 'DELIVERED' | 'CANCELLED';
 export type WorkOrder = { id: string; number: number; customerId: string; vehicleId: string; quoteId: string | null; status: WorkOrderStatus; reportedProblem: string | null; diagnosis: string | null; mileage: number | null; expectedCompletionDate: string | null; notes: string | null; items: DocumentItem[]; total: string; createdAt: string; updatedAt: string };
 export type WorkOrderInput = { customerId: string; vehicleId: string; reportedProblem?: string; diagnosis?: string; mileage?: number; expectedCompletionDate?: string; notes?: string; items?: ItemInput[] };
@@ -8,7 +9,8 @@ export const getWorkOrder = (id: string) => httpClient.get<WorkOrder>(`/work-ord
 export const createWorkOrder = (input: WorkOrderInput) => httpClient.post<WorkOrder>('/work-orders', input).then((r) => r.data);
 export const convertQuote = (quoteId: string) => httpClient.post<WorkOrder>(`/work-orders/from-quote/${quoteId}`).then((r) => r.data);
 export const updateWorkOrder = (id: string, input: Partial<WorkOrderInput>) => httpClient.patch<WorkOrder>(`/work-orders/${id}`, input).then((r) => r.data);
-export const addWorkOrderItem = (id: string, input: ItemInput) => httpClient.post<WorkOrder>(`/work-orders/${id}/items`, input).then((r) => r.data);
-export const updateWorkOrderItem = (id: string, itemId: string, input: Partial<ItemInput>) => httpClient.patch<WorkOrder>(`/work-orders/${id}/items/${itemId}`, input).then((r) => r.data);
+const normalizeItem = <T extends ItemInput | Partial<ItemInput>>(input: T): T => input.unitPrice === undefined ? input : { ...input, unitPrice: normalizeMoney(input.unitPrice) } as T;
+export const addWorkOrderItem = (id: string, input: ItemInput) => httpClient.post<WorkOrder>(`/work-orders/${id}/items`, normalizeItem(input)).then((r) => r.data);
+export const updateWorkOrderItem = (id: string, itemId: string, input: Partial<ItemInput>) => httpClient.patch<WorkOrder>(`/work-orders/${id}/items/${itemId}`, normalizeItem(input)).then((r) => r.data);
 export const removeWorkOrderItem = (id: string, itemId: string) => httpClient.delete<WorkOrder>(`/work-orders/${id}/items/${itemId}`).then((r) => r.data);
 export const workOrderAction = (id: string, action: 'request-approval' | 'start' | 'wait-parts' | 'complete' | 'deliver' | 'cancel') => httpClient.post<WorkOrder>(`/work-orders/${id}/${action}`).then((r) => r.data);

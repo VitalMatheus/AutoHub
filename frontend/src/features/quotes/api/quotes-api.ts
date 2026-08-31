@@ -1,4 +1,5 @@
 import { httpClient } from '@/shared/api/http';
+import { normalizeMoney } from '@/features/shared/money';
 
 export type ItemType = 'SERVICE' | 'PRODUCT' | 'MANUAL';
 export type DocumentItem = { id: string; type: ItemType; serviceId: string | null; productId: string | null; description: string; quantity: string; unitPrice: string; total?: string };
@@ -11,7 +12,8 @@ export const listQuotes = (params: Record<string, unknown>) => httpClient.get<Pa
 export const getQuote = (id: string) => httpClient.get<Quote>(`/quotes/${id}`).then((r) => r.data);
 export const createQuote = (input: { customerId: string; vehicleId: string; notes?: string }) => httpClient.post<Quote>('/quotes', input).then((r) => r.data);
 export const updateQuote = (id: string, input: Partial<{ customerId: string; vehicleId: string; notes: string }>) => httpClient.patch<Quote>(`/quotes/${id}`, input).then((r) => r.data);
-export const addQuoteItem = (id: string, input: ItemInput) => httpClient.post<Quote>(`/quotes/${id}/items`, input).then((r) => r.data);
-export const updateQuoteItem = (id: string, itemId: string, input: Partial<ItemInput>) => httpClient.patch<Quote>(`/quotes/${id}/items/${itemId}`, input).then((r) => r.data);
+const normalizeItem = <T extends ItemInput | Partial<ItemInput>>(input: T): T => input.unitPrice === undefined ? input : { ...input, unitPrice: normalizeMoney(input.unitPrice) } as T;
+export const addQuoteItem = (id: string, input: ItemInput) => httpClient.post<Quote>(`/quotes/${id}/items`, normalizeItem(input)).then((r) => r.data);
+export const updateQuoteItem = (id: string, itemId: string, input: Partial<ItemInput>) => httpClient.patch<Quote>(`/quotes/${id}/items/${itemId}`, normalizeItem(input)).then((r) => r.data);
 export const removeQuoteItem = (id: string, itemId: string) => httpClient.delete<Quote>(`/quotes/${id}/items/${itemId}`).then((r) => r.data);
 export const quoteAction = (id: string, action: 'submit' | 'approve' | 'reject' | 'cancel') => httpClient.post<Quote>(`/quotes/${id}/${action}`).then((r) => r.data);
