@@ -11,6 +11,8 @@ import { NewQuotePage, QuoteDetailPage, QuotesListPage } from '@/features/quotes
 import { NewWorkOrderPage, WorkOrderDetailPage, WorkOrdersListPage } from '@/features/work-orders/pages/work-order-pages';
 import { CustomerDetailPage, CustomersListPage, EditCustomerPage, NewCustomerPage } from '@/features/customers/pages/customer-pages';
 import { EditVehiclePage, NewVehiclePage, VehicleDetailPage, VehiclesListPage } from '@/features/vehicles/pages/vehicle-pages';
+import { EditProductPage, NewProductPage, ProductDetailPage, ProductsListPage } from '@/features/products/pages/product-pages';
+import { EditServicePage, NewServicePage, ServicesListPage } from '@/features/services/pages/service-pages';
 
 function HomeRedirect() {
   const { principal, isAuthenticated, isRestoring } = useAuth();
@@ -40,8 +42,13 @@ export function AppRouter() {
           <Route path="work-orders" element={<WorkOrdersListPage />} />
           <Route path="work-orders/new" element={<NewWorkOrderPage />} />
           <Route path="work-orders/:id" element={<WorkOrderDetailPage />} />
-          <Route path="products/*" element={<FutureModulePage title="Produtos" />} />
-          <Route path="services/*" element={<FutureModulePage title="Serviços" />} />
+          <Route path="products" element={<ProductsListPage />} />
+          <Route path="products/new" element={<NewProductPage />} />
+          <Route path="products/:id/edit" element={<EditProductPage />} />
+          <Route path="products/:id" element={<ProductDetailPage />} />
+          <Route path="services" element={<ServicesListPage />} />
+          <Route path="services/new" element={<NewServicePage />} />
+          <Route path="services/:id/edit" element={<EditServicePage />} />
           <Route path="finance/*" element={<FutureModulePage title="Financeiro" />} />
           <Route path="reports/*" element={<FutureModulePage title="Relatórios" />} />
           <Route path="settings/*" element={<FutureModulePage title="Configurações" />} />
