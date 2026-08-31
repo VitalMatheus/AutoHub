@@ -44,27 +44,57 @@ describe('service management behavior', () => {
     await waitFor(() => expect(get.mock.calls.some(([, config]) => (config as { params: Record<string, unknown> }).params.search === 'freio')).toBe(true), { timeout: 1000 });
   });
 
+  it('navigates from a service row to its saved details and offers editing', async () => {
+    const user = userEvent.setup();
+    vi.spyOn(httpClient, 'get').mockImplementation((url) => url === '/services/service-1'
+      ? Promise.resolve({ data: service }) as never
+      : Promise.resolve({ data: { data: [service], meta: { page: 1, pageSize: 20, total: 1, totalPages: 1 } } }) as never);
+    renderPage(<Routes>
+      <Route path="/app/services" element={<ServicesListPage />} />
+      <Route path="/app/services/:id" element={<ServiceDetailPage />} />
+      <Route path="/app/services/:id/edit" element={<div>Editor de serviço</div>} />
+    </Routes>);
+
+    await user.click(await screen.findByRole('link', { name: 'Troca de óleo' }));
+    expect(await screen.findByRole('heading', { name: 'Troca de óleo' })).toBeInTheDocument();
+    await user.click(screen.getByRole('link', { name: 'Editar' }));
+    expect(await screen.findByText('Editor de serviço')).toBeInTheDocument();
+  });
+
   it('creates a Service with an exact decimal string and supported fields only', async () => {
     const user = userEvent.setup();
-    const post = vi.spyOn(httpClient, 'post').mockResolvedValue({ data: { ...service, id: 'service-2' } } as never);
-    renderPage(<Routes><Route path="/app/services/new" element={<NewServicePage />} /><Route path="/app/services/:id" element={<div />} /></Routes>, '/app/services/new');
+    const saved = { ...service, id: 'service-2', name: 'Alinhamento', description: 'Alinhamento completo', price: '89.90' };
+    const post = vi.spyOn(httpClient, 'post').mockResolvedValue({ data: saved } as never);
+    vi.spyOn(httpClient, 'get').mockResolvedValue({ data: saved } as never);
+    renderPage(<Routes><Route path="/app/services/new" element={<NewServicePage />} /><Route path="/app/services/:id" element={<ServiceDetailPage />} /></Routes>, '/app/services/new');
     await user.type(await screen.findByLabelText(/Nome/), 'Alinhamento');
     await user.type(screen.getByLabelText(/Preço/), '89,90');
     await user.click(screen.getByRole('button', { name: 'Salvar serviço' }));
     await waitFor(() => expect(httpClient.post).toHaveBeenCalledWith('/services', { name: 'Alinhamento', price: '89.90' }));
+    expect(await screen.findByRole('heading', { name: 'Alinhamento' })).toBeInTheDocument();
+    expect(screen.getByText('Alinhamento completo')).toBeInTheDocument();
+    expect(screen.getByText('R$ 89,90')).toBeInTheDocument();
+    expect(screen.getByText('Ativo')).toBeInTheDocument();
     expect(JSON.stringify(post.mock.calls)).not.toContain('organizationId');
   });
 
   it('edits a Service and activates or deactivates it with explicit actions', async () => {
     const user = userEvent.setup();
-    const patch = vi.spyOn(httpClient, 'patch').mockResolvedValue({ data: { ...service, name: 'Troca completa' } } as never);
+    let saved = service;
+    const patch = vi.spyOn(httpClient, 'patch').mockImplementation(async () => {
+      saved = { ...service, name: 'Troca completa', description: 'Serviço atualizado', price: '159.90' };
+      return { data: saved } as never;
+    });
     const post = vi.spyOn(httpClient, 'post').mockResolvedValue({ data: { ...service, active: false } } as never);
-    vi.spyOn(httpClient, 'get').mockImplementation((url) => url === '/services/service-1' ? Promise.resolve({ data: service }) as never : Promise.resolve({ data: { data: [service], meta: { page: 1, pageSize: 20, total: 1, totalPages: 1 } } }) as never);
-    renderPage(<Routes><Route path="/app/services/:id/edit" element={<EditServicePage />} /><Route path="/app/services/:id" element={<div />} /></Routes>, '/app/services/service-1/edit');
+    vi.spyOn(httpClient, 'get').mockImplementation((url) => url === '/services/service-1' ? Promise.resolve({ data: saved }) as never : Promise.resolve({ data: { data: [service], meta: { page: 1, pageSize: 20, total: 1, totalPages: 1 } } }) as never);
+    renderPage(<Routes><Route path="/app/services/:id/edit" element={<EditServicePage />} /><Route path="/app/services/:id" element={<ServiceDetailPage />} /></Routes>, '/app/services/service-1/edit');
     const name = await screen.findByLabelText(/Nome/);
     await user.clear(name); await user.type(name, 'Troca completa');
     await user.click(screen.getByRole('button', { name: 'Salvar serviço' }));
     await waitFor(() => expect(patch).toHaveBeenCalledWith('/services/service-1', { name: 'Troca completa' }));
+    expect(await screen.findByRole('heading', { name: 'Troca completa' })).toBeInTheDocument();
+    expect(screen.getByText('Serviço atualizado')).toBeInTheDocument();
+    expect(screen.getByText('R$ 159,90')).toBeInTheDocument();
     cleanup();
     renderPage(<Routes><Route path="/app/services" element={<ServicesListPage />} /></Routes>);
     await screen.findByText('Troca de óleo');
@@ -84,5 +114,16 @@ describe('service management behavior', () => {
     expect(screen.getByText('Ativo')).toBeInTheDocument();
     await user.click(screen.getByRole('button', { name: 'Desativar serviço' }));
     await waitFor(() => expect(post).toHaveBeenCalledWith('/services/service-1/deactivate'));
+  });
+
+  it('activates an inactive service and updates the details status', async () => {
+    const user = userEvent.setup();
+    vi.spyOn(httpClient, 'get').mockResolvedValue({ data: { ...service, active: false } } as never);
+    const post = vi.spyOn(httpClient, 'post').mockResolvedValue({ data: { ...service, active: true } } as never);
+    renderPage(<Routes><Route path="/app/services/:id" element={<ServiceDetailPage />} /></Routes>, '/app/services/service-1');
+
+    await user.click(await screen.findByRole('button', { name: 'Ativar serviço' }));
+    await waitFor(() => expect(post).toHaveBeenCalledWith('/services/service-1/activate'));
+    expect(await screen.findByRole('button', { name: 'Desativar serviço' })).toBeInTheDocument();
   });
 });
