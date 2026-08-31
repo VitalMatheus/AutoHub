@@ -25,6 +25,28 @@ describe('Product catalog', () => {
     expect(screen.getByText('R$ 149,90')).toBeInTheDocument();
   });
 
+  it('lists only low-stock products when the stock filter is selected', async () => {
+    const get = vi.spyOn(httpClient, 'get').mockResolvedValue({ data: { data: [product], meta: { page: 1, pageSize: 20, total: 1, totalPages: 1 } } } as never);
+    const user = userEvent.setup();
+    renderPage(<ProductsListPage />);
+
+    await user.selectOptions(await screen.findByLabelText('Estoque'), 'low');
+
+    await waitFor(() => expect(get).toHaveBeenLastCalledWith('/products', { params: expect.objectContaining({ lowStock: true }) }));
+    expect(screen.getByText('Estoque baixo')).toBeInTheDocument();
+  });
+
+  it('shows SKU and stock values in the product detail', async () => {
+    vi.spyOn(httpClient, 'get').mockResolvedValue({ data: { ...product, stockQuantity: 1, stockMinimum: 2, lowStock: true } } as never);
+    renderPage(<ProductDetailPage />, ['/app/products/product-1']);
+
+    expect(await screen.findByText('FIL-001')).toBeInTheDocument();
+    expect(screen.getByText('Estoque baixo')).toBeInTheDocument();
+    expect(screen.getByText('1')).toBeInTheDocument();
+    expect(screen.getByText('2')).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'Editar produto' })).toHaveAttribute('href', '/app/products/product-1/edit');
+  });
+
   it('creates a product with a decimal price and never sends organizationId', async () => {
     const user = userEvent.setup();
     vi.spyOn(httpClient, 'post').mockResolvedValue({ data: product } as never);
@@ -46,6 +68,21 @@ describe('Product catalog', () => {
     await user.click(screen.getByRole('button', { name: 'Salvar produto' }));
     await waitFor(() => expect(patch).toHaveBeenCalledWith('/products/product-1', { name: 'Filtro novo' }));
     expect(await screen.findByRole('alert')).toHaveTextContent('Já existe um produto com este SKU.');
+  });
+
+  it('edits current and minimum stock from the Product edit screen', async () => {
+    const user = userEvent.setup();
+    vi.spyOn(httpClient, 'get').mockResolvedValue({ data: product } as never);
+    const patch = vi.spyOn(httpClient, 'patch').mockResolvedValue({ data: { ...product, stockQuantity: 8, stockMinimum: 3 } } as never);
+    renderPage(<EditProductPage />, ['/app/products/product-1/edit']);
+
+    const quantity = await screen.findByLabelText('Estoque atual');
+    await user.clear(quantity); await user.type(quantity, '8');
+    const minimum = screen.getByLabelText('Estoque mínimo');
+    await user.clear(minimum); await user.type(minimum, '3');
+    await user.click(screen.getByRole('button', { name: 'Salvar produto' }));
+
+    await waitFor(() => expect(patch).toHaveBeenCalledWith('/products/product-1', { stockQuantity: 8, stockMinimum: 3 }));
   });
 
   it('activates and deactivates a product through explicit actions', async () => {

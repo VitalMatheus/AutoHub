@@ -1,5 +1,5 @@
 import { Transform } from 'class-transformer';
-import { IsDecimal, IsInt, IsNotEmpty, IsOptional, IsString, Length, Min } from 'class-validator';
+import { IsDecimal, IsInt, IsNotEmpty, IsOptional, IsString, Length, Matches, Min } from 'class-validator';
 import { normalizeMoneyTransform } from '../../common/money/normalize-money';
 
 export class CreateProductDto {
@@ -9,7 +9,7 @@ export class CreateProductDto {
   @IsOptional() @IsString() @Length(1, 2000)
   description?: string;
 
-  @IsOptional() @IsString() @Length(1, 80)
+  @IsOptional() @IsString() @Length(1, 80) @Matches(/\S/)
   sku?: string;
 
   @Transform(normalizeMoneyTransform)

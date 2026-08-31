@@ -54,9 +54,13 @@ describe('Products (e2e)', () => {
       .send({ name: 'Oil filter', description: 'Engine part', sku: ' of-001 ', salePrice: '149.90' })
       .expect(201);
     expect(response.body).toMatchObject({ organizationId, name: 'Oil filter', sku: 'OF-001', salePrice: '149.90', stockQuantity: 0, stockMinimum: 0, lowStock: true, active: true });
+    const persisted = await prisma.product.findUnique({ where: { id: response.body.id } });
+    expect(persisted).toMatchObject({ sku: 'OF-001', stockQuantity: 0, stockMinimum: 0 });
     const generated = await request(app.getHttpServer()).post('/api/v1/products').set('Authorization', `Bearer ${adminToken}`).send({ name: 'Generated SKU', salePrice: '10.00', stockQuantity: 2, stockMinimum: 3 }).expect(201);
     expect(generated.body).toMatchObject({ stockQuantity: 2, stockMinimum: 3, lowStock: true });
     expect(generated.body.sku).toMatch(/^PROD-/);
+    const secondGenerated = await request(app.getHttpServer()).post('/api/v1/products').set('Authorization', `Bearer ${adminToken}`).send({ name: 'Second generated SKU', salePrice: '10.00' }).expect(201);
+    expect(secondGenerated.body.sku).not.toBe(generated.body.sku);
   });
 
   it('filters low-stock Products and allows direct stock adjustment', async () => {
@@ -68,10 +72,25 @@ describe('Products (e2e)', () => {
     expect(updated.body).toMatchObject({ stockQuantity: 8, stockMinimum: 2, lowStock: false });
   });
 
+  it('does not leak another Organization through the low-stock filter', async () => {
+    const other = await prisma.product.create({ data: { organizationId: otherOrganizationId, name: 'Other low stock', sku: `OTHER-LOW-${suffix}`, salePrice: '10.00', stockQuantity: 0, stockMinimum: 1 } });
+    const low = await request(app.getHttpServer()).get('/api/v1/products?lowStock=true').set('Authorization', `Bearer ${adminToken}`).expect(200);
+    expect(low.body.data).not.toEqual(expect.arrayContaining([expect.objectContaining({ id: other.id })]));
+  });
+
+  it('has migrated stock columns and non-null SKUs for existing Products', async () => {
+    const columns = await prisma.$queryRaw<{ column_name: string; is_nullable: string }[]>`SELECT column_name, is_nullable FROM information_schema.columns WHERE table_name = 'Product' AND column_name IN ('sku', 'stockQuantity', 'stockMinimum')`;
+    expect(columns).toEqual(expect.arrayContaining([
+      { column_name: 'sku', is_nullable: 'NO' },
+      { column_name: 'stockQuantity', is_nullable: 'NO' },
+      { column_name: 'stockMinimum', is_nullable: 'NO' },
+    ]));
+  });
+
   it('enforces SKU uniqueness inside one Organization but not across Organizations', async () => {
     await request(app.getHttpServer()).post('/api/v1/products').set('Authorization', `Bearer ${adminToken}`)
       .send({ name: 'Duplicate SKU', sku: 'OF-001', salePrice: '10.00' }).expect(409);
-    await prisma.product.create({ data: { organizationId: otherOrganizationId, name: 'Other filter', sku: 'OF-001', salePrice: '10.00' } });
+    await prisma.product.create({ data: { organizationId: otherOrganizationId, name: 'Other filter', sku: `OTHER-FILTER-${suffix}`, salePrice: '10.00' } });
   });
 
   it('excludes deactivated Products by default but supports active filtering and search', async () => {
@@ -89,7 +108,7 @@ describe('Products (e2e)', () => {
   });
 
   it('returns 404 for another Organization on read and mutation', async () => {
-    const other = await prisma.product.create({ data: { organizationId: otherOrganizationId, name: 'Hidden product', salePrice: '10.00' } });
+    const other = await prisma.product.create({ data: { organizationId: otherOrganizationId, name: 'Hidden product', sku: `HIDDEN-${suffix}`, salePrice: '10.00' } });
     await request(app.getHttpServer()).get(`/api/v1/products/${other.id}`).set('Authorization', `Bearer ${adminToken}`).expect(404);
     await request(app.getHttpServer()).patch(`/api/v1/products/${other.id}`).set('Authorization', `Bearer ${adminToken}`).send({ name: 'Changed' }).expect(404);
     await request(app.getHttpServer()).post(`/api/v1/products/${other.id}/deactivate`).set('Authorization', `Bearer ${adminToken}`).expect(404);

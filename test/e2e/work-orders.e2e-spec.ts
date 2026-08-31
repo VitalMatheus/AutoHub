@@ -120,7 +120,7 @@ describe('Work Orders (e2e)', () => {
 
   it('preserves catalog snapshots and permits edits only before terminal states', async () => {
     const service = await prisma.service.create({ data: { organizationId, name: 'Brake service', description: 'Brake inspection', price: '80.00' } });
-    const product = await prisma.product.create({ data: { organizationId, name: 'Brake pad', description: 'Front pad', salePrice: '45.00' } });
+    const product = await prisma.product.create({ data: { organizationId, name: 'Brake pad', description: 'Front pad', sku: `BRAKE-PAD-${suffix}`, salePrice: '45.00' } });
     const created = await request(app.getHttpServer()).post('/api/v1/work-orders').set('Authorization', `Bearer ${token}`).send({ customerId, vehicleId, items: [{ type: 'SERVICE', serviceId: service.id, quantity: '1', unitPrice: '999.99' }, { type: 'PRODUCT', productId: product.id, quantity: '2' }] }).expect(201);
     expect(created.body.items.map((item: any) => item.unitPrice)).toEqual(['80.00', '45.00']);
 

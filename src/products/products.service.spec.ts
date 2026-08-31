@@ -45,6 +45,19 @@ describe('ProductsService', () => {
       .rejects.toBeInstanceOf(ConflictException);
   });
 
+  it('regenerates an automatic SKU when the database reports a generated collision', async () => {
+    prisma.product.create
+      .mockRejectedValueOnce({ code: 'P2002' })
+      .mockImplementationOnce(async ({ data }: any) => ({ id: 'product-a', ...data, salePrice: '10.00', active: true }));
+
+    const result = await subject.create(principal, { name: 'Oil filter', salePrice: '10.00' } as any);
+
+    expect(prisma.product.create).toHaveBeenCalledTimes(2);
+    expect(prisma.product.create.mock.calls[0][0].data.sku).toMatch(/^PROD-/);
+    expect(prisma.product.create.mock.calls[1][0].data.sku).toMatch(/^PROD-/);
+    expect(result.sku).toBe(prisma.product.create.mock.calls[1][0].data.sku);
+  });
+
   it('defaults listing to active Products and scopes every query to the tenant', async () => {
     prisma.product.findMany.mockResolvedValue([]);
     prisma.product.count.mockResolvedValue(1);
@@ -70,9 +83,20 @@ describe('ProductsService', () => {
     prisma.product.updateMany.mockResolvedValue({ count: 1 });
     prisma.product.findFirst.mockResolvedValue({ id: 'product-a', organizationId: 'org-a', salePrice: '10.00', stockQuantity: 7, stockMinimum: 2, active: true });
 
-    await subject.update(principal, 'product-a', { stockQuantity: 7 } as any);
+    const result = await subject.update(principal, 'product-a', { stockQuantity: 7, stockMinimum: 3 } as any);
 
-    expect(prisma.product.updateMany).toHaveBeenCalledWith({ where: { id: 'product-a', organizationId: 'org-a' }, data: { stockQuantity: 7 } });
+    expect(prisma.product.updateMany).toHaveBeenCalledWith({ where: { id: 'product-a', organizationId: 'org-a' }, data: { stockQuantity: 7, stockMinimum: 3 } });
+    expect(result).toMatchObject({ stockQuantity: 7, stockMinimum: 2, lowStock: false });
+  });
+
+  it('does not include another Organization in the low-stock list', async () => {
+    prisma.$queryRaw.mockResolvedValue([{ id: 'product-a' }]);
+    prisma.$transaction.mockResolvedValue([[{ id: 'product-a', organizationId: 'org-a', salePrice: '10.00', stockQuantity: 0, stockMinimum: 0 }], 1]);
+
+    await subject.list(principal, { page: 1, pageSize: 20, lowStock: true } as any);
+
+    expect(prisma.$queryRaw).toHaveBeenCalledTimes(1);
+    expect(prisma.$queryRaw.mock.calls[0][0].values).toContain('org-a');
   });
 
   it('does not expose a Product from another organization', async () => {

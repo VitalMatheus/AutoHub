@@ -40,24 +40,29 @@ export class ProductsService {
 
   async create(principal: AuthenticatedPrincipal, dto: CreateProductDto) {
     const organizationId = this.tenant(principal);
-    try {
-      const product = await this.prisma.product.create({
-        data: {
-          organizationId,
-          name: dto.name.trim(),
-          description: dto.description?.trim(),
-          sku: this.normalizeSku(dto.sku) ?? this.generateSku(),
-          salePrice: dto.salePrice,
-          stockQuantity: dto.stockQuantity ?? 0,
-          stockMinimum: dto.stockMinimum ?? 0,
-        },
-        select: productSelect,
-      });
-      return serializeProduct(product);
-    } catch (error) {
-      this.mapConflict(error);
-      throw error;
+    const suppliedSku = this.normalizeSku(dto.sku);
+    for (let attempt = 0; attempt < 3; attempt += 1) {
+      try {
+        const product = await this.prisma.product.create({
+          data: {
+            organizationId,
+            name: dto.name.trim(),
+            description: dto.description?.trim(),
+            sku: suppliedSku ?? this.generateSku(),
+            salePrice: dto.salePrice,
+            stockQuantity: dto.stockQuantity ?? 0,
+            stockMinimum: dto.stockMinimum ?? 0,
+          },
+          select: productSelect,
+        });
+        return serializeProduct(product);
+      } catch (error) {
+        if (!suppliedSku && this.isConflict(error) && attempt < 2) continue;
+        this.mapConflict(error);
+        throw error;
+      }
     }
+    throw new ConflictException('Unable to generate a unique Product SKU');
   }
 
   async list(principal: AuthenticatedPrincipal, query: ListProductsDto) {
@@ -130,11 +135,13 @@ export class ProductsService {
   }
 
   private mapConflict(error: unknown): void {
-    if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002') {
+    if (this.isConflict(error)) {
       throw new ConflictException('Product SKU already exists in this Organization');
     }
-    if ((error as { code?: string })?.code === 'P2002') {
-      throw new ConflictException('Product SKU already exists in this Organization');
-    }
+  }
+
+  private isConflict(error: unknown): boolean {
+    return (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002')
+      || (error as { code?: string })?.code === 'P2002';
   }
 }
