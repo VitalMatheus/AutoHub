@@ -12,7 +12,7 @@ import { NewWorkOrderPage, WorkOrderDetailPage, WorkOrdersListPage } from '@/fea
 import { CustomerDetailPage, CustomersListPage, EditCustomerPage, NewCustomerPage } from '@/features/customers/pages/customer-pages';
 import { EditVehiclePage, NewVehiclePage, VehicleDetailPage, VehiclesListPage } from '@/features/vehicles/pages/vehicle-pages';
 import { EditProductPage, NewProductPage, ProductDetailPage, ProductsListPage } from '@/features/products/pages/product-pages';
-import { EditServicePage, NewServicePage, ServicesListPage } from '@/features/services/pages/service-pages';
+import { EditServicePage, NewServicePage, ServiceDetailPage, ServicesListPage } from '@/features/services/pages/service-pages';
 import { FinanceIndexPage, FinancePage } from '@/features/finance/pages/finance-page';
 import { ReportsPage } from '@/features/reports/pages/reports-page';
 import { SettingsPage } from '@/features/settings/pages/settings-pages';
@@ -52,6 +52,7 @@ export function AppRouter() {
           <Route path="services" element={<ServicesListPage />} />
           <Route path="services/new" element={<NewServicePage />} />
           <Route path="services/:id/edit" element={<EditServicePage />} />
+          <Route path="services/:id" element={<ServiceDetailPage />} />
           <Route path="finance" element={<FinanceIndexPage />} />
           <Route path="finance/work-orders/:workOrderId" element={<FinancePage />} />
           <Route path="reports" element={<ReportsPage />} />

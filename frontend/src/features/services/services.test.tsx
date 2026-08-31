@@ -6,7 +6,7 @@ import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { httpClient } from '@/shared/api/http';
 import { createService, listServices, serviceAction } from './api/services-api';
-import { EditServicePage, NewServicePage, ServicesListPage } from './pages/service-pages';
+import { EditServicePage, NewServicePage, ServiceDetailPage, ServicesListPage } from './pages/service-pages';
 
 const service = { id: 'service-1', organizationId: 'org-1', name: 'Troca de óleo', description: 'Óleo e filtro', price: '149.90', active: true, createdAt: '2026-01-01T12:00:00.000Z', updatedAt: '2026-01-02T12:00:00.000Z' };
 
@@ -47,9 +47,9 @@ describe('service management behavior', () => {
   it('creates a Service with an exact decimal string and supported fields only', async () => {
     const user = userEvent.setup();
     const post = vi.spyOn(httpClient, 'post').mockResolvedValue({ data: { ...service, id: 'service-2' } } as never);
-    renderPage(<Routes><Route path="/app/services/new" element={<NewServicePage />} /><Route path="/app/services/:id/edit" element={<div />} /></Routes>, '/app/services/new');
+    renderPage(<Routes><Route path="/app/services/new" element={<NewServicePage />} /><Route path="/app/services/:id" element={<div />} /></Routes>, '/app/services/new');
     await user.type(await screen.findByLabelText(/Nome/), 'Alinhamento');
-    await user.type(screen.getByLabelText(/Preço/), '89.90');
+    await user.type(screen.getByLabelText(/Preço/), '89,90');
     await user.click(screen.getByRole('button', { name: 'Salvar serviço' }));
     await waitFor(() => expect(httpClient.post).toHaveBeenCalledWith('/services', { name: 'Alinhamento', price: '89.90' }));
     expect(JSON.stringify(post.mock.calls)).not.toContain('organizationId');
@@ -60,7 +60,7 @@ describe('service management behavior', () => {
     const patch = vi.spyOn(httpClient, 'patch').mockResolvedValue({ data: { ...service, name: 'Troca completa' } } as never);
     const post = vi.spyOn(httpClient, 'post').mockResolvedValue({ data: { ...service, active: false } } as never);
     vi.spyOn(httpClient, 'get').mockImplementation((url) => url === '/services/service-1' ? Promise.resolve({ data: service }) as never : Promise.resolve({ data: { data: [service], meta: { page: 1, pageSize: 20, total: 1, totalPages: 1 } } }) as never);
-    renderPage(<Routes><Route path="/app/services/:id/edit" element={<EditServicePage />} /><Route path="/app/services" element={<div />} /></Routes>, '/app/services/service-1/edit');
+    renderPage(<Routes><Route path="/app/services/:id/edit" element={<EditServicePage />} /><Route path="/app/services/:id" element={<div />} /></Routes>, '/app/services/service-1/edit');
     const name = await screen.findByLabelText(/Nome/);
     await user.clear(name); await user.type(name, 'Troca completa');
     await user.click(screen.getByRole('button', { name: 'Salvar serviço' }));
@@ -68,6 +68,20 @@ describe('service management behavior', () => {
     cleanup();
     renderPage(<Routes><Route path="/app/services" element={<ServicesListPage />} /></Routes>);
     await screen.findByText('Troca de óleo');
+    await user.click(screen.getByRole('button', { name: 'Desativar serviço' }));
+    await waitFor(() => expect(post).toHaveBeenCalledWith('/services/service-1/deactivate'));
+  });
+
+  it('shows saved Service details and maintains its active status', async () => {
+    const user = userEvent.setup();
+    const post = vi.spyOn(httpClient, 'post').mockResolvedValue({ data: { ...service, active: false } } as never);
+    vi.spyOn(httpClient, 'get').mockResolvedValue({ data: service } as never);
+    renderPage(<Routes><Route path="/app/services/:id" element={<ServiceDetailPage />} /><Route path="/app/services/:id/edit" element={<div />} /></Routes>, '/app/services/service-1');
+
+    expect(await screen.findByRole('heading', { name: 'Troca de óleo' })).toBeInTheDocument();
+    expect(screen.getByText('Óleo e filtro')).toBeInTheDocument();
+    expect(screen.getByText('R$ 149,90')).toBeInTheDocument();
+    expect(screen.getByText('Ativo')).toBeInTheDocument();
     await user.click(screen.getByRole('button', { name: 'Desativar serviço' }));
     await waitFor(() => expect(post).toHaveBeenCalledWith('/services/service-1/deactivate'));
   });
