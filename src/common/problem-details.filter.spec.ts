@@ -18,7 +18,8 @@ describe('ProblemDetailsFilter', () => {
     expect(response.status).toHaveBeenCalledWith(500);
     expect(json).toHaveBeenCalledWith(expect.objectContaining({
       status: 500,
-      detail: 'An unexpected error occurred.',
+      title: 'Erro interno do servidor',
+      detail: 'Ocorreu um erro inesperado.',
       code: 'HTTP_500',
     }));
     expect(JSON.stringify(json.mock.calls[0][0])).not.toMatch(/Prisma|SQL|stack|token|hash|secret/i);
@@ -27,11 +28,11 @@ describe('ProblemDetailsFilter', () => {
   it('keeps contract validation details while rejecting arbitrary exception messages', () => {
     const contract = makeHost();
     new ProblemDetailsFilter({ record: jest.fn() } as never).catch(new BadRequestException({ message: ['invalid'] }), contract.host);
-    expect(contract.json).toHaveBeenCalledWith(expect.objectContaining({ status: 400, detail: 'Request validation failed.', code: 'HTTP_400' }));
+    expect(contract.json).toHaveBeenCalledWith(expect.objectContaining({ status: 400, title: 'Requisição inválida', detail: 'Falha na validação da requisição.', code: 'HTTP_400' }));
 
     const unsafe = makeHost();
     new ProblemDetailsFilter({ record: jest.fn() } as never).catch(new BadRequestException('Prisma password hash: secret'), unsafe.host);
-    expect(unsafe.json).toHaveBeenCalledWith(expect.objectContaining({ detail: 'Request validation failed.' }));
+    expect(unsafe.json).toHaveBeenCalledWith(expect.objectContaining({ detail: 'Falha na validação da requisição.' }));
   });
 
   it('preserves a known coded contract error with a sanitized detail', () => {
@@ -43,8 +44,26 @@ describe('ProblemDetailsFilter', () => {
     expect(contract.json).toHaveBeenCalledWith(expect.objectContaining({
       status: 409,
       code: 'PAYMENT_EXCEEDS_BALANCE',
-      detail: 'Payment exceeds the Work Order balance.',
+      detail: 'O pagamento excede o saldo da ordem de serviço.',
     }));
+  });
+
+  it('translates a known resource error and hides an unknown client error', () => {
+    const known = makeHost();
+    new ProblemDetailsFilter({ record: jest.fn() } as never).catch(new HttpException('Product not found', 404), known.host);
+    expect(known.json).toHaveBeenCalledWith(expect.objectContaining({
+      status: 404,
+      title: 'Recurso não encontrado',
+      detail: 'Produto não encontrado.',
+    }));
+
+    const unknown = makeHost();
+    new ProblemDetailsFilter({ record: jest.fn() } as never).catch(new HttpException('English implementation detail', 422), unknown.host);
+    expect(unknown.json).toHaveBeenCalledWith(expect.objectContaining({
+      status: 422,
+      detail: 'Não foi possível concluir a solicitação.',
+    }));
+    expect(JSON.stringify(unknown.json.mock.calls[0][0])).not.toContain('English implementation detail');
   });
 
   it('records rate-limit failures as structured security events', () => {

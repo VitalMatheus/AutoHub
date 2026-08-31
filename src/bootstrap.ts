@@ -50,11 +50,11 @@ export function validateOpenApiContract(document: OpenAPIObject): void {
 function publishCommonResponses(document: OpenAPIObject): void {
   const problemRef = { $ref: '#/components/schemas/ProblemDetails' };
   const common: Record<string, ResponseObject> = {
-    '400': { description: 'Invalid request.', content: { 'application/problem+json': { schema: problemRef } } },
-    '401': { description: 'Authentication required.', content: { 'application/problem+json': { schema: problemRef } } },
-    '403': { description: 'Insufficient role or access.', content: { 'application/problem+json': { schema: problemRef } } },
-    '404': { description: 'Resource not found in the authenticated Organization.', content: { 'application/problem+json': { schema: problemRef } } },
-    '429': { description: 'Too many requests.', content: { 'application/problem+json': { schema: problemRef } } },
+    '400': { description: 'Requisição inválida.', content: { 'application/problem+json': { schema: problemRef } } },
+    '401': { description: 'Autenticação obrigatória.', content: { 'application/problem+json': { schema: problemRef } } },
+    '403': { description: 'Papel ou acesso insuficiente.', content: { 'application/problem+json': { schema: problemRef } } },
+    '404': { description: 'Recurso não encontrado na Organization autenticada.', content: { 'application/problem+json': { schema: problemRef } } },
+    '429': { description: 'Muitas solicitações.', content: { 'application/problem+json': { schema: problemRef } } },
   };
   for (const item of Object.values(document.paths)) {
     for (const operation of Object.values(item)) {

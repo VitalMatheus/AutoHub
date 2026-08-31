@@ -1,6 +1,6 @@
 import { FormEvent, useEffect, useState } from 'react';
 import type { CustomerInput } from '../api/customers-api';
-import { ApiError } from '@/shared/api/http';
+import { ApiError, getUserFacingError } from '@/shared/api/http';
 
 type Props = { initial?: Partial<CustomerInput>; submitting?: boolean; omitEmptyOptional?: boolean; onSubmit: (value: CustomerInput) => Promise<unknown>; onCancel: () => void };
 type Errors = Partial<Record<keyof CustomerInput, string>>;
@@ -38,7 +38,7 @@ export function CustomerForm({ initial, submitting, omitEmptyOptional = true, on
       else if (error instanceof ApiError) {
         const fieldErrors = (error.problem as typeof error.problem & { errors?: unknown }).errors;
         if (fieldErrors && typeof fieldErrors === 'object') setErrors((current) => ({ ...current, ...Object.fromEntries(Object.entries(fieldErrors).filter(([field, message]) => field in value && typeof message === 'string')) as Errors }));
-        setApiError(error.problem.detail || 'Não foi possível salvar o Customer.');
+        setApiError(getUserFacingError(error.problem, 'Não foi possível salvar o Customer.'));
       }
       else setApiError('Não foi possível salvar o Customer agora.');
     }

@@ -1,6 +1,6 @@
 import { AxiosError } from 'axios';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { getAccessToken, httpClient, setAccessToken, setRefreshAccessTokenHandler } from './http';
+import { getAccessToken, getUserFacingError, httpClient, setAccessToken, setRefreshAccessTokenHandler } from './http';
 
 describe('HTTP authentication boundary', () => {
   beforeEach(() => {
@@ -83,5 +83,16 @@ describe('HTTP authentication boundary', () => {
     await expect(httpClient.get('/customers')).rejects.toThrow('Sessão expirada.');
     expect(refreshRequests).toBe(1);
     httpClient.defaults.adapter = adapter;
+  });
+});
+
+describe('HTTP error presentation', () => {
+  it('translates known legacy API details and uses a safe Portuguese fallback', () => {
+    expect(getUserFacingError({ status: 409, detail: 'Payment exceeds the Work Order balance.', code: 'PAYMENT_EXCEEDS_BALANCE' }, 'fallback')).toBe('O pagamento excede o saldo da ordem de serviço.');
+    expect(getUserFacingError({ status: 500, detail: 'The request could not be completed.', code: 'HTTP_500' }, 'fallback')).toBe('Não foi possível concluir a solicitação.');
+  });
+
+  it('keeps a Portuguese API detail when it is already safe to show', () => {
+    expect(getUserFacingError({ status: 404, detail: 'Produto não encontrado.', code: 'HTTP_404' }, 'fallback')).toBe('Produto não encontrado.');
   });
 });

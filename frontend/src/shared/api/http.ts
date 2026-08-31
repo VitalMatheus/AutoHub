@@ -19,6 +19,32 @@ export class ApiError extends Error {
   }
 }
 
+const LEGACY_ERROR_TRANSLATIONS: Record<string, string> = {
+  'Payment exceeds the Work Order balance.': 'O pagamento excede o saldo da ordem de serviço.',
+  'The request could not be completed.': 'Não foi possível concluir a solicitação.',
+  'An unexpected error occurred.': 'Ocorreu um erro inesperado.',
+  'Request validation failed.': 'Falha na validação da requisição.',
+};
+
+const CODE_ERROR_TRANSLATIONS: Record<string, string> = {
+  PAYMENT_EXCEEDS_BALANCE: 'O pagamento excede o saldo da ordem de serviço.',
+  PAYMENT_ALREADY_CANCELLED: 'O pagamento já está cancelado.',
+  WORK_ORDER_CANCELLED: 'Work Orders canceladas não podem receber pagamentos.',
+};
+
+const PORTUGUESE_ERROR_MARKERS = ['não ', 'não.', 'falha', 'solicitação', 'pagamento', 'produto', 'usuário', 'acesso', 'obrigatória'];
+
+/** Converts API-safe details to text that can be shown outside authentication screens. */
+export function getUserFacingError(problem: Pick<ProblemDetails, 'status' | 'detail' | 'code'>, fallback: string): string {
+  const byCode = CODE_ERROR_TRANSLATIONS[problem.code];
+  if (byCode) return byCode;
+  const byDetail = LEGACY_ERROR_TRANSLATIONS[problem.detail];
+  if (byDetail) return byDetail;
+  const detail = problem.detail.trim();
+  if (PORTUGUESE_ERROR_MARKERS.some((marker) => detail.toLocaleLowerCase('pt-BR').includes(marker))) return detail;
+  return fallback;
+}
+
 const apiBaseUrl = import.meta.env.VITE_API_URL || '/api/v1';
 let accessToken: string | null = null;
 let refreshAccessToken: (() => Promise<string>) | null = null;
