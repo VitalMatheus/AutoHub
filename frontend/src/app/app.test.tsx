@@ -225,9 +225,23 @@ describe('Organization Admin frontend shell', () => {
 
     render(<AppProviders />);
     await screen.findByRole('heading', { name: 'Sua oficina está pronta' });
-    await user.click(screen.getByRole('button', { name: 'Abrir menu' }));
-    expect(screen.getByRole('button', { name: 'Fechar menu' })).toBeInTheDocument();
+    const openMenu = screen.getByRole('button', { name: 'Abrir menu' });
+    await user.click(openMenu);
+    expect(screen.getByRole('button', { name: 'Fechar menu' })).toHaveFocus();
     await user.keyboard('{Escape}');
     expect(screen.queryByRole('button', { name: 'Fechar menu' })).not.toBeInTheDocument();
+    expect(openMenu).toHaveFocus();
+  });
+
+  it('shows the role returned by the backend in the user menu', async () => {
+    const user = userEvent.setup();
+    vi.spyOn(httpClient, 'post').mockResolvedValue({ data: { accessToken: 'restored-token', expiresIn: 900, tokenType: 'Bearer' } } as never);
+    vi.spyOn(httpClient, 'get').mockResolvedValue({ data: principal } as never);
+
+    render(<AppProviders />);
+    await screen.findByRole('heading', { name: 'Sua oficina está pronta' });
+    await user.click(screen.getByRole('button', { name: /Ana Admin/ }));
+
+    expect(screen.getByText('Administrador da oficina')).toBeInTheDocument();
   });
 });

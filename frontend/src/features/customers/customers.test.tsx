@@ -47,5 +47,26 @@ describe('Customer management through the routed application', () => {
     expect(await screen.findByRole('alert')).toHaveTextContent('Já existe um Customer com este documento.'); expect(screen.queryByLabelText('Endereço')).not.toBeInTheDocument();
   });
 
+  it('maps safe API field errors and validates DTO length limits', async () => {
+    const user = userEvent.setup(); renderCustomers('/app/customers/new'); await screen.findByRole('heading', { name: 'Novo cliente' });
+    await user.type(screen.getByLabelText(/Nome/), 'A'.repeat(161));
+    await user.type(screen.getByLabelText(/Telefone/), '9999');
+    await user.click(screen.getByRole('button', { name: 'Salvar Customer' }));
+    expect(screen.getByText('Use no máximo 160 caracteres.')).toBeInTheDocument();
+
+    await user.clear(screen.getByLabelText(/Nome/)); await user.type(screen.getByLabelText(/Nome/), 'Válido');
+    vi.spyOn(httpClient, 'post').mockRejectedValue(new ApiError(Object.assign({ status: 400, detail: 'Request validation failed.', code: 'HTTP_400' }, { errors: { phone: 'Telefone inválido.' } })));
+    await user.click(screen.getByRole('button', { name: 'Salvar Customer' }));
+    expect(await screen.findByText('Telefone inválido.')).toBeInTheDocument();
+  });
+
+  it('sends empty optional fields when editing to clear them', async () => {
+    const user = userEvent.setup(); renderCustomers('/app/customers/customer-1/edit'); await screen.findByRole('heading', { name: 'Editar Customer' });
+    const patch = vi.spyOn(httpClient, 'patch').mockResolvedValue({ data: customer } as never);
+    await user.clear(screen.getByLabelText('E-mail')); await user.click(screen.getByRole('button', { name: 'Salvar Customer' }));
+
+    await waitFor(() => expect(patch).toHaveBeenCalledWith('/customers/customer-1', { email: '' }));
+  });
+
   it('shows Customer details and the future Vehicle/history boundary without fabricated records', async () => { renderCustomers('/app/customers/customer-1'); expect(await screen.findByRole('heading', { name: 'Maria Silva' })).toBeInTheDocument(); expect(screen.getByText('Prefere contato pela manhã.')).toBeInTheDocument(); expect(screen.getByText(/serão integradas/)).toBeInTheDocument(); });
 });
