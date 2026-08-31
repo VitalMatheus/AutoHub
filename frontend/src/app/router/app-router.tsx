@@ -6,6 +6,7 @@ import { ProtectedRoute } from '@/features/auth/components/protected-route';
 import { LoginPage } from '@/features/auth/pages/login-page';
 import { PlatformHomePage } from '../pages/platform-home-page';
 import { useAuth, getHomePath } from '@/features/auth/auth-context';
+import { FutureModulePage } from '../pages/future-module-page';
 
 function HomeRedirect() {
   const { principal, isAuthenticated, isRestoring } = useAuth();
@@ -19,7 +20,18 @@ export function AppRouter() {
       <Route path="/login" element={<LoginPage />} />
       <Route element={<ProtectedRoute allowedRoles={['ADMIN']} />}>
         <Route path="/app" element={<AppLayout />}>
-          <Route index element={<AppHomePage />} />
+          <Route index element={<Navigate to="dashboard" replace />} />
+          <Route path="dashboard" element={<AppHomePage />} />
+          <Route path="customers" element={<FutureModulePage title="Clientes" />} />
+          <Route path="customers/new" element={<FutureModulePage title="Novo cliente" />} />
+          <Route path="vehicles/*" element={<FutureModulePage title="Veículos" />} />
+          <Route path="quotes/*" element={<FutureModulePage title="Orçamentos" />} />
+          <Route path="work-orders/*" element={<FutureModulePage title="Ordens de Serviço" />} />
+          <Route path="products/*" element={<FutureModulePage title="Produtos" />} />
+          <Route path="services/*" element={<FutureModulePage title="Serviços" />} />
+          <Route path="finance/*" element={<FutureModulePage title="Financeiro" />} />
+          <Route path="reports/*" element={<FutureModulePage title="Relatórios" />} />
+          <Route path="settings/*" element={<FutureModulePage title="Configurações" />} />
         </Route>
       </Route>
       <Route element={<ProtectedRoute allowedRoles={['SUPER_ADMIN']} />}>

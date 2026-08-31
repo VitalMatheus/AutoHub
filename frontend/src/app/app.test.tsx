@@ -199,4 +199,35 @@ describe('Organization Admin frontend shell', () => {
 
     expect(await screen.findByRole('heading', { name: 'Entrar na oficina' })).toBeInTheDocument();
   });
+
+  it('navigates between modules without leaving the persistent application shell', async () => {
+    const user = userEvent.setup();
+    vi.spyOn(httpClient, 'post').mockResolvedValue({ data: { accessToken: 'restored-token', expiresIn: 900, tokenType: 'Bearer' } } as never);
+    vi.spyOn(httpClient, 'get').mockImplementation((url) => {
+      if (url === '/auth/me') return Promise.resolve({ data: principal }) as never;
+      return Promise.resolve({ data: { meta: { total: 7 } } }) as never;
+    });
+
+    render(<AppProviders />);
+    expect(await screen.findByRole('heading', { name: 'Sua oficina está pronta' })).toBeInTheDocument();
+    expect(await screen.findByText('7')).toBeInTheDocument();
+    await user.click(screen.getByRole('link', { name: 'Clientes' }));
+
+    expect(await screen.findByRole('heading', { name: 'Clientes', level: 2 })).toBeInTheDocument();
+    expect(screen.getByRole('navigation', { name: 'Módulos da oficina' })).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'Clientes' })).toHaveAttribute('aria-current', 'page');
+  });
+
+  it('opens and closes the mobile navigation with the backdrop and Escape', async () => {
+    const user = userEvent.setup();
+    vi.spyOn(httpClient, 'post').mockResolvedValue({ data: { accessToken: 'restored-token', expiresIn: 900, tokenType: 'Bearer' } } as never);
+    vi.spyOn(httpClient, 'get').mockResolvedValue({ data: principal } as never);
+
+    render(<AppProviders />);
+    await screen.findByRole('heading', { name: 'Sua oficina está pronta' });
+    await user.click(screen.getByRole('button', { name: 'Abrir menu' }));
+    expect(screen.getByRole('button', { name: 'Fechar menu' })).toBeInTheDocument();
+    await user.keyboard('{Escape}');
+    expect(screen.queryByRole('button', { name: 'Fechar menu' })).not.toBeInTheDocument();
+  });
 });
