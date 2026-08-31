@@ -7,6 +7,8 @@ import { LoginPage } from '@/features/auth/pages/login-page';
 import { PlatformHomePage } from '../pages/platform-home-page';
 import { useAuth, getHomePath } from '@/features/auth/auth-context';
 import { FutureModulePage } from '../pages/future-module-page';
+import { NewQuotePage, QuoteDetailPage, QuotesListPage } from '@/features/quotes/pages/quote-pages';
+import { NewWorkOrderPage, WorkOrderDetailPage, WorkOrdersListPage } from '@/features/work-orders/pages/work-order-pages';
 import { CustomerDetailPage, CustomersListPage, EditCustomerPage, NewCustomerPage } from '@/features/customers/pages/customer-pages';
 import { EditVehiclePage, NewVehiclePage, VehicleDetailPage, VehiclesListPage } from '@/features/vehicles/pages/vehicle-pages';
 
@@ -32,8 +34,12 @@ export function AppRouter() {
           <Route path="vehicles/new" element={<NewVehiclePage />} />
           <Route path="vehicles/:id/edit" element={<EditVehiclePage />} />
           <Route path="vehicles/:id" element={<VehicleDetailPage />} />
-          <Route path="quotes/*" element={<FutureModulePage title="Orçamentos" />} />
-          <Route path="work-orders/*" element={<FutureModulePage title="Ordens de Serviço" />} />
+          <Route path="quotes" element={<QuotesListPage />} />
+          <Route path="quotes/new" element={<NewQuotePage />} />
+          <Route path="quotes/:id" element={<QuoteDetailPage />} />
+          <Route path="work-orders" element={<WorkOrdersListPage />} />
+          <Route path="work-orders/new" element={<NewWorkOrderPage />} />
+          <Route path="work-orders/:id" element={<WorkOrderDetailPage />} />
           <Route path="products/*" element={<FutureModulePage title="Produtos" />} />
           <Route path="services/*" element={<FutureModulePage title="Serviços" />} />
           <Route path="finance/*" element={<FutureModulePage title="Financeiro" />} />
