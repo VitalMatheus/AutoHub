@@ -95,4 +95,17 @@ describe('HTTP error presentation', () => {
   it('keeps a Portuguese API detail when it is already safe to show', () => {
     expect(getUserFacingError({ status: 404, detail: 'Produto não encontrado.', code: 'HTTP_404' }, 'fallback')).toBe('Produto não encontrado.');
   });
+
+  it.each([
+    ['QUOTE_NOT_APPROVED', 'Only approved Quotes can be converted into Work Orders.', 'Apenas orçamentos aprovados podem ser convertidos em ordens de serviço.'],
+    ['WORK_ORDER_INVALID_TRANSITION', 'Work Order cannot complete from OPEN.', 'A transição solicitada para a ordem de serviço não é permitida.'],
+    ['HTTP_409', 'Product SKU already exists in this Organization', 'O SKU do produto já existe nesta oficina.'],
+    ['HTTP_404', 'Service not found', 'Serviço não encontrado.'],
+  ])('translates %s API errors without exposing the original detail', (code, detail, expected) => {
+    expect(getUserFacingError({ status: 409, detail, code }, 'fallback')).toBe(expected);
+  });
+
+  it('uses a safe Portuguese fallback for unknown technical details', () => {
+    expect(getUserFacingError({ status: 500, detail: 'PrismaClientKnownRequestError: SQL detail', code: 'HTTP_500' }, 'Não foi possível salvar.')).toBe('Não foi possível salvar.');
+  });
 });

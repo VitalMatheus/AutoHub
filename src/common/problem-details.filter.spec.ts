@@ -66,6 +66,22 @@ describe('ProblemDetailsFilter', () => {
     expect(JSON.stringify(unknown.json.mock.calls[0][0])).not.toContain('English implementation detail');
   });
 
+  it('translates domain errors from quotes, work orders, products, and services', () => {
+    const cases = [
+      ['Only approved Quotes can be converted into Work Orders.', 'Apenas orçamentos aprovados podem ser convertidos em ordens de serviço.'],
+      ['Work Order cannot complete from OPEN.', 'A transição solicitada para a ordem de serviço não é permitida.'],
+      ['Product SKU already exists in this Organization', 'O SKU do produto já existe nesta oficina.'],
+      ['Service not found', 'Serviço não encontrado.'],
+    ] as const;
+
+    for (const [message, detail] of cases) {
+      const { host, json } = makeHost();
+      new ProblemDetailsFilter({ record: jest.fn() } as never).catch(new HttpException(message, 409), host);
+      expect(json).toHaveBeenCalledWith(expect.objectContaining({ detail }));
+      expect(JSON.stringify(json.mock.calls[0][0])).not.toContain(message);
+    }
+  });
+
   it('records rate-limit failures as structured security events', () => {
     const securityLogger = { record: jest.fn() };
     const { host } = makeHost();

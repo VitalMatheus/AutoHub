@@ -13,4 +13,8 @@ describe('money input normalization', () => {
     expect(plainToInstance(CreateQuoteItemDto, { quantity: '1', unitPrice: '5,50' }).unitPrice).toBe('5.50');
     expect(plainToInstance(CreateWorkOrderItemDto, { quantity: '1', unitPrice: '5,50' }).unitPrice).toBe('5.50');
   });
+
+  it('removes Brazilian thousands separators before validation', () => {
+    expect(plainToInstance(CreateProductDto, { name: 'Filtro', salePrice: '1.234,56' }).salePrice).toBe('1234.56');
+  });
 });

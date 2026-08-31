@@ -24,15 +24,32 @@ const LEGACY_ERROR_TRANSLATIONS: Record<string, string> = {
   'The request could not be completed.': 'Não foi possível concluir a solicitação.',
   'An unexpected error occurred.': 'Ocorreu um erro inesperado.',
   'Request validation failed.': 'Falha na validação da requisição.',
+  'Only approved Quotes can be converted into Work Orders.': 'Apenas orçamentos aprovados podem ser convertidos em ordens de serviço.',
+  'An approved Quote can generate only one Work Order.': 'Um orçamento aprovado pode gerar apenas uma ordem de serviço.',
+  'Work Order cannot complete from OPEN.': 'A transição solicitada para a ordem de serviço não é permitida.',
+  'Product SKU already exists in this Organization': 'O SKU do produto já existe nesta oficina.',
+  'Service not found': 'Serviço não encontrado.',
+  'Active Service not found': 'Serviço ativo não encontrado.',
+  'Quote not found': 'Orçamento não encontrado.',
+  'Work Order not found': 'Ordem de serviço não encontrada.',
+  'Customer or Vehicle not found': 'Cliente ou veículo não encontrado.',
+  'Customer not found': 'Cliente não encontrado.',
+  'Vehicle not found': 'Veículo não encontrado.',
+  'Organization not found': 'Oficina não encontrada.',
+  'Quote Item not found': 'Item do orçamento não encontrado.',
+  'Work Order Item not found': 'Item da ordem de serviço não encontrado.',
+  'Only draft Quotes can be edited': 'Apenas orçamentos em rascunho podem ser editados.',
+  'Customer document already exists in this Organization': 'O documento do cliente já existe nesta oficina.',
+  'Vehicle plate already exists in this Organization': 'A placa do veículo já existe nesta oficina.',
+  'Produto não encontrado.': 'Produto não encontrado.',
 };
 
 const CODE_ERROR_TRANSLATIONS: Record<string, string> = {
   PAYMENT_EXCEEDS_BALANCE: 'O pagamento excede o saldo da ordem de serviço.',
   PAYMENT_ALREADY_CANCELLED: 'O pagamento já está cancelado.',
-  WORK_ORDER_CANCELLED: 'Work Orders canceladas não podem receber pagamentos.',
+  WORK_ORDER_CANCELLED: 'Ordens de serviço canceladas não podem receber pagamentos.',
 };
-
-const PORTUGUESE_ERROR_MARKERS = ['não ', 'não.', 'falha', 'solicitação', 'pagamento', 'produto', 'usuário', 'acesso', 'obrigatória'];
+const SAFE_DETAILS = new Set([...Object.values(LEGACY_ERROR_TRANSLATIONS), ...Object.values(CODE_ERROR_TRANSLATIONS)]);
 
 /** Converts API-safe details to text that can be shown outside authentication screens. */
 export function getUserFacingError(problem: Pick<ProblemDetails, 'status' | 'detail' | 'code'>, fallback: string): string {
@@ -40,8 +57,7 @@ export function getUserFacingError(problem: Pick<ProblemDetails, 'status' | 'det
   if (byCode) return byCode;
   const byDetail = LEGACY_ERROR_TRANSLATIONS[problem.detail];
   if (byDetail) return byDetail;
-  const detail = problem.detail.trim();
-  if (PORTUGUESE_ERROR_MARKERS.some((marker) => detail.toLocaleLowerCase('pt-BR').includes(marker))) return detail;
+  if (SAFE_DETAILS.has(problem.detail.trim())) return problem.detail.trim();
   return fallback;
 }
 

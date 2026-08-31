@@ -1,7 +1,7 @@
 import { FormEvent, useState } from 'react';
 import type { ServiceInput } from '../api/services-api';
-import { ApiError } from '@/shared/api/http';
-import { normalizeMoney } from '@/features/shared/money';
+import { ApiError, getUserFacingError } from '@/shared/api/http';
+import { isValidMoney, normalizeMoney } from '@/features/shared/money';
 
 const inputClass = 'w-full rounded-xl border border-slate-300 bg-white px-3 py-2.5 text-sm outline-none ring-blue-500 placeholder:text-slate-400 focus:ring-2';
 
@@ -15,12 +15,12 @@ export function ServiceForm({ initial, submitting = false, omitEmptyOptional = t
     const next: Partial<Record<keyof ServiceInput, string>> = {};
     if (!value.name.trim()) next.name = 'Informe o nome.';
     else if (value.name.length > 160) next.name = 'Use no máximo 160 caracteres.';
-    if (!/^\d+([\.,]\d{1,2})?$/.test(value.price)) next.price = 'Informe um preço decimal válido.';
+    if (!isValidMoney(value.price)) next.price = 'Informe um preço decimal válido.';
     if (value.description && value.description.length > 2000) next.description = 'Use no máximo 2000 caracteres.';
     setErrors(next); setApiError(''); if (Object.keys(next).length) return;
     const normalized = { name: value.name.trim(), price: normalizeMoney(value.price), description: value.description?.trim() ?? '' };
     const input: ServiceInput = (omitEmptyOptional ? Object.fromEntries(Object.entries(normalized).filter(([, field]) => field !== '')) : normalized) as ServiceInput;
-    try { await onSubmit(input); } catch (error) { setApiError(error instanceof ApiError ? error.problem.detail : 'Não foi possível salvar o serviço agora.'); }
+    try { await onSubmit(input); } catch (error) { setApiError(error instanceof ApiError ? getUserFacingError(error.problem, 'Não foi possível salvar o serviço agora.') : 'Não foi possível salvar o serviço agora.'); }
   }
   return <form onSubmit={submit} className="space-y-6" noValidate>
     {apiError && <div role="alert" className="rounded-xl border border-red-200 bg-red-50 p-3 text-sm text-red-700">{apiError}</div>}

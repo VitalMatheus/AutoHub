@@ -16,6 +16,6 @@ export class CreateQuoteItemDto {
   @IsOptional() @IsString() @Length(1, 2000) description?: string;
   @ApiProperty({ type: String, pattern: '^\\d+(\\.\\d{1,3})?$', example: '1.500' })
   @IsDecimal({ decimal_digits: '1,3' }) @Matches(decimal) quantity!: string;
-  @ApiPropertyOptional({ type: String, pattern: '^\\d+(\\.\\d{1,2})?$', example: '149.90' })
+  @ApiPropertyOptional({ type: String, pattern: '^\\d+(\\.\\d{1,2})?$', example: '149.90', description: 'Aceita entrada brasileira com vírgula, como 149,90.' })
   @IsOptional() @Transform(normalizeMoneyTransform) @IsDecimal({ decimal_digits: '0,2' }) @Matches(/^\d+(\.\d{1,2})?$/) unitPrice?: string;
 }

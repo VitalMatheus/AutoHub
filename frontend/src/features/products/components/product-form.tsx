@@ -1,7 +1,7 @@
 import { type FormEvent, useState } from 'react';
-import { ApiError } from '@/shared/api/http';
+import { ApiError, getUserFacingError } from '@/shared/api/http';
 import type { ProductInput } from '../api/products-api';
-import { normalizeMoney } from '@/features/shared/money';
+import { isValidMoney, normalizeMoney } from '@/features/shared/money';
 
 type Props = { initial?: Partial<ProductInput>; submitting?: boolean; omitEmptyOptional?: boolean; onSubmit: (value: ProductInput) => Promise<unknown>; onCancel: () => void };
 const inputClass = 'w-full rounded-xl border border-slate-300 bg-white px-3 py-2.5 text-sm outline-none focus:ring-2 focus:ring-blue-500';
@@ -13,12 +13,12 @@ export function ProductForm({ initial, submitting = false, omitEmptyOptional = t
   async function submit(event: FormEvent) {
     event.preventDefault(); setError('');
     if (!value.name.trim()) { setError('Informe o nome do produto.'); return; }
-    if (!/^\d+([\.,]\d{1,2})?$/.test(value.salePrice)) { setError('Informe um preço decimal válido.'); return; }
+    if (!isValidMoney(value.salePrice)) { setError('Informe um preço decimal válido.'); return; }
     const normalized = { ...value, name: value.name.trim(), description: value.description?.trim(), sku: value.sku?.trim(), salePrice: normalizeMoney(value.salePrice), stockQuantity: Number(value.stockQuantity), stockMinimum: Number(value.stockMinimum) };
     const payload = (omitEmptyOptional ? Object.fromEntries(Object.entries(normalized).filter(([, field]) => field !== '')) : normalized) as ProductInput;
     try { await onSubmit(payload); } catch (cause) {
       if (cause instanceof ApiError && cause.problem.status === 409) setError('Já existe um produto com este SKU.');
-      else if (cause instanceof ApiError) setError(cause.problem.detail || 'Não foi possível salvar o produto.');
+      else if (cause instanceof ApiError) setError(getUserFacingError(cause.problem, 'Não foi possível salvar o produto.'));
       else setError('Não foi possível salvar o produto agora.');
     }
   }

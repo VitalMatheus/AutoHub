@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { httpClient } from '@/shared/api/http';
 import { decimalMultiply } from './shared/document-components';
-import { formatMoney, normalizeMoney } from './shared/money';
+import { formatMoney, isValidMoney, normalizeMoney } from './shared/money';
 import { addQuoteItem, quoteAction } from './quotes/api/quotes-api';
 import { convertQuote, createWorkOrder, workOrderAction } from './work-orders/api/work-orders-api';
 
@@ -16,8 +16,13 @@ describe('document frontend contracts', () => {
 
   it('normalizes and displays Brazilian monetary strings without floating point', () => {
     expect(normalizeMoney('5,50')).toBe('5.50');
+    expect(normalizeMoney('1.234,56')).toBe('1234.56');
     expect(formatMoney('1234.5')).toBe('R$ 1.234,50');
     expect(formatMoney('5,50')).toBe('R$ 5,50');
+    expect(formatMoney('1234567,8')).toBe('R$ 1.234.567,80');
+    expect(isValidMoney('12,34')).toBe(true);
+    expect(isValidMoney('1.234,56')).toBe(true);
+    expect(isValidMoney('12.345')).toBe(false);
   });
 
   it('sends quote item and lifecycle requests to the tenant-scoped API', async () => {
