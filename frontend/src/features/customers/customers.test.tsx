@@ -34,36 +34,47 @@ describe('Customer management through the routed application', () => {
     expect(window.location.search).toContain('search=Maria');
   });
 
-  it('creates a Customer using only supported fields and navigates to details', async () => {
+  it('applies Brazilian masks and sends normalized Customer fields', async () => {
     const user = userEvent.setup(); renderCustomers('/app/customers/new');
-    await screen.findByRole('heading', { name: 'Novo cliente' }); await user.type(screen.getByLabelText(/Nome/), 'João Souza'); await user.type(screen.getByLabelText(/Telefone/), '85988887777'); await user.type(screen.getByLabelText('E-mail'), 'joao@example.com');
-    const post = vi.spyOn(httpClient, 'post').mockResolvedValue({ data: { ...customer, id: 'customer-2', name: 'João Souza' } } as never); await user.click(screen.getByRole('button', { name: 'Salvar Customer' }));
-    await waitFor(() => expect(post).toHaveBeenCalledWith('/customers', { name: 'João Souza', phone: '85988887777', email: 'joao@example.com' }));
+    await screen.findByRole('heading', { name: 'Novo cliente' }); await user.type(screen.getByLabelText(/Nome/), 'João Souza');
+    const phone = screen.getByLabelText(/Telefone/); const document = screen.getByLabelText('CPF/CNPJ');
+    await user.type(phone, '85988887777'); await user.type(document, '12345678901'); await user.type(screen.getByLabelText('E-mail'), 'joao@example.com');
+    expect(phone).toHaveValue('(85) 98888-7777'); expect(document).toHaveValue('123.456.789-01');
+    const post = vi.spyOn(httpClient, 'post').mockResolvedValue({ data: { ...customer, id: 'customer-2', name: 'João Souza' } } as never); await user.click(screen.getByRole('button', { name: 'Salvar cliente' }));
+    await waitFor(() => expect(post).toHaveBeenCalledWith('/customers', { name: 'João Souza', document: '12345678901', phone: '85988887777', email: 'joao@example.com' }));
+  });
+
+  it('applies the CNPJ mask and validates Brazilian document and phone lengths', async () => {
+    const user = userEvent.setup(); renderCustomers('/app/customers/new'); await screen.findByRole('heading', { name: 'Novo cliente' });
+    await user.type(screen.getByLabelText(/Nome/), 'Empresa'); const phone = screen.getByLabelText(/Telefone/); const document = screen.getByLabelText('CPF/CNPJ');
+    await user.type(phone, '8599'); await user.type(document, '11222333000181');
+    expect(document).toHaveValue('11.222.333/0001-81'); await user.click(screen.getByRole('button', { name: 'Salvar cliente' }));
+    expect(screen.getByText('Informe um telefone brasileiro com DDD.')).toBeInTheDocument(); expect(screen.queryByText('Informe um CPF ou CNPJ válido.')).not.toBeInTheDocument();
   });
 
   it('shows API conflict feedback without exposing unsupported fields', async () => {
     const user = userEvent.setup(); renderCustomers('/app/customers/new'); await screen.findByRole('heading', { name: 'Novo cliente' });
-    await user.type(screen.getByLabelText(/Nome/), 'Duplicado'); await user.type(screen.getByLabelText(/Telefone/), '9999'); vi.spyOn(httpClient, 'post').mockRejectedValue(new ApiError({ status: 409, detail: 'duplicate', code: 'CONFLICT' })); await user.click(screen.getByRole('button', { name: 'Salvar Customer' }));
-    expect(await screen.findByRole('alert')).toHaveTextContent('Já existe um Customer com este documento.'); expect(screen.queryByLabelText('Endereço')).not.toBeInTheDocument();
+    await user.type(screen.getByLabelText(/Nome/), 'Duplicado'); await user.type(screen.getByLabelText(/Telefone/), '85999990000'); vi.spyOn(httpClient, 'post').mockRejectedValue(new ApiError({ status: 409, detail: 'duplicate', code: 'CONFLICT' })); await user.click(screen.getByRole('button', { name: 'Salvar cliente' }));
+    expect(await screen.findByRole('alert')).toHaveTextContent('Já existe um cliente com este documento.'); expect(screen.queryByLabelText('Endereço')).not.toBeInTheDocument();
   });
 
   it('maps safe API field errors and validates DTO length limits', async () => {
     const user = userEvent.setup(); renderCustomers('/app/customers/new'); await screen.findByRole('heading', { name: 'Novo cliente' });
     await user.type(screen.getByLabelText(/Nome/), 'A'.repeat(161));
-    await user.type(screen.getByLabelText(/Telefone/), '9999');
-    await user.click(screen.getByRole('button', { name: 'Salvar Customer' }));
+    await user.type(screen.getByLabelText(/Telefone/), '85999990000');
+    await user.click(screen.getByRole('button', { name: 'Salvar cliente' }));
     expect(screen.getByText('Use no máximo 160 caracteres.')).toBeInTheDocument();
 
     await user.clear(screen.getByLabelText(/Nome/)); await user.type(screen.getByLabelText(/Nome/), 'Válido');
     vi.spyOn(httpClient, 'post').mockRejectedValue(new ApiError(Object.assign({ status: 400, detail: 'Request validation failed.', code: 'HTTP_400' }, { errors: { phone: 'Telefone inválido.' } })));
-    await user.click(screen.getByRole('button', { name: 'Salvar Customer' }));
+    await user.click(screen.getByRole('button', { name: 'Salvar cliente' }));
     expect(await screen.findByText('Telefone inválido.')).toBeInTheDocument();
   });
 
   it('sends empty optional fields when editing to clear them', async () => {
     const user = userEvent.setup(); renderCustomers('/app/customers/customer-1/edit'); await screen.findByRole('heading', { name: 'Editar Customer' });
     const patch = vi.spyOn(httpClient, 'patch').mockResolvedValue({ data: customer } as never);
-    await user.clear(screen.getByLabelText('E-mail')); await user.click(screen.getByRole('button', { name: 'Salvar Customer' }));
+    await user.clear(screen.getByLabelText('E-mail')); await user.click(screen.getByRole('button', { name: 'Salvar cliente' }));
 
     await waitFor(() => expect(patch).toHaveBeenCalledWith('/customers/customer-1', { email: '' }));
   });
