@@ -13,6 +13,9 @@ import { CustomerDetailPage, CustomersListPage, EditCustomerPage, NewCustomerPag
 import { EditVehiclePage, NewVehiclePage, VehicleDetailPage, VehiclesListPage } from '@/features/vehicles/pages/vehicle-pages';
 import { EditProductPage, NewProductPage, ProductDetailPage, ProductsListPage } from '@/features/products/pages/product-pages';
 import { EditServicePage, NewServicePage, ServicesListPage } from '@/features/services/pages/service-pages';
+import { FinanceIndexPage, FinancePage } from '@/features/finance/pages/finance-page';
+import { ReportsPage } from '@/features/reports/pages/reports-page';
+import { SettingsPage } from '@/features/settings/pages/settings-pages';
 
 function HomeRedirect() {
   const { principal, isAuthenticated, isRestoring } = useAuth();
@@ -49,9 +52,10 @@ export function AppRouter() {
           <Route path="services" element={<ServicesListPage />} />
           <Route path="services/new" element={<NewServicePage />} />
           <Route path="services/:id/edit" element={<EditServicePage />} />
-          <Route path="finance/*" element={<FutureModulePage title="Financeiro" />} />
-          <Route path="reports/*" element={<FutureModulePage title="Relatórios" />} />
-          <Route path="settings/*" element={<FutureModulePage title="Configurações" />} />
+          <Route path="finance" element={<FinanceIndexPage />} />
+          <Route path="finance/work-orders/:workOrderId" element={<FinancePage />} />
+          <Route path="reports" element={<ReportsPage />} />
+          <Route path="settings" element={<SettingsPage />} />
         </Route>
       </Route>
       <Route element={<ProtectedRoute allowedRoles={['SUPER_ADMIN']} />}>

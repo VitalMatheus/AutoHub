@@ -6,7 +6,6 @@ export type OrganizationUser = {
   id: string;
   name: string;
   email: string;
-  role: 'ADMIN';
   status: OrganizationUserStatus;
   createdAt: string;
   updatedAt: string;

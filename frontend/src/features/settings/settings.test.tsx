@@ -8,7 +8,7 @@ import { ApiError, httpClient } from '@/shared/api/http';
 import { SettingsPage } from './pages/settings-pages';
 import type { OrganizationUser } from './api/organization-users-api';
 
-const admin: OrganizationUser = { id: 'user-1', name: 'Ana Admin', email: 'ana@example.com', role: 'ADMIN', status: 'ACTIVE', createdAt: '2026-01-01', updatedAt: '2026-01-01' };
+const admin: OrganizationUser = { id: 'user-1', name: 'Ana Admin', email: 'ana@example.com', status: 'ACTIVE', createdAt: '2026-01-01', updatedAt: '2026-01-01' };
 function renderPage() { const client = new QueryClient({ defaultOptions: { queries: { retry: false } } }); return render(<QueryClientProvider client={client}><MemoryRouter><SettingsPage /></MemoryRouter></QueryClientProvider>); }
 
 describe('Organization User settings', () => {
