@@ -7,6 +7,7 @@ import { LoginPage } from '@/features/auth/pages/login-page';
 import { PlatformHomePage } from '../pages/platform-home-page';
 import { useAuth, getHomePath } from '@/features/auth/auth-context';
 import { FutureModulePage } from '../pages/future-module-page';
+import { CustomerDetailPage, CustomersListPage, EditCustomerPage, NewCustomerPage } from '@/features/customers/pages/customer-pages';
 
 function HomeRedirect() {
   const { principal, isAuthenticated, isRestoring } = useAuth();
@@ -22,8 +23,10 @@ export function AppRouter() {
         <Route path="/app" element={<AppLayout />}>
           <Route index element={<Navigate to="dashboard" replace />} />
           <Route path="dashboard" element={<AppHomePage />} />
-          <Route path="customers" element={<FutureModulePage title="Clientes" />} />
-          <Route path="customers/new" element={<FutureModulePage title="Novo cliente" />} />
+          <Route path="customers" element={<CustomersListPage />} />
+          <Route path="customers/new" element={<NewCustomerPage />} />
+          <Route path="customers/:id/edit" element={<EditCustomerPage />} />
+          <Route path="customers/:id" element={<CustomerDetailPage />} />
           <Route path="vehicles/*" element={<FutureModulePage title="Veículos" />} />
           <Route path="quotes/*" element={<FutureModulePage title="Orçamentos" />} />
           <Route path="work-orders/*" element={<FutureModulePage title="Ordens de Serviço" />} />
