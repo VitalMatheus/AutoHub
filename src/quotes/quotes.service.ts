@@ -80,9 +80,20 @@ export class QuotesService {
   async list(principal: AuthenticatedPrincipal, query: ListQuotesDto) {
     const organizationId = this.tenant(principal);
     const page = query.page ?? 1; const pageSize = query.pageSize ?? 20;
-    const where: Prisma.QuoteWhereInput = { organizationId, ...(query.status ? { status: query.status as any } : {}), ...(query.customerId ? { customerId: query.customerId } : {}) };
+    const search = query.search?.trim();
+    const number = search && /^\d+$/.test(search) ? Number(search) : undefined;
+    const where: Prisma.QuoteWhereInput = {
+      organizationId,
+      ...(query.status ? { status: query.status as any } : {}),
+      ...(query.customerId ? { customerId: query.customerId } : {}),
+      ...(search ? { OR: [
+        ...(number === undefined ? [] : [{ number }]),
+        { customer: { name: { contains: search, mode: 'insensitive' } } },
+        { vehicle: { plate: { contains: search, mode: 'insensitive' } } },
+      ] } : {}),
+    };
     const [data, total] = await this.prisma.$transaction([
-      this.prisma.quote.findMany({ where, include: { items: { orderBy: { createdAt: 'asc' } } }, orderBy: [{ createdAt: 'desc' }, { id: 'desc' }], skip: (page - 1) * pageSize, take: pageSize }),
+      this.prisma.quote.findMany({ where, include: { customer: { select: { name: true } }, vehicle: { select: { plate: true, brand: true, model: true } }, items: { orderBy: { createdAt: 'asc' } } }, orderBy: [{ createdAt: 'desc' }, { id: 'desc' }], skip: (page - 1) * pageSize, take: pageSize }),
       this.prisma.quote.count({ where }),
     ]);
     return { data: data.map((quote) => this.format(quote)), meta: { page, pageSize, total, totalPages: Math.ceil(total / pageSize) } };

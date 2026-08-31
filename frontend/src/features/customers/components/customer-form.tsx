@@ -36,15 +36,15 @@ export function CustomerForm({ initial, submitting, omitEmptyOptional = true, on
     event.preventDefault();
     const nextErrors: Errors = {};
     if (!value.name.trim()) nextErrors.name = 'Informe o nome.';
-    else if (value.name.length > 160) nextErrors.name = 'Use no máximo 160 caracteres.';
-    const phoneDigits = digits(value.phone, 11); const documentDigits = digits(value.document, 14);
+    else if (value.name.trim().length > 160) nextErrors.name = 'Use no máximo 160 caracteres.';
+    const phoneDigits = digits(value.phone, 11); const documentDigits = digits(value.document ?? '', 14);
     if (!value.phone.trim()) nextErrors.phone = 'Informe o telefone.';
     else if (![10, 11].includes(phoneDigits.length)) nextErrors.phone = 'Informe um telefone brasileiro com DDD.';
     if (value.document && ![11, 14].includes(documentDigits.length)) nextErrors.document = 'Informe um CPF ou CNPJ válido.';
-    if (value.email && !/^\S+@\S+\.\S+$/.test(value.email)) nextErrors.email = 'Informe um e-mail válido.';
-    if (value.notes && (value.notes.length < 1 || value.notes.length > 2000)) nextErrors.notes = 'Use entre 1 e 2000 caracteres.';
+    if ((value.email ?? '').trim() && !/^\S+@\S+\.\S+$/.test((value.email ?? '').trim())) nextErrors.email = 'Informe um e-mail válido.';
+    if ((value.notes ?? '').trim().length > 2000) nextErrors.notes = 'Use no máximo 2000 caracteres.';
     setErrors(nextErrors); setApiError(''); if (Object.keys(nextErrors).length) return;
-    const normalized = { ...value, phone: phoneDigits, ...(value.document !== undefined ? { document: documentDigits } : {}) };
+    const normalized = { ...value, name: value.name.trim(), phone: phoneDigits, email: (value.email ?? '').trim(), notes: (value.notes ?? '').trim(), ...(value.document !== undefined ? { document: documentDigits } : {}) };
     const submitted = omitEmptyOptional ? Object.fromEntries(Object.entries(normalized).filter(([, field]) => field.trim() !== '')) as CustomerInput : normalized;
     try { await onSubmit(submitted); setDirty(false); }
     catch (error) {

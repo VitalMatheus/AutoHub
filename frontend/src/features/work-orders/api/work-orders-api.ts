@@ -2,7 +2,7 @@ import { httpClient } from '@/shared/api/http';
 import type { DocumentItem, ItemInput, Page } from '@/features/quotes/api/quotes-api';
 import { normalizeMoney } from '@/features/shared/money';
 export type WorkOrderStatus = 'OPEN' | 'WAITING_APPROVAL' | 'IN_PROGRESS' | 'WAITING_PARTS' | 'COMPLETED' | 'DELIVERED' | 'CANCELLED';
-export type WorkOrder = { id: string; number: number; customerId: string; vehicleId: string; quoteId: string | null; status: WorkOrderStatus; reportedProblem: string | null; diagnosis: string | null; mileage: number | null; expectedCompletionDate: string | null; notes: string | null; items: DocumentItem[]; total: string; createdAt: string; updatedAt: string };
+export type WorkOrder = { id: string; number: number; customerId: string; vehicleId: string; customer?: { name: string }; vehicle?: { plate: string; brand: string; model: string }; quoteId: string | null; status: WorkOrderStatus; reportedProblem: string | null; diagnosis: string | null; mileage: number | null; expectedCompletionDate: string | null; notes: string | null; items: DocumentItem[]; total: string; createdAt: string; updatedAt: string };
 export type WorkOrderInput = { customerId: string; vehicleId: string; reportedProblem?: string; diagnosis?: string; mileage?: number; expectedCompletionDate?: string; notes?: string; items?: ItemInput[] };
 export const listWorkOrders = (params: Record<string, unknown>) => httpClient.get<Page<WorkOrder>>('/work-orders', { params }).then((r) => r.data);
 export const getWorkOrder = (id: string) => httpClient.get<WorkOrder>(`/work-orders/${id}`).then((r) => r.data);

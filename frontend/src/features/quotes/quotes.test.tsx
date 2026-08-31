@@ -1,0 +1,70 @@
+import '@testing-library/jest-dom/vitest';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { render, screen, waitFor } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
+import { MemoryRouter, Route, Routes } from 'react-router-dom';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { httpClient } from '@/shared/api/http';
+import { listQuotes } from './api/quotes-api';
+import { QuotesListPage } from './pages/quote-pages';
+
+const customer = { id: 'customer-1', name: 'Maria Silva', active: true };
+const vehicle = { id: 'vehicle-1', customerId: 'customer-1', plate: 'ABC1D23', brand: 'Toyota', model: 'Corolla', active: true };
+const quote = { id: 'quote-1', number: 42, customerId: customer.id, vehicleId: vehicle.id, status: 'APPROVED', notes: null, items: [{ id: 'item-1', type: 'MANUAL', serviceId: null, productId: null, description: 'Troca de óleo', quantity: '1.000', unitPrice: '150.00', total: '150.00' }], total: '150.00', createdAt: '2026-01-01T12:00:00.000Z', updatedAt: '2026-01-01T12:00:00.000Z' };
+
+function renderPage(initialEntries = ['/app/quotes']) {
+  const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  return render(<QueryClientProvider client={client}><MemoryRouter initialEntries={initialEntries}><Routes><Route path="/app/quotes" element={<QuotesListPage />} /><Route path="/app/quotes/:id" element={<div />} /></Routes></MemoryRouter></QueryClientProvider>);
+}
+
+describe('Quotes list', () => {
+  beforeEach(() => vi.restoreAllMocks());
+
+  it('calls the Quotes API with search, status and pagination parameters', async () => {
+    const get = vi.spyOn(httpClient, 'get').mockResolvedValue({ data: { data: [quote], meta: { page: 2, pageSize: 20, total: 21, totalPages: 2 } } } as never);
+    await listQuotes({ page: 2, pageSize: 20, search: 'ABC1D23', status: 'APPROVED' });
+    expect(get).toHaveBeenCalledWith('/quotes', { params: { page: 2, pageSize: 20, search: 'ABC1D23', status: 'APPROVED' } });
+  });
+
+  it('renders customer, vehicle, item, translated status and total', async () => {
+    vi.spyOn(httpClient, 'get').mockImplementation((url) => {
+      if (url === '/quotes') return Promise.resolve({ data: { data: [quote], meta: { page: 1, pageSize: 20, total: 1, totalPages: 1 } } }) as never;
+      if (url === '/customers') return Promise.resolve({ data: { data: [customer] } }) as never;
+      return Promise.resolve({ data: { data: [vehicle] } }) as never;
+    });
+    renderPage();
+    expect(await screen.findByText('#42')).toBeInTheDocument();
+    expect(screen.getByText('Maria Silva')).toBeInTheDocument();
+    expect(screen.getByText(/Toyota Corolla.*ABC1D23/)).toBeInTheDocument();
+    expect(screen.getAllByText('Aprovado').length).toBeGreaterThan(1);
+    expect(screen.getByText('Troca de óleo (1)')).toBeInTheDocument();
+    expect(screen.getByText('R$ 150,00')).toBeInTheDocument();
+  });
+
+  it('preserves search and status in the URL and resets to the first page', async () => {
+    const user = userEvent.setup();
+    vi.spyOn(httpClient, 'get').mockResolvedValue({ data: { data: [], meta: { page: 3, pageSize: 20, total: 0, totalPages: 0 } } } as never);
+    renderPage(['/app/quotes?page=3&search=old&status=PENDING']);
+    const search = await screen.findByRole('textbox', { name: 'Buscar por número, Customer ou placa' });
+    await user.clear(search);
+    await user.type(search, 'Maria');
+    await user.selectOptions(screen.getByRole('combobox', { name: 'Filtrar por status' }), 'APPROVED');
+    await waitFor(() => expect(window.location.search).toBe(''));
+    expect(screen.getByText('Nenhum orçamento encontrado.')).toBeInTheDocument();
+  });
+
+  it('paginates and shows the empty state', async () => {
+    const user = userEvent.setup();
+    const get = vi.spyOn(httpClient, 'get').mockResolvedValue({ data: { data: [], meta: { page: 1, pageSize: 20, total: 21, totalPages: 2 } } } as never);
+    renderPage();
+    expect(await screen.findByText('Nenhum orçamento encontrado.')).toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: 'Próxima' }));
+    await waitFor(() => expect(get).toHaveBeenCalledWith('/quotes', { params: { page: 2, pageSize: 20 } }));
+  });
+
+  it('shows a Portuguese loading failure', async () => {
+    vi.spyOn(httpClient, 'get').mockRejectedValue(new Error('offline'));
+    renderPage();
+    expect(await screen.findByRole('alert')).toHaveTextContent('Não foi possível carregar os orçamentos.');
+  });
+});

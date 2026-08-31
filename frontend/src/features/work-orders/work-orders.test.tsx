@@ -60,7 +60,7 @@ describe('work orders operational list', () => {
     renderPage();
     await screen.findByText('#42');
     await user.selectOptions(screen.getByLabelText('Filtrar por status'), 'COMPLETED');
-    await waitFor(() => expect(get).toHaveBeenCalledWith('/work-orders', { params: { page: 1, pageSize: 100, status: 'COMPLETED' } }));
+    await waitFor(() => expect(get).toHaveBeenCalledWith('/work-orders', { params: { page: 1, pageSize: 20, status: 'COMPLETED' } }));
   });
 
   it('shows every supported status translated in the filter', async () => {
