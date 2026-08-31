@@ -212,6 +212,8 @@ model Product {
   description    String?
   sku            String?
   salePrice      Decimal  @db.Decimal(12, 2)
+  stockQuantity  Int      @default(0)
+  stockMinimum   Int      @default(0)
   active         Boolean  @default(true)
   createdAt      DateTime @default(now()) @db.Timestamptz(3)
   updatedAt      DateTime @updatedAt @db.Timestamptz(3)

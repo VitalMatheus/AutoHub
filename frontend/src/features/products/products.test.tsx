@@ -7,7 +7,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { ApiError, httpClient } from '@/shared/api/http';
 import { ProductsListPage, NewProductPage, EditProductPage, ProductDetailPage } from './pages/product-pages';
 
-const product = { id: 'product-1', organizationId: 'org-1', name: 'Filtro de óleo', description: 'Motor 1.6', sku: 'FIL-001', salePrice: '149.90', active: true, createdAt: '2026-01-01T12:00:00.000Z', updatedAt: '2026-01-02T12:00:00.000Z' };
+const product = { id: 'product-1', organizationId: 'org-1', name: 'Filtro de óleo', description: 'Motor 1.6', sku: 'FIL-001', salePrice: '149.90', stockQuantity: 4, stockMinimum: 2, lowStock: false, active: true, createdAt: '2026-01-01T12:00:00.000Z', updatedAt: '2026-01-02T12:00:00.000Z' };
 
 function renderPage(ui: React.ReactNode, initialEntries = ['/app/products']) {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
@@ -30,10 +30,9 @@ describe('Product catalog', () => {
     vi.spyOn(httpClient, 'post').mockResolvedValue({ data: product } as never);
     renderPage(<NewProductPage />);
     await user.type(await screen.findByLabelText('Nome'), 'Pastilha de freio');
-    await user.type(screen.getByLabelText('Preço de venda'), '89.90');
-    await user.type(screen.getByLabelText('SKU'), 'past-01');
+    await user.type(screen.getByLabelText('Preço de venda'), '89,90');
     await user.click(screen.getByRole('button', { name: 'Salvar produto' }));
-    await waitFor(() => expect(httpClient.post).toHaveBeenCalledWith('/products', { name: 'Pastilha de freio', salePrice: '89.90', sku: 'past-01' }));
+    await waitFor(() => expect(httpClient.post).toHaveBeenCalledWith('/products', { name: 'Pastilha de freio', salePrice: '89.90', stockQuantity: 0, stockMinimum: 0 }));
     expect(httpClient.post).not.toHaveBeenCalledWith('/products', expect.objectContaining({ organizationId: expect.anything() }));
   });
 

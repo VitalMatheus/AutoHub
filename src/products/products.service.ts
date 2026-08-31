@@ -1,4 +1,5 @@
 import { ConflictException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
+import { randomUUID } from 'node:crypto';
 import { Prisma } from '@prisma/client';
 import type { AuthenticatedPrincipal } from '../auth/authenticated-principal';
 import { formatMoney } from '../common/money/format-money';
@@ -9,13 +10,13 @@ import { UpdateProductDto } from './dto/update-product.dto';
 
 const productSelect = {
   id: true, organizationId: true, name: true, description: true, sku: true, salePrice: true,
-  active: true, createdAt: true, updatedAt: true,
+  active: true, stockQuantity: true, stockMinimum: true, createdAt: true, updatedAt: true,
 } as const;
 
 type ProductRecord = Prisma.ProductGetPayload<{ select: typeof productSelect }>;
 
 function serializeProduct(product: ProductRecord) {
-  return { ...product, salePrice: formatMoney(product.salePrice) };
+  return { ...product, salePrice: formatMoney(product.salePrice), lowStock: product.stockQuantity <= product.stockMinimum };
 }
 
 @Injectable()
@@ -35,6 +36,8 @@ export class ProductsService {
     return normalized || undefined;
   }
 
+  private generateSku(): string { return `PROD-${randomUUID().replaceAll('-', '').slice(0, 20).toUpperCase()}`; }
+
   async create(principal: AuthenticatedPrincipal, dto: CreateProductDto) {
     const organizationId = this.tenant(principal);
     try {
@@ -43,8 +46,10 @@ export class ProductsService {
           organizationId,
           name: dto.name.trim(),
           description: dto.description?.trim(),
-          sku: this.normalizeSku(dto.sku),
+          sku: this.normalizeSku(dto.sku) ?? this.generateSku(),
           salePrice: dto.salePrice,
+          stockQuantity: dto.stockQuantity ?? 0,
+          stockMinimum: dto.stockMinimum ?? 0,
         },
         select: productSelect,
       });
@@ -60,9 +65,15 @@ export class ProductsService {
     const page = query.page ?? 1;
     const pageSize = query.pageSize ?? 20;
     const search = query.search?.trim();
+    let lowStockIds: string[] | undefined;
+    if (query.lowStock === true) {
+      const rows = await this.prisma.$queryRaw<{ id: string }[]>(Prisma.sql`SELECT "id" FROM "Product" WHERE "organizationId" = CAST(${organizationId} AS uuid) AND "stockQuantity" <= "stockMinimum"`);
+      lowStockIds = rows.map(({ id }) => id);
+    }
     const where: Prisma.ProductWhereInput = {
       organizationId,
       ...(query.active === undefined ? { active: true } : { active: query.active }),
+      ...(lowStockIds ? { id: { in: lowStockIds } } : {}),
       ...(search ? { OR: [
         { name: { contains: search, mode: 'insensitive' } },
         { description: { contains: search, mode: 'insensitive' } },
@@ -96,6 +107,8 @@ export class ProductsService {
           ...(dto.description === undefined ? {} : { description: dto.description.trim() }),
           ...(dto.sku === undefined ? {} : { sku: this.normalizeSku(dto.sku) }),
           ...(dto.salePrice === undefined ? {} : { salePrice: dto.salePrice }),
+          ...(dto.stockQuantity === undefined ? {} : { stockQuantity: dto.stockQuantity }),
+          ...(dto.stockMinimum === undefined ? {} : { stockMinimum: dto.stockMinimum }),
         },
       });
       if (result.count !== 1) throw new NotFoundException('Product not found');

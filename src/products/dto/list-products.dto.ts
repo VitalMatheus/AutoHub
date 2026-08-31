@@ -17,6 +17,9 @@ export class ListProductsDto {
   @IsOptional() @Transform(({ value }) => value === 'true' ? true : value === 'false' ? false : value) @IsBoolean()
   active?: boolean;
 
+  @IsOptional() @Transform(({ value }) => value === 'true' ? true : value === 'false' ? false : value) @IsBoolean()
+  lowStock?: boolean;
+
   @IsOptional() @IsIn(PRODUCT_SORT_FIELDS)
   sort: ProductSortField = 'createdAt';
 

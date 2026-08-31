@@ -1,8 +1,8 @@
 import { httpClient } from '@/shared/api/http';
 
-export type Product = { id: string; name: string; description: string | null; sku: string | null; salePrice: string; active: boolean; createdAt: string; updatedAt: string };
-export type ProductInput = { name: string; description?: string; sku?: string; salePrice: string };
-export type ProductListParams = { page: number; pageSize: number; search?: string; active?: boolean; sort: 'createdAt' | 'name' | 'sku' | 'salePrice' | 'updatedAt'; direction: 'asc' | 'desc' };
+export type Product = { id: string; name: string; description: string | null; sku: string; salePrice: string; stockQuantity: number; stockMinimum: number; lowStock: boolean; active: boolean; createdAt: string; updatedAt: string };
+export type ProductInput = { name: string; description?: string; sku?: string; salePrice: string; stockQuantity?: number; stockMinimum?: number };
+export type ProductListParams = { page: number; pageSize: number; search?: string; active?: boolean; lowStock?: boolean; sort: 'createdAt' | 'name' | 'sku' | 'salePrice' | 'updatedAt'; direction: 'asc' | 'desc' };
 export type ProductList = { data: Product[]; meta: { page: number; pageSize: number; total: number; totalPages: number } };
 
 export const listProducts = (params: ProductListParams) => httpClient.get<ProductList>('/products', { params }).then((response) => response.data);

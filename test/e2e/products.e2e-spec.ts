@@ -41,7 +41,7 @@ describe('Products (e2e)', () => {
     await app.close();
   });
 
-  it('creates a tenant-scoped Product and returns its Decimal price as a string', async () => {
+  it('creates a tenant-scoped Product with generated SKU and stock defaults', async () => {
     const before = await prisma.product.count({ where: { organizationId } });
     await request(app.getHttpServer()).post('/api/v1/products')
       .set('Authorization', `Bearer ${adminToken}`)
@@ -53,7 +53,19 @@ describe('Products (e2e)', () => {
       .set('Authorization', `Bearer ${adminToken}`)
       .send({ name: 'Oil filter', description: 'Engine part', sku: ' of-001 ', salePrice: '149.90' })
       .expect(201);
-    expect(response.body).toMatchObject({ organizationId, name: 'Oil filter', sku: 'OF-001', salePrice: '149.90', active: true });
+    expect(response.body).toMatchObject({ organizationId, name: 'Oil filter', sku: 'OF-001', salePrice: '149.90', stockQuantity: 0, stockMinimum: 0, lowStock: true, active: true });
+    const generated = await request(app.getHttpServer()).post('/api/v1/products').set('Authorization', `Bearer ${adminToken}`).send({ name: 'Generated SKU', salePrice: '10.00', stockQuantity: 2, stockMinimum: 3 }).expect(201);
+    expect(generated.body).toMatchObject({ stockQuantity: 2, stockMinimum: 3, lowStock: true });
+    expect(generated.body.sku).toMatch(/^PROD-/);
+  });
+
+  it('filters low-stock Products and allows direct stock adjustment', async () => {
+    const created = await request(app.getHttpServer()).post('/api/v1/products').set('Authorization', `Bearer ${adminToken}`)
+      .send({ name: 'Low stock filter', salePrice: '20.00', stockQuantity: 1, stockMinimum: 2 }).expect(201);
+    const low = await request(app.getHttpServer()).get('/api/v1/products?lowStock=true').set('Authorization', `Bearer ${adminToken}`).expect(200);
+    expect(low.body.data).toEqual(expect.arrayContaining([expect.objectContaining({ id: created.body.id, lowStock: true })]));
+    const updated = await request(app.getHttpServer()).patch(`/api/v1/products/${created.body.id}`).set('Authorization', `Bearer ${adminToken}`).send({ stockQuantity: 8 }).expect(200);
+    expect(updated.body).toMatchObject({ stockQuantity: 8, stockMinimum: 2, lowStock: false });
   });
 
   it('enforces SKU uniqueness inside one Organization but not across Organizations', async () => {

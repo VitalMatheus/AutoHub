@@ -127,7 +127,7 @@ Cada módulo de negócio segue uma forma previsível: `dto/`, `*.controller.ts`,
 | Customer | Cliente atual da Organization; possui Vehicles e aparece historicamente em Quotes/WorkOrders. |
 | Vehicle | Veículo atualmente associado a um Customer da mesma Organization. |
 | Service | Item ativo/inativo do catálogo de mão de obra. |
-| Product | Item ativo/inativo do catálogo de peças/produtos, sem estoque avançado. |
+| Product | Item ativo/inativo do catálogo de peças/produtos, com controle básico de estoque. |
 | Quote | Orçamento numerado para Customer e Vehicle; possui QuoteItems. |
 | QuoteItem | Snapshot comercial de Service, Product ou item manual. |
 | WorkOrder | Ordem numerada, opcionalmente originada de um único Quote aprovado. |
@@ -364,6 +364,8 @@ model Product {
   description    String?
   sku            String?
   salePrice      Decimal  @db.Decimal(12, 2)
+  stockQuantity  Int      @default(0)
+  stockMinimum   Int      @default(0)
   active         Boolean  @default(true)
   createdAt      DateTime @default(now()) @db.Timestamptz(3)
   updatedAt      DateTime @updatedAt @db.Timestamptz(3)
@@ -863,7 +865,7 @@ O conteúdo operacional completo está no [AGENTS.md](../../AGENTS.md). Ele mant
 
 ### Fase 6 — Catálogos
 
-- **Objetivo**: Service e Product simples, sem estoque.
+- **Objetivo**: Service simples e Product com controle básico de estoque, sem compras, fornecedores ou movimentações avançadas.
 - **Arquivos/módulos**: `service-catalog/`, `products/`.
 - **Dependências**: fase 3.
 - **Conclusão**: CRUD, ativação/desativação, dinheiro decimal e busca paginada funcionam.
