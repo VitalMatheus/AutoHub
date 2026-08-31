@@ -4,7 +4,7 @@ import type { ProductInput } from '../api/products-api';
 import { isValidMoney, normalizeMoney } from '@/features/shared/money';
 
 type Props = { initial?: Partial<ProductInput>; submitting?: boolean; omitEmptyOptional?: boolean; onSubmit: (value: ProductInput) => Promise<unknown>; onCancel: () => void };
-const inputClass = 'w-full rounded-xl border border-slate-300 bg-white px-3 py-2.5 text-sm outline-none focus:ring-2 focus:ring-blue-500';
+const inputClass = 'w-full rounded-xl border border-slate-300 bg-white px-3 py-2.5 text-sm outline-none ring-blue-500 placeholder:text-slate-400 focus:ring-2';
 
 export function ProductForm({ initial, submitting = false, omitEmptyOptional = true, onSubmit, onCancel }: Props) {
   const [value, setValue] = useState<ProductInput>({ name: initial?.name ?? '', description: initial?.description ?? '', sku: initial?.sku ?? '', salePrice: initial?.salePrice ?? '', stockQuantity: initial?.stockQuantity ?? 0, stockMinimum: initial?.stockMinimum ?? 0 });
@@ -32,6 +32,6 @@ export function ProductForm({ initial, submitting = false, omitEmptyOptional = t
       <label className="space-y-1 text-sm font-medium">Estoque mínimo<input aria-label="Estoque mínimo" className={inputClass} type="number" min="0" step="1" value={value.stockMinimum} onChange={(e) => update('stockMinimum', e.target.value)} /></label>
       <label className="space-y-1 text-sm font-medium md:col-span-2">Descrição<textarea aria-label="Descrição" className={inputClass} rows={4} value={value.description} onChange={(e) => update('description', e.target.value)} /></label>
     </div>
-    <div className="flex justify-end gap-3 border-t pt-5"><button type="button" onClick={onCancel} className="rounded-xl border px-4 py-2.5 text-sm font-semibold">Cancelar</button><button disabled={submitting} className="rounded-xl bg-blue-600 px-4 py-2.5 text-sm font-semibold text-white">Salvar produto</button></div>
+    <div className="flex justify-end gap-3 border-t border-slate-200 pt-5"><button type="button" onClick={onCancel} className="rounded-xl border border-slate-300 px-4 py-2.5 text-sm font-semibold">Cancelar</button><button disabled={submitting} className="rounded-xl bg-blue-600 px-4 py-2.5 text-sm font-semibold text-white disabled:opacity-50">Salvar produto</button></div>
   </form>;
 }
