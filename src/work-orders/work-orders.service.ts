@@ -293,11 +293,57 @@ export class WorkOrdersService {
   private async transition(principal: AuthenticatedPrincipal, id: string, action: WorkOrderAction) {
     const organizationId = this.tenant(principal); const rule = transitions[action];
     return this.prisma.$transaction(async (tx) => {
+      if (action === 'complete') return this.completeInTransaction(tx, organizationId, id, rule);
       const current = await tx.workOrder.findFirst({ where: { id, organizationId }, include: { items: { orderBy: { createdAt: 'asc' } } } });
       if (!current) throw new NotFoundException('Work Order not found');
       if (!rule.from.includes(current.status)) throw new ConflictException({ type: 'https://api.autohub.local/problems/work-order-invalid-transition', title: 'Work Order transition is not allowed', status: 409, detail: `Work Order cannot ${action} from ${current.status}.`, code: 'WORK_ORDER_INVALID_TRANSITION' });
       const updated = await tx.workOrder.update({ where: { organizationId_id: { organizationId, id } }, data: { status: rule.to as any }, include: { items: { orderBy: { createdAt: 'asc' } } } });
       return this.format(updated);
     });
+  }
+
+  private async completeInTransaction(tx: Prisma.TransactionClient, organizationId: string, id: string, rule: { from: string[]; to: string }) {
+    const locked = await tx.$queryRaw<Array<{ id: string }>>`
+      SELECT "id" FROM "WorkOrder"
+      WHERE "id" = ${id}::uuid AND "organizationId" = ${organizationId}::uuid FOR UPDATE
+    `;
+    if (locked.length !== 1) throw new NotFoundException('Work Order not found');
+    const current = await tx.workOrder.findFirst({ where: { id, organizationId }, include: { items: { orderBy: { createdAt: 'asc' } } } });
+    if (!current) throw new NotFoundException('Work Order not found');
+    if (!rule.from.includes(current.status)) throw this.invalidTransition('complete', current.status);
+
+    const required = new Map<string, number>();
+    for (const item of current.items) {
+      if (item.type !== 'PRODUCT' || !item.productId) continue;
+      const value = item.quantity.toString();
+      if (!/^\d+(\.0+)?$/.test(value)) throw new BadRequestException('Product quantities must be whole numbers to consume stock');
+      required.set(item.productId, (required.get(item.productId) ?? 0) + Number(value.split('.')[0]));
+    }
+    const insufficient: string[] = [];
+    for (const productId of [...required.keys()].sort()) {
+      const rows = await tx.$queryRaw<Array<{ id: string; name: string; stockQuantity: number }>>`
+        SELECT "id", "name", "stockQuantity" FROM "Product"
+        WHERE "id" = ${productId}::uuid AND "organizationId" = ${organizationId}::uuid FOR UPDATE
+      `;
+      const product = rows[0];
+      const needed = required.get(productId)!;
+      if (!product || product.stockQuantity < needed) insufficient.push(product?.name ?? productId);
+    }
+    if (insufficient.length > 0) {
+      throw new ConflictException({
+        type: 'https://api.autohub.local/problems/insufficient-stock', title: 'Insufficient stock', status: 409,
+        detail: `Insufficient stock for Products: ${insufficient.join(', ')}.`, code: 'INSUFFICIENT_STOCK', products: insufficient,
+      });
+    }
+    for (const [productId, quantity] of required) {
+      await tx.product.update({ where: { organizationId_id: { organizationId, id: productId } }, data: { stockQuantity: { decrement: quantity } } });
+      await tx.stockMovement.create({ data: { organizationId, productId, workOrderId: id, type: 'CONSUMPTION', quantityChange: -quantity } });
+    }
+    const updated = await tx.workOrder.update({ where: { organizationId_id: { organizationId, id } }, data: { status: rule.to as any }, include: { items: { orderBy: { createdAt: 'asc' } } } });
+    return this.format(updated);
+  }
+
+  private invalidTransition(action: string, status: string): ConflictException {
+    return new ConflictException({ type: 'https://api.autohub.local/problems/work-order-invalid-transition', title: 'Work Order transition is not allowed', status: 409, detail: `Work Order cannot ${action} from ${status}.`, code: 'WORK_ORDER_INVALID_TRANSITION' });
   }
 }

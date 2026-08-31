@@ -40,6 +40,8 @@ const SAFE_MESSAGE_TRANSLATIONS: Record<string, string> = {
   'Work Order not found': 'Ordem de serviço não encontrada.',
   'Work Order Item not found': 'Item da ordem de serviço não encontrado.',
   'Historical Work Orders cannot be edited': 'Ordens de serviço históricas não podem ser editadas.',
+  'Product quantities must be whole numbers to consume stock': 'As quantidades de Product devem ser números inteiros para baixar estoque.',
+  'Stock adjustment would make the Product stock negative': 'O ajuste deixaria o estoque do Product negativo.',
   'Payment not found': 'Pagamento não encontrado.',
   'Payment is already cancelled.': 'O pagamento já está cancelado.',
   'Only approved Quotes can be converted into Work Orders.': 'Apenas orçamentos aprovados podem ser convertidos em ordens de serviço.',
@@ -55,6 +57,7 @@ const SAFE_CODES = new Set([
   'WORK_ORDER_CANCELLED',
   'PAYMENT_EXCEEDS_BALANCE',
   'PAYMENT_ALREADY_CANCELLED',
+  'INSUFFICIENT_STOCK',
 ]);
 
 const SAFE_CODE_DETAILS: Record<string, string> = {
@@ -65,6 +68,7 @@ const SAFE_CODE_DETAILS: Record<string, string> = {
   WORK_ORDER_CANCELLED: 'Ordens de serviço canceladas não podem receber pagamentos.',
   PAYMENT_EXCEEDS_BALANCE: 'O pagamento excede o saldo da ordem de serviço.',
   PAYMENT_ALREADY_CANCELLED: 'O pagamento já está cancelado.',
+  INSUFFICIENT_STOCK: 'Não há estoque suficiente para concluir a ordem de serviço.',
 };
 
 const TITLES: Record<number, string> = {
@@ -122,6 +126,10 @@ export class ProblemDetailsFilter implements ExceptionFilter {
     if (typeof exceptionResponse === 'string' && SAFE_MESSAGE_TRANSLATIONS[exceptionResponse]) return SAFE_MESSAGE_TRANSLATIONS[exceptionResponse];
     if (typeof exceptionResponse === 'object' && exceptionResponse !== null) {
       const code = (exceptionResponse as Record<string, unknown>).code;
+      if (typeof code === 'string' && code === 'INSUFFICIENT_STOCK') {
+        const detail = (exceptionResponse as Record<string, unknown>).detail;
+        if (typeof detail === 'string') return detail;
+      }
       if (typeof code === 'string' && SAFE_CODES.has(code)) return SAFE_CODE_DETAILS[code];
     }
     return 'Não foi possível concluir a solicitação.';

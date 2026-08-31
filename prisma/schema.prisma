@@ -119,7 +119,8 @@ model Organization {
   quoteItems QuoteItem[]
   workOrders WorkOrder[]
   workOrderItems WorkOrderItem[]
-  payments Payment[]
+  payments       Payment[]
+  stockMovements StockMovement[]
 
   @@index([active])
 }
@@ -221,6 +222,7 @@ model Product {
   organization Organization @relation(fields: [organizationId], references: [id], onDelete: Restrict)
   quoteItems     QuoteItem[]
   workOrderItems WorkOrderItem[]
+  stockMovements StockMovement[]
 
   @@unique([organizationId, id])
   @@unique([organizationId, sku])
@@ -294,6 +296,7 @@ model WorkOrder {
   quote        Quote?          @relation(fields: [organizationId, quoteId], references: [organizationId, id], onDelete: Restrict)
   items        WorkOrderItem[]
   payments     Payment[]
+  stockMovements StockMovement[]
 
   @@unique([organizationId, id])
   @@unique([organizationId, number])
@@ -339,4 +342,27 @@ model Payment {
 
   @@index([organizationId, workOrderId, status])
   @@index([organizationId, paidAt])
+}
+
+enum StockMovementType {
+  CONSUMPTION
+  ADJUSTMENT
+}
+
+model StockMovement {
+  id             String            @id @default(uuid()) @db.Uuid
+  organizationId String            @db.Uuid
+  productId      String            @db.Uuid
+  workOrderId    String?           @db.Uuid
+  type           StockMovementType
+  quantityChange Int
+  note           String?
+  createdAt      DateTime          @default(now()) @db.Timestamptz(3)
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  product      Product      @relation(fields: [organizationId, productId], references: [organizationId, id], onDelete: Restrict)
+  workOrder    WorkOrder?   @relation(fields: [organizationId, workOrderId], references: [organizationId, id], onDelete: Restrict)
+
+  @@unique([organizationId, productId, workOrderId, type])
+  @@index([organizationId, productId, createdAt])
 }

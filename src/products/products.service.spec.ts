@@ -85,7 +85,7 @@ describe('ProductsService', () => {
 
     const result = await subject.update(principal, 'product-a', { stockQuantity: 7, stockMinimum: 3 } as any);
 
-    expect(prisma.product.updateMany).toHaveBeenCalledWith({ where: { id: 'product-a', organizationId: 'org-a' }, data: { stockQuantity: 7, stockMinimum: 3 } });
+    expect(prisma.product.updateMany).toHaveBeenCalledWith({ where: { id: 'product-a', organizationId: 'org-a' }, data: { stockMinimum: 3 } });
     expect(result).toMatchObject({ stockQuantity: 7, stockMinimum: 2, lowStock: false });
   });
 

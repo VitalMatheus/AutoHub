@@ -35,6 +35,7 @@ describe('Products (e2e)', () => {
 
   afterAll(async () => {
     if (!prisma) return;
+    await prisma.stockMovement.deleteMany({ where: { organizationId: { in: [organizationId, otherOrganizationId] } } });
     await prisma.product.deleteMany({ where: { organizationId: { in: [organizationId, otherOrganizationId] } } });
     await prisma.user.deleteMany({ where: { organizationId: { in: [organizationId, otherOrganizationId] } } });
     await prisma.organization.deleteMany({ where: { id: { in: [organizationId, otherOrganizationId] } } });
@@ -70,6 +71,9 @@ describe('Products (e2e)', () => {
     expect(low.body.data).toEqual(expect.arrayContaining([expect.objectContaining({ id: created.body.id, lowStock: true })]));
     const updated = await request(app.getHttpServer()).patch(`/api/v1/products/${created.body.id}`).set('Authorization', `Bearer ${adminToken}`).send({ stockQuantity: 8 }).expect(200);
     expect(updated.body).toMatchObject({ stockQuantity: 8, stockMinimum: 2, lowStock: false });
+    const adjusted = await request(app.getHttpServer()).post(`/api/v1/products/${created.body.id}/stock-adjustments`).set('Authorization', `Bearer ${adminToken}`).send({ quantityChange: -2, note: 'Correção de inventário' }).expect(201);
+    expect(adjusted.body).toMatchObject({ stockQuantity: 6 });
+    expect(await prisma.stockMovement.count({ where: { productId: created.body.id, type: 'ADJUSTMENT' } })).toBe(2);
   });
 
   it('does not leak another Organization through the low-stock filter', async () => {

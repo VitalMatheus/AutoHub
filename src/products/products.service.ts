@@ -7,6 +7,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { CreateProductDto } from './dto/create-product.dto';
 import { ListProductsDto } from './dto/list-products.dto';
 import { UpdateProductDto } from './dto/update-product.dto';
+import { AdjustStockDto } from './dto/adjust-stock.dto';
 
 const productSelect = {
   id: true, organizationId: true, name: true, description: true, sku: true, salePrice: true,
@@ -105,18 +106,24 @@ export class ProductsService {
   async update(principal: AuthenticatedPrincipal, id: string, dto: UpdateProductDto) {
     const organizationId = this.tenant(principal);
     try {
-      const result = await this.prisma.product.updateMany({
-        where: { id, organizationId },
-        data: {
-          ...(dto.name === undefined ? {} : { name: dto.name.trim() }),
-          ...(dto.description === undefined ? {} : { description: dto.description.trim() }),
-          ...(dto.sku === undefined ? {} : { sku: this.normalizeSku(dto.sku) }),
-          ...(dto.salePrice === undefined ? {} : { salePrice: dto.salePrice }),
-          ...(dto.stockQuantity === undefined ? {} : { stockQuantity: dto.stockQuantity }),
-          ...(dto.stockMinimum === undefined ? {} : { stockMinimum: dto.stockMinimum }),
-        },
-      });
+      const requestedStock = dto.stockQuantity;
+      const data = {
+        ...(dto.name === undefined ? {} : { name: dto.name.trim() }),
+        ...(dto.description === undefined ? {} : { description: dto.description.trim() }),
+        ...(dto.sku === undefined ? {} : { sku: this.normalizeSku(dto.sku) }),
+        ...(dto.salePrice === undefined ? {} : { salePrice: dto.salePrice }),
+        ...(dto.stockMinimum === undefined ? {} : { stockMinimum: dto.stockMinimum }),
+      };
+      const result = Object.keys(data).length > 0
+        ? await this.prisma.product.updateMany({ where: { id, organizationId }, data })
+        : { count: (await this.prisma.product.findFirst({ where: { id, organizationId }, select: { id: true } })) ? 1 : 0 };
       if (result.count !== 1) throw new NotFoundException('Product not found');
+      if (requestedStock !== undefined) {
+        const current = await this.prisma.product.findFirst({ where: { id, organizationId }, select: { stockQuantity: true } });
+        if (!current) throw new NotFoundException('Product not found');
+        const quantityChange = requestedStock - current.stockQuantity;
+        if (quantityChange !== 0) await this.adjustStock(principal, id, { quantityChange, note: 'Ajuste de estoque do Product' });
+      }
       return this.findOne(principal, id);
     } catch (error) {
       this.mapConflict(error);
@@ -126,6 +133,23 @@ export class ProductsService {
 
   async activate(principal: AuthenticatedPrincipal, id: string) { return this.setActive(principal, id, true); }
   async deactivate(principal: AuthenticatedPrincipal, id: string) { return this.setActive(principal, id, false); }
+
+  async adjustStock(principal: AuthenticatedPrincipal, id: string, dto: AdjustStockDto) {
+    const organizationId = this.tenant(principal);
+    const product = await this.prisma.$transaction(async (tx) => {
+      const locked = await tx.$queryRaw<Array<{ id: string; stockQuantity: number }>>`
+        SELECT "id", "stockQuantity" FROM "Product"
+        WHERE "id" = ${id}::uuid AND "organizationId" = ${organizationId}::uuid FOR UPDATE
+      `;
+      if (locked.length !== 1) throw new NotFoundException('Product not found');
+      const next = locked[0].stockQuantity + dto.quantityChange;
+      if (next < 0) throw new ConflictException('Stock adjustment would make the Product stock negative');
+      await tx.product.update({ where: { organizationId_id: { organizationId, id } }, data: { stockQuantity: dto.quantityChange < 0 ? { decrement: -dto.quantityChange } : { increment: dto.quantityChange } } });
+      await tx.stockMovement.create({ data: { organizationId, productId: id, type: 'ADJUSTMENT', quantityChange: dto.quantityChange, note: dto.note?.trim() } });
+      return tx.product.findFirstOrThrow({ where: { id, organizationId }, select: productSelect });
+    });
+    return serializeProduct(product);
+  }
 
   private async setActive(principal: AuthenticatedPrincipal, id: string, active: boolean) {
     const organizationId = this.tenant(principal);

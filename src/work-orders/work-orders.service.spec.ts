@@ -47,14 +47,28 @@ describe('WorkOrdersService', () => {
     ['requestApproval', 'OPEN', 'WAITING_APPROVAL'], ['start', 'WAITING_APPROVAL', 'IN_PROGRESS'], ['waitParts', 'IN_PROGRESS', 'WAITING_PARTS'], ['complete', 'IN_PROGRESS', 'COMPLETED'], ['deliver', 'COMPLETED', 'DELIVERED'], ['cancel', 'OPEN', 'CANCELLED'],
   ] as const)('transitions %s', async (action, status, next) => {
     const current = { id: 'wo', organizationId: 'org', status, items: [] };
-    const tx = { workOrder: { findFirst: jest.fn().mockResolvedValue(current), update: jest.fn().mockResolvedValue({ ...current, status: next }) } };
+    const tx = { $queryRaw: jest.fn().mockResolvedValue([{ id: 'wo' }]), workOrder: { findFirst: jest.fn().mockResolvedValue(current), update: jest.fn().mockResolvedValue({ ...current, status: next }) }, product: { update: jest.fn() }, stockMovement: { create: jest.fn() } };
     const prisma = { $transaction: jest.fn((cb: (value: unknown) => unknown) => cb(tx)) } as never;
     const result = await new WorkOrdersService(prisma)[action](principal, 'wo');
     expect(result.status).toBe(next);
   });
 
+  it('consumes the final Product composition atomically on completion and reports insufficient Products', async () => {
+    const tx = {
+      $queryRaw: jest.fn()
+        .mockResolvedValueOnce([{ id: 'wo' }])
+        .mockResolvedValueOnce([{ id: 'product', name: 'Oil', stockQuantity: 1 }]),
+      workOrder: { findFirst: jest.fn().mockResolvedValue({ id: 'wo', status: 'IN_PROGRESS', items: [{ type: 'PRODUCT', productId: 'product', quantity: { toString: () => '2' } }] }) },
+      product: { update: jest.fn(), }, stockMovement: { create: jest.fn() },
+    };
+    const prisma = { $transaction: jest.fn((cb: (value: unknown) => unknown) => cb(tx)) } as never;
+    await expect(new WorkOrdersService(prisma).complete(principal, 'wo')).rejects.toMatchObject({ status: 409, response: expect.objectContaining({ code: 'INSUFFICIENT_STOCK', products: ['Oil'] }) });
+    expect(tx.product.update).not.toHaveBeenCalled();
+    expect(tx.stockMovement.create).not.toHaveBeenCalled();
+  });
+
   it('returns a stable conflict for invalid transitions', async () => {
-    const tx = { workOrder: { findFirst: jest.fn().mockResolvedValue({ id: 'wo', organizationId: 'org', status: 'DELIVERED', items: [] }) } };
+    const tx = { $queryRaw: jest.fn().mockResolvedValue([{ id: 'wo' }]), workOrder: { findFirst: jest.fn().mockResolvedValue({ id: 'wo', organizationId: 'org', status: 'DELIVERED', items: [] }) } };
     const prisma = { $transaction: jest.fn((cb: (value: unknown) => unknown) => cb(tx)) } as never;
     await expect(new WorkOrdersService(prisma).complete(principal, 'wo')).rejects.toMatchObject({ status: 409, response: expect.objectContaining({ code: 'WORK_ORDER_INVALID_TRANSITION' }) });
   });

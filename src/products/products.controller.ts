@@ -6,6 +6,7 @@ import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { CreateProductDto } from './dto/create-product.dto';
 import { ListProductsDto } from './dto/list-products.dto';
 import { UpdateProductDto } from './dto/update-product.dto';
+import { AdjustStockDto } from './dto/adjust-stock.dto';
 import { ProductsService } from './products.service';
 
 type AuthenticatedRequest = Request & { user?: AuthenticatedPrincipal };
@@ -28,6 +29,9 @@ export class ProductsController {
 
   @Patch(':id')
   update(@Req() request: AuthenticatedRequest, @Param('id') id: string, @Body() dto: UpdateProductDto) { return this.products.update(request.user!, id, dto); }
+
+  @Post(':id/stock-adjustments')
+  adjustStock(@Req() request: AuthenticatedRequest, @Param('id') id: string, @Body() dto: AdjustStockDto) { return this.products.adjustStock(request.user!, id, dto); }
 
   @Post(':id/activate')
   activate(@Req() request: AuthenticatedRequest, @Param('id') id: string) { return this.products.activate(request.user!, id); }

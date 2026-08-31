@@ -19,7 +19,23 @@ describe('Work Orders (e2e)', () => {
     token = (await request(app.getHttpServer()).post('/api/v1/auth/login').send({ email: admin.email, password }).expect(201)).body.accessToken;
   });
 
-  afterAll(async () => { if (!prisma) return; await prisma.payment.deleteMany({ where: { organizationId: { in: [organizationId, otherOrganizationId] } } }); await prisma.workOrderItem.deleteMany({ where: { organizationId: { in: [organizationId, otherOrganizationId] } } }); await prisma.workOrder.deleteMany({ where: { organizationId: { in: [organizationId, otherOrganizationId] } } }); await prisma.quoteItem.deleteMany({ where: { organizationId: { in: [organizationId, otherOrganizationId] } } }); await prisma.quote.deleteMany({ where: { organizationId: { in: [organizationId, otherOrganizationId] } } }); await prisma.service.deleteMany({ where: { organizationId: { in: [organizationId, otherOrganizationId] } } }); await prisma.product.deleteMany({ where: { organizationId: { in: [organizationId, otherOrganizationId] } } }); await prisma.vehicle.deleteMany({ where: { organizationId: { in: [organizationId, otherOrganizationId] } } }); await prisma.customer.deleteMany({ where: { organizationId: { in: [organizationId, otherOrganizationId] } } }); await prisma.user.deleteMany({ where: { organizationId: { in: [organizationId, otherOrganizationId] } } }); await prisma.organization.deleteMany({ where: { id: { in: [organizationId, otherOrganizationId] } } }); await app.close(); });
+  afterAll(async () => {
+    if (!prisma) return;
+    const where = { organizationId: { in: [organizationId, otherOrganizationId] } };
+    await prisma.payment.deleteMany({ where });
+    await prisma.stockMovement.deleteMany({ where });
+    await prisma.workOrderItem.deleteMany({ where });
+    await prisma.workOrder.deleteMany({ where });
+    await prisma.quoteItem.deleteMany({ where });
+    await prisma.quote.deleteMany({ where });
+    await prisma.service.deleteMany({ where });
+    await prisma.product.deleteMany({ where });
+    await prisma.vehicle.deleteMany({ where });
+    await prisma.customer.deleteMany({ where });
+    await prisma.user.deleteMany({ where });
+    await prisma.organization.deleteMany({ where: { id: { in: [organizationId, otherOrganizationId] } } });
+    await app.close();
+  });
 
   it('creates direct Work Orders with atomic numbering and snapshots', async () => {
     const service = await prisma.service.create({ data: { organizationId, name: 'Alignment', description: 'Alignment service', price: '100.00' } });
@@ -33,12 +49,61 @@ describe('Work Orders (e2e)', () => {
   it('enforces tenant links and the lifecycle graph', async () => {
     const otherCustomer = await prisma.customer.create({ data: { organizationId: otherOrganizationId, name: 'Other', phone: '222' } }); const otherVehicle = await prisma.vehicle.create({ data: { organizationId: otherOrganizationId, customerId: otherCustomer.id, plate: `O${suffix}`, brand: 'VW', model: 'Golf' } });
     await request(app.getHttpServer()).post('/api/v1/work-orders').set('Authorization', `Bearer ${token}`).send({ customerId: otherCustomer.id, vehicleId: otherVehicle.id }).expect(404);
+    const otherProduct = await prisma.product.create({ data: { organizationId: otherOrganizationId, name: 'Other product', sku: `OTHER-PRODUCT-${suffix}`, salePrice: '10.00', stockQuantity: 2 } });
+    await request(app.getHttpServer()).post('/api/v1/work-orders').set('Authorization', `Bearer ${token}`).send({ customerId, vehicleId, items: [{ type: 'PRODUCT', productId: otherProduct.id, quantity: '1' }] }).expect(404);
+    expect((await prisma.product.findUniqueOrThrow({ where: { id: otherProduct.id } })).stockQuantity).toBe(2);
     const created = await request(app.getHttpServer()).post('/api/v1/work-orders').set('Authorization', `Bearer ${token}`).send({ customerId, vehicleId }).expect(201);
     const action = (path: string) => request(app.getHttpServer()).post(path).set('Authorization', `Bearer ${token}`);
     await action(`/api/v1/work-orders/${created.body.id}/start`).expect(201);
     await action(`/api/v1/work-orders/${created.body.id}/complete`).expect(201);
     await action(`/api/v1/work-orders/${created.body.id}/complete`).expect(409).expect((r) => expect(r.body.code).toBe('WORK_ORDER_INVALID_TRANSITION'));
     await action(`/api/v1/work-orders/${created.body.id}/deliver`).expect(201);
+  });
+
+  it('consumes the final Product composition only when completing a Work Order', async () => {
+    const product = await prisma.product.create({ data: { organizationId, name: 'Oil filter completion', sku: `COMPLETE-${suffix}`, salePrice: '25.00', stockQuantity: 3 } });
+    const order = await request(app.getHttpServer()).post('/api/v1/work-orders').set('Authorization', `Bearer ${token}`).send({ customerId, vehicleId, items: [{ type: 'PRODUCT', productId: product.id, quantity: '2' }] }).expect(201);
+    await request(app.getHttpServer()).patch(`/api/v1/work-orders/${order.body.id}/items/${order.body.items[0].id}`).set('Authorization', `Bearer ${token}`).send({ quantity: '1' }).expect(200);
+    expect((await prisma.product.findUniqueOrThrow({ where: { id: product.id } })).stockQuantity).toBe(3);
+    await request(app.getHttpServer()).post(`/api/v1/work-orders/${order.body.id}/start`).set('Authorization', `Bearer ${token}`).expect(201);
+    await request(app.getHttpServer()).post(`/api/v1/work-orders/${order.body.id}/complete`).set('Authorization', `Bearer ${token}`).expect(201);
+    expect((await prisma.product.findUniqueOrThrow({ where: { id: product.id } })).stockQuantity).toBe(2);
+    await request(app.getHttpServer()).post(`/api/v1/products/${product.id}/stock-adjustments`).set('Authorization', `Bearer ${token}`).send({ quantityChange: 1, note: 'Conferência' }).expect(201);
+    expect(await prisma.stockMovement.findMany({ where: { workOrderId: order.body.id, type: 'CONSUMPTION' } })).toHaveLength(1);
+    expect(await prisma.stockMovement.count({ where: { productId: product.id } })).toBe(2);
+  });
+
+  it('rejects completion atomically when a Product has insufficient stock and names it', async () => {
+    const product = await prisma.product.create({ data: { organizationId, name: 'Insufficient brake pad', sku: `INSUFFICIENT-${suffix}`, salePrice: '40.00', stockQuantity: 1 } });
+    const order = await request(app.getHttpServer()).post('/api/v1/work-orders').set('Authorization', `Bearer ${token}`).send({ customerId, vehicleId, items: [{ type: 'PRODUCT', productId: product.id, quantity: '2' }] }).expect(201);
+    await request(app.getHttpServer()).post(`/api/v1/work-orders/${order.body.id}/start`).set('Authorization', `Bearer ${token}`).expect(201);
+    await request(app.getHttpServer()).post(`/api/v1/work-orders/${order.body.id}/complete`).set('Authorization', `Bearer ${token}`).expect(409).expect((response) => {
+      expect(response.body.code).toBe('INSUFFICIENT_STOCK');
+      expect(response.body.detail).toContain('Insufficient brake pad');
+    });
+    expect((await prisma.product.findUniqueOrThrow({ where: { id: product.id } })).stockQuantity).toBe(1);
+    expect(await prisma.stockMovement.count({ where: { workOrderId: order.body.id } })).toBe(0);
+    expect((await prisma.workOrder.findUniqueOrThrow({ where: { id: order.body.id } })).status).toBe('IN_PROGRESS');
+  });
+
+  it('does not consume stock when a Product Work Order is cancelled', async () => {
+    const product = await prisma.product.create({ data: { organizationId, name: 'Cancelled brake pad', sku: `CANCELLED-${suffix}`, salePrice: '40.00', stockQuantity: 3 } });
+    const order = await request(app.getHttpServer()).post('/api/v1/work-orders').set('Authorization', `Bearer ${token}`).send({ customerId, vehicleId, items: [{ type: 'PRODUCT', productId: product.id, quantity: '2' }] }).expect(201);
+    await request(app.getHttpServer()).post(`/api/v1/work-orders/${order.body.id}/cancel`).set('Authorization', `Bearer ${token}`).expect(201);
+    expect((await prisma.product.findUniqueOrThrow({ where: { id: product.id } })).stockQuantity).toBe(3);
+    expect(await prisma.stockMovement.count({ where: { workOrderId: order.body.id } })).toBe(0);
+  });
+
+  it('serializes concurrent completions so stock cannot be consumed twice', async () => {
+    const product = await prisma.product.create({ data: { organizationId, name: 'Concurrent oil filter', sku: `CONCURRENT-${suffix}`, salePrice: '25.00', stockQuantity: 1 } });
+    const create = () => request(app.getHttpServer()).post('/api/v1/work-orders').set('Authorization', `Bearer ${token}`).send({ customerId, vehicleId, items: [{ type: 'PRODUCT', productId: product.id, quantity: '1' }] });
+    const orders = await Promise.all([create(), create()]);
+    for (const order of orders) { expect(order.status).toBe(201); await request(app.getHttpServer()).post(`/api/v1/work-orders/${order.body.id}/start`).set('Authorization', `Bearer ${token}`).expect(201); }
+    const completions = await Promise.all(orders.map((order) => request(app.getHttpServer()).post(`/api/v1/work-orders/${order.body.id}/complete`).set('Authorization', `Bearer ${token}`)));
+    expect(completions.filter((response) => response.status === 201)).toHaveLength(1);
+    expect(completions.filter((response) => response.status === 409 && response.body.code === 'INSUFFICIENT_STOCK')).toHaveLength(1);
+    expect((await prisma.product.findUniqueOrThrow({ where: { id: product.id } })).stockQuantity).toBe(0);
+    expect(await prisma.stockMovement.count({ where: { productId: product.id, type: 'CONSUMPTION' } })).toBe(1);
   });
 
   it('allocates unique sequential numbers for concurrent direct creations in one Organization', async () => {
@@ -133,7 +198,7 @@ describe('Work Orders (e2e)', () => {
 
   it('preserves catalog snapshots and permits edits only before terminal states', async () => {
     const service = await prisma.service.create({ data: { organizationId, name: 'Brake service', description: 'Brake inspection', price: '80.00' } });
-    const product = await prisma.product.create({ data: { organizationId, name: 'Brake pad', description: 'Front pad', sku: `BRAKE-PAD-${suffix}`, salePrice: '45.00' } });
+    const product = await prisma.product.create({ data: { organizationId, name: 'Brake pad', description: 'Front pad', sku: `BRAKE-PAD-${suffix}`, salePrice: '45.00', stockQuantity: 2 } });
     const created = await request(app.getHttpServer()).post('/api/v1/work-orders').set('Authorization', `Bearer ${token}`).send({ customerId, vehicleId, items: [{ type: 'SERVICE', serviceId: service.id, quantity: '1', unitPrice: '999.99' }, { type: 'PRODUCT', productId: product.id, quantity: '2' }] }).expect(201);
     expect(created.body.items.map((item: any) => item.unitPrice)).toEqual(['80.00', '45.00']);
 
