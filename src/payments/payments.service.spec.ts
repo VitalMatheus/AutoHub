@@ -40,6 +40,22 @@ describe('PaymentsService', () => {
     expect(result).toMatchObject({ amount: '35.10', financial: { total: '100.00', paid: '35.10', balance: '64.90', status: 'PARTIAL' } });
   });
 
+  it('derives PAID when confirmed Payments reach the exact Work Order total', async () => {
+    const tx = {
+      $queryRaw: jest.fn().mockResolvedValue([{ id: 'wo', status: 'DELIVERED' }]),
+      workOrderItem: { findMany: jest.fn().mockResolvedValue([{ quantity: decimal('1'), unitPrice: decimal('100.00') }]) },
+      payment: {
+        findMany: jest.fn().mockResolvedValue([]),
+        create: jest.fn().mockResolvedValue({ id: 'payment', amount: decimal('100.00'), status: 'CONFIRMED', method: 'PIX', paidAt: new Date('2026-01-01T10:00:00.000Z'), createdAt: new Date('2026-01-01T10:00:00.000Z') }),
+      },
+    };
+    tx.payment.findMany.mockResolvedValueOnce([]).mockResolvedValueOnce([{ amount: decimal('100.00') }]);
+
+    const result = await new PaymentsService(prismaFor(tx)).create(principal, 'wo', { amount: '100.00', method: 'PIX', paidAt: '2026-01-01T10:00:00.000Z' });
+
+    expect(result.financial).toMatchObject({ total: '100.00', paid: '100.00', balance: '0.00', status: 'PAID' });
+  });
+
   it('rejects a Payment that exceeds the balance using exact decimal arithmetic', async () => {
     const tx = {
       $queryRaw: jest.fn().mockResolvedValue([{ id: 'wo', status: 'OPEN' }]),
@@ -51,9 +67,22 @@ describe('PaymentsService', () => {
   });
 
   it('returns 404 for a WorkOrder outside the authenticated Organization', async () => {
-    const tx = { $queryRaw: jest.fn().mockResolvedValue([]) };
+    const tx = { workOrder: { findFirst: jest.fn().mockResolvedValue(null) } };
     await expect(new PaymentsService(prismaFor(tx)).list(principal, 'other-wo')).rejects.toBeInstanceOf(NotFoundException);
-    expect(tx.$queryRaw).toHaveBeenCalled();
+    expect(tx.workOrder.findFirst).toHaveBeenCalled();
+  });
+
+  it('lists Payments from a cancelled WorkOrder for consultation', async () => {
+    const tx = {
+      workOrder: { findFirst: jest.fn().mockResolvedValue({ id: 'wo' }) },
+      payment: { findMany: jest.fn().mockImplementation(({ where }: { where?: { status?: string } }) => Promise.resolve(where?.status === 'CONFIRMED' ? [] : [{ id: 'payment', amount: decimal('20.00'), status: 'CANCELLED' }])) },
+      workOrderItem: { findMany: jest.fn().mockResolvedValue([{ quantity: decimal('1'), unitPrice: decimal('20.00') }]) },
+    };
+    const result = await new PaymentsService(prismaFor(tx)).list(principal, 'wo');
+    expect(result.data).toHaveLength(1);
+    expect(result.data[0].status).toBe('CANCELLED');
+    expect(result.financial).toMatchObject({ total: '20.00', paid: '0.00', status: 'UNPAID' });
+    expect(tx.workOrder.findFirst).toHaveBeenCalledWith(expect.objectContaining({ where: { id: 'wo', organizationId: 'org' } }));
   });
 
   it('cancels without deleting and recalculates the state to UNPAID', async () => {

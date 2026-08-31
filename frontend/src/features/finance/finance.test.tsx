@@ -5,7 +5,7 @@ import userEvent from '@testing-library/user-event';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { httpClient } from '@/shared/api/http';
-import { FinancePage } from './pages/finance-page';
+import { FinanceIndexPage, FinancePage } from './pages/finance-page';
 import { cancelPayment, createPayment, listPayments } from './api/payments-api';
 
 const workOrder = { id: 'wo-1', number: 42, status: 'IN_PROGRESS', total: '100.00' };
@@ -69,9 +69,29 @@ describe('Finance payment registration', () => {
   });
 
   it('does not offer new payments for a cancelled Work Order', async () => {
-    vi.spyOn(httpClient, 'get').mockImplementation((url) => Promise.resolve({ data: url.endsWith('/payments') ? { data: [], financial: { total: '100.00', paid: '0.00', balance: '100.00', status: 'UNPAID' } } : { ...workOrder, status: 'CANCELLED', items: [] } }) as never);
+    vi.spyOn(httpClient, 'get').mockImplementation((url) => Promise.resolve({ data: url.endsWith('/payments') ? { data: [{ id: 'payment-1', amount: '10.00', method: 'PIX', status: 'CONFIRMED', paidAt: null, createdAt: '2026-01-01T10:00:00.000Z' }], financial: { total: '100.00', paid: '10.00', balance: '90.00', status: 'PARTIAL' } } : { ...workOrder, status: 'CANCELLED', items: [] } }) as never);
     renderPage();
-    await screen.findByText('Não pago');
+    await screen.findByText('Parcial');
     expect(screen.queryByRole('button', { name: 'Registrar pagamento' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Cancelar' })).not.toBeInTheDocument();
+  });
+});
+
+describe('Finance Work Order list', () => {
+  beforeEach(() => vi.restoreAllMocks());
+
+  it('loads operational and financial fields through the dedicated endpoint', async () => {
+    vi.spyOn(httpClient, 'get').mockResolvedValue({ data: { data: [{ ...workOrder, customer: { name: 'Maria Silva' }, vehicle: { brand: 'Toyota', model: 'Corolla', plate: 'ABC1D23' }, financial: { total: '100.00', paid: '35.10', balance: '64.90', status: 'PARTIAL' } }], meta: { page: 1, pageSize: 100, total: 1, totalPages: 1 } } } as never);
+    render(<QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}><MemoryRouter><FinanceIndexPage /></MemoryRouter></QueryClientProvider>);
+
+    expect(await screen.findByText('#42')).toBeInTheDocument();
+    expect(screen.getByText('Maria Silva')).toBeInTheDocument();
+    expect(screen.getByText('Toyota Corolla · ABC1D23')).toBeInTheDocument();
+    expect(screen.getByText('Em execução')).toBeInTheDocument();
+    expect(screen.getByText('R$ 100,00')).toBeInTheDocument();
+    expect(screen.getByText('R$ 35,10')).toBeInTheDocument();
+    expect(screen.getByText('R$ 64,90')).toBeInTheDocument();
+    expect(screen.getByText('Parcial')).toBeInTheDocument();
+    expect(httpClient.get).toHaveBeenCalledWith('/work-orders/financial', { params: { page: 1, pageSize: 100 } });
   });
 });

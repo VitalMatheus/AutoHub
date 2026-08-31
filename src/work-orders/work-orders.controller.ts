@@ -22,6 +22,7 @@ export class WorkOrdersController {
   @ApiConflictResponse({ description: 'Quote is not approved or was already converted.' })
   @ApiNotFoundResponse({ description: 'Quote is not in the authenticated Organization.' })
   convertFromQuote(@Req() r: AuthenticatedRequest, @Param('quoteId') quoteId: string) { return this.workOrders.convertApprovedQuote(r.user!, quoteId); }
+  @Get('financial') @ApiOperation({ summary: 'List Work Orders with their financial state' }) @ApiOkResponse({ description: 'Financial Work Orders listed.' }) listFinancial(@Req() r: AuthenticatedRequest, @Query() q: ListWorkOrdersDto) { return this.workOrders.listFinancial(r.user!, q); }
   @Get() @ApiOkResponse({ description: 'Work Orders listed.' }) list(@Req() r: AuthenticatedRequest, @Query() q: ListWorkOrdersDto) { return this.workOrders.list(r.user!, q); }
   @Get(':id') @ApiOkResponse({ description: 'Work Order returned.' }) findOne(@Req() r: AuthenticatedRequest, @Param('id') id: string) { return this.workOrders.findOne(r.user!, id); }
   @Patch(':id') @ApiOkResponse({ description: 'Work Order updated.' }) update(@Req() r: AuthenticatedRequest, @Param('id') id: string, @Body() dto: UpdateWorkOrderDto) { return this.workOrders.update(r.user!, id, dto); }

@@ -19,6 +19,15 @@ const transitions: Record<WorkOrderAction, { from: string[]; to: string }> = {
   cancel: { from: ['OPEN', 'WAITING_APPROVAL', 'IN_PROGRESS', 'WAITING_PARTS'], to: 'CANCELLED' },
 };
 
+function cents(value: string): bigint {
+  const [whole, fraction = ''] = value.split('.');
+  return BigInt(whole) * 100n + BigInt((fraction + '00').slice(0, 2));
+}
+
+function money(value: bigint): string {
+  return `${value / 100n}.${(value % 100n).toString().padStart(2, '0')}`;
+}
+
 @Injectable()
 export class WorkOrdersService {
   constructor(private readonly prisma: PrismaService) {}
@@ -177,6 +186,40 @@ export class WorkOrdersService {
       this.prisma.workOrder.count({ where }),
     ]);
     return { data: data.map((entry) => this.format(entry)), meta: { page, pageSize, total, totalPages: Math.ceil(total / pageSize) } };
+  }
+
+  async listFinancial(principal: AuthenticatedPrincipal, query: ListWorkOrdersDto) {
+    const organizationId = this.tenant(principal);
+    const page = query.page ?? 1;
+    const pageSize = query.pageSize ?? 20;
+    const search = query.search?.trim();
+    const number = search && /^\d+$/.test(search) ? Number(search) : undefined;
+    const where: Prisma.WorkOrderWhereInput = {
+      organizationId,
+      ...(query.status ? { status: query.status as any } : {}),
+      ...(query.customerId ? { customerId: query.customerId } : {}),
+      ...(search ? { OR: [
+        ...(number === undefined ? [] : [{ number }]),
+        { customer: { name: { contains: search, mode: 'insensitive' } } },
+        { vehicle: { plate: { contains: search, mode: 'insensitive' } } },
+        { vehicle: { brand: { contains: search, mode: 'insensitive' } } },
+        { vehicle: { model: { contains: search, mode: 'insensitive' } } },
+      ] } : {}),
+    };
+    const [data, total] = await this.prisma.$transaction([
+      this.prisma.workOrder.findMany({ where, include: { customer: { select: { name: true } }, vehicle: { select: { plate: true, brand: true, model: true } }, items: { orderBy: { createdAt: 'asc' } }, payments: { where: { organizationId }, select: { amount: true, status: true } } }, orderBy: [{ createdAt: 'desc' }, { id: 'desc' }], skip: (page - 1) * pageSize, take: pageSize }),
+      this.prisma.workOrder.count({ where }),
+    ]);
+    return {
+      data: data.map((entry) => {
+        const { payments, ...workOrder } = entry;
+        const formatted = this.format(workOrder);
+        const paid = payments.filter((payment) => payment.status === 'CONFIRMED').reduce((sum, payment) => sum + cents(payment.amount.toString()), 0n);
+        const totalAmount = cents(formatted.total);
+        return { ...formatted, financial: { total: money(totalAmount), paid: money(paid), balance: money(totalAmount - paid), status: paid === 0n ? 'UNPAID' : paid < totalAmount ? 'PARTIAL' : 'PAID' } };
+      }),
+      meta: { page, pageSize, total, totalPages: Math.ceil(total / pageSize) },
+    };
   }
 
   async findOne(principal: AuthenticatedPrincipal, id: string) {

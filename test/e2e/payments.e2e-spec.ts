@@ -52,6 +52,18 @@ describe('Payments (e2e)', () => {
     await request(app.getHttpServer()).post(`/api/v1/work-orders/${workOrderId}/payments`).set(auth()).send({ amount: '100.01', method: 'CASH', paidAt: '2026-01-01T10:00:00.000Z' }).expect(409).expect((response) => expect(response.body.code).toBe('PAYMENT_EXCEEDS_BALANCE'));
   });
 
+  it('allows cancelled Work Orders to be consulted but never records new Payments', async () => {
+    const cancelled = await prisma.workOrder.create({ data: { organizationId, customerId: (await prisma.workOrder.findUniqueOrThrow({ where: { id: workOrderId }, select: { customerId: true } })).customerId, vehicleId: (await prisma.workOrder.findUniqueOrThrow({ where: { id: workOrderId }, select: { vehicleId: true } })).vehicleId, number: 99, status: 'CANCELLED', items: { create: [{ type: 'MANUAL', description: 'Cancelled repair', quantity: '1', unitPrice: '50.00' }] } } });
+    await prisma.payment.create({ data: { organizationId, workOrderId: cancelled.id, amount: '10.00', method: 'PIX', status: 'CANCELLED' } });
+    await request(app.getHttpServer()).post(`/api/v1/work-orders/${cancelled.id}/payments`).set(auth()).send({ amount: '1.00', method: 'CASH', paidAt: '2026-01-01T10:00:00.000Z' }).expect(409).expect((response) => expect(response.body.code).toBe('WORK_ORDER_CANCELLED'));
+    const listed = await request(app.getHttpServer()).get(`/api/v1/work-orders/${cancelled.id}/payments`).set(auth()).expect(200);
+    expect(listed.body.data).toHaveLength(1);
+    expect(listed.body.data[0]).toMatchObject({ status: 'CANCELLED', amount: '10.00' });
+    await prisma.payment.deleteMany({ where: { workOrderId: cancelled.id } });
+    await prisma.workOrderItem.deleteMany({ where: { workOrderId: cancelled.id } });
+    await prisma.workOrder.delete({ where: { id: cancelled.id } });
+  });
+
   it('serializes concurrent confirmed payments so the total is never exceeded', async () => {
     const results = await Promise.all([1, 2].map(() => request(app.getHttpServer()).post(`/api/v1/work-orders/${workOrderId}/payments`).set(auth()).send({ amount: '60.00', method: 'CASH', paidAt: '2026-01-01T10:00:00.000Z' })));
     expect(results.filter((result) => result.status === 201)).toHaveLength(1);

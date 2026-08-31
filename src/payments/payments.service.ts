@@ -36,6 +36,11 @@ export class PaymentsService {
     return locked[0];
   }
 
+  private async readableWorkOrder(tx: Prisma.TransactionClient, organizationId: string, workOrderId: string) {
+    const workOrder = await tx.workOrder.findFirst({ where: { id: workOrderId, organizationId }, select: { id: true } });
+    if (!workOrder) throw new NotFoundException('Work Order not found');
+  }
+
   private async financialState(tx: Prisma.TransactionClient, organizationId: string, workOrderId: string) {
     const items = await tx.workOrderItem.findMany({ where: { organizationId, workOrderId }, select: { quantity: true, unitPrice: true } });
     const total = cents(sumTotals(items.map((item) => ({ quantity: item.quantity.toString(), unitPrice: item.unitPrice.toString() }))));
@@ -73,7 +78,7 @@ export class PaymentsService {
   async list(principal: AuthenticatedPrincipal, workOrderId: string) {
     const organizationId = this.tenant(principal);
     const result = await this.prisma.$transaction(async (tx) => {
-      await this.lockedWorkOrder(tx, organizationId, workOrderId);
+      await this.readableWorkOrder(tx, organizationId, workOrderId);
       const [payments, state] = await Promise.all([
         tx.payment.findMany({ where: { organizationId, workOrderId }, orderBy: { createdAt: 'asc' } }),
         this.financialState(tx, organizationId, workOrderId),

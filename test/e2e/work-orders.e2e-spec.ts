@@ -55,6 +55,19 @@ describe('Work Orders (e2e)', () => {
     expect(after.nextWorkOrderNumber).toBe(before.nextWorkOrderNumber + requests.length);
   });
 
+  it('lists financial Work Orders with derived states and explicit Organization isolation', async () => {
+    const own = await request(app.getHttpServer()).post('/api/v1/work-orders').set('Authorization', `Bearer ${token}`).send({ customerId, vehicleId, items: [{ type: 'MANUAL', description: 'Financial repair', quantity: '1', unitPrice: '100.00' }] }).expect(201);
+    const otherCustomer = await prisma.customer.create({ data: { organizationId: otherOrganizationId, name: 'Financial other', phone: '333' } });
+    const otherVehicle = await prisma.vehicle.create({ data: { organizationId: otherOrganizationId, customerId: otherCustomer.id, plate: `F${suffix}`, brand: 'Fiat', model: 'Uno' } });
+    const other = await prisma.workOrder.create({ data: { organizationId: otherOrganizationId, customerId: otherCustomer.id, vehicleId: otherVehicle.id, number: 900000 + suffix % 100000, items: { create: [{ type: 'MANUAL', description: 'Other financial repair', quantity: '1', unitPrice: '200.00' }] } } });
+    await prisma.payment.create({ data: { organizationId, workOrderId: own.body.id, amount: '35.10', method: 'PIX', status: 'CONFIRMED' } });
+
+    const listed = await request(app.getHttpServer()).get('/api/v1/work-orders/financial').set('Authorization', `Bearer ${token}`).query({ page: 1, pageSize: 100 }).expect(200);
+    const ownRow = listed.body.data.find((row: { id: string }) => row.id === own.body.id);
+    expect(ownRow).toMatchObject({ customer: { name: 'WO customer' }, vehicle: { brand: 'Ford', model: 'Ka' }, status: 'OPEN', total: '100.00', financial: { total: '100.00', paid: '35.10', balance: '64.90', status: 'PARTIAL' } });
+    expect(listed.body.data.some((row: { id: string }) => row.id === other.id)).toBe(false);
+  });
+
   it('does not leave a numbering gap when an item cannot be resolved', async () => {
     const service = await prisma.service.create({ data: { organizationId, name: 'Unavailable service', price: '20.00', active: false } });
     const before = await prisma.organization.findUniqueOrThrow({ where: { id: organizationId }, select: { nextWorkOrderNumber: true } });
