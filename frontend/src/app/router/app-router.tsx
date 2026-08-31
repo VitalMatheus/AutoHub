@@ -8,6 +8,7 @@ import { PlatformHomePage } from '../pages/platform-home-page';
 import { useAuth, getHomePath } from '@/features/auth/auth-context';
 import { FutureModulePage } from '../pages/future-module-page';
 import { CustomerDetailPage, CustomersListPage, EditCustomerPage, NewCustomerPage } from '@/features/customers/pages/customer-pages';
+import { EditVehiclePage, NewVehiclePage, VehicleDetailPage, VehiclesListPage } from '@/features/vehicles/pages/vehicle-pages';
 
 function HomeRedirect() {
   const { principal, isAuthenticated, isRestoring } = useAuth();
@@ -27,7 +28,10 @@ export function AppRouter() {
           <Route path="customers/new" element={<NewCustomerPage />} />
           <Route path="customers/:id/edit" element={<EditCustomerPage />} />
           <Route path="customers/:id" element={<CustomerDetailPage />} />
-          <Route path="vehicles/*" element={<FutureModulePage title="Veículos" />} />
+          <Route path="vehicles" element={<VehiclesListPage />} />
+          <Route path="vehicles/new" element={<NewVehiclePage />} />
+          <Route path="vehicles/:id/edit" element={<EditVehiclePage />} />
+          <Route path="vehicles/:id" element={<VehicleDetailPage />} />
           <Route path="quotes/*" element={<FutureModulePage title="Orçamentos" />} />
           <Route path="work-orders/*" element={<FutureModulePage title="Ordens de Serviço" />} />
           <Route path="products/*" element={<FutureModulePage title="Produtos" />} />

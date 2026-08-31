@@ -68,5 +68,5 @@ describe('Customer management through the routed application', () => {
     await waitFor(() => expect(patch).toHaveBeenCalledWith('/customers/customer-1', { email: '' }));
   });
 
-  it('shows Customer details and the future Vehicle/history boundary without fabricated records', async () => { renderCustomers('/app/customers/customer-1'); expect(await screen.findByRole('heading', { name: 'Maria Silva' })).toBeInTheDocument(); expect(screen.getByText('Prefere contato pela manhã.')).toBeInTheDocument(); expect(screen.getByText(/serão integradas/)).toBeInTheDocument(); });
+  it('shows Customer details and links to its Vehicle list without fabricated records', async () => { renderCustomers('/app/customers/customer-1'); expect(await screen.findByRole('heading', { name: 'Maria Silva' })).toBeInTheDocument(); expect(screen.getByText('Prefere contato pela manhã.')).toBeInTheDocument(); expect(screen.getByRole('link', { name: 'Ver veículos' })).toHaveAttribute('href', '/app/vehicles?customerId=customer-1'); });
 });
