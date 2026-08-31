@@ -15,8 +15,12 @@
     "prisma:validate": "prisma validate",
     "prisma:migrate": "prisma migrate dev",
     "prisma:migrate:deploy": "prisma migrate deploy",
+    "prisma:seed": "tsc -p tsconfig.seed.json && node dist/prisma/seed.js",
     "db:up": "docker compose up -d postgres",
     "bootstrap:super-admin": "npm run build && node dist/auth/bootstrap-super-admin.js"
+  },
+  "prisma": {
+    "seed": "npm run prisma:seed"
   },
   "dependencies": {
     "@nestjs/common": "^11.0.0",

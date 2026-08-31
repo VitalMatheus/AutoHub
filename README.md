@@ -40,6 +40,20 @@ npm run bootstrap:super-admin
 The command refuses a second bootstrap and stores only an Argon2id password
 hash. It does not read credentials from source-controlled files.
 
+For a repeatable local development dataset, run the seed with credentials
+provided in the shell (never commit them):
+
+```bash
+DEV_ADMIN_EMAIL=admin@autohub.example \
+DEV_ADMIN_PASSWORD='local-development-password-123' \
+DEV_ADMIN_NAME='Admin de Desenvolvimento' \
+npx prisma db seed
+```
+
+The seed is idempotent, creates or updates a development Organization and
+Admin, and inserts three Customers and four Vehicles for frontend testing. It
+refuses to run with `NODE_ENV=production` and never deletes existing data.
+
 The versioned health endpoint is available at `http://localhost:3000/api/v1/health`; Swagger is at `http://localhost:3000/api/v1/docs`.
 
 ## Checks
