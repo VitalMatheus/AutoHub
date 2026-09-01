@@ -15,6 +15,7 @@ import { QuotesModule } from './quotes/quotes.module';
 import { WorkOrdersModule } from './work-orders/work-orders.module';
 import { PaymentsModule } from './payments/payments.module';
 import { SecurityLogger } from './common/security.logger';
+import { DashboardModule } from './dashboard/dashboard.module';
 
 @Module({
   imports: [
@@ -36,6 +37,7 @@ import { SecurityLogger } from './common/security.logger';
     QuotesModule,
     WorkOrdersModule,
     PaymentsModule,
+    DashboardModule,
   ],
   providers: [SecurityLogger],
   exports: [SecurityLogger],

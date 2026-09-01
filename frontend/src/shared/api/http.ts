@@ -28,6 +28,9 @@ const LEGACY_ERROR_TRANSLATIONS: Record<string, string> = {
   'An approved Quote can generate only one Work Order.': 'Um orçamento aprovado pode gerar apenas uma ordem de serviço.',
   'Work Order cannot complete from OPEN.': 'A transição solicitada para a ordem de serviço não é permitida.',
   'Product SKU already exists in this Organization': 'O SKU do produto já existe nesta oficina.',
+  'Unable to generate a unique Product SKU': 'Não foi possível gerar um código único para o produto.',
+  'Stock adjustment would make the Product stock negative': 'O ajuste não pode deixar o estoque do produto negativo.',
+  'Organization Admin access required': 'Você não tem permissão para realizar esta ação.',
   'Service not found': 'Serviço não encontrado.',
   'Active Service not found': 'Serviço ativo não encontrado.',
   'Quote not found': 'Orçamento não encontrado.',
@@ -48,6 +51,7 @@ const CODE_ERROR_TRANSLATIONS: Record<string, string> = {
   PAYMENT_EXCEEDS_BALANCE: 'O pagamento excede o saldo da ordem de serviço.',
   PAYMENT_ALREADY_CANCELLED: 'O pagamento já está cancelado.',
   WORK_ORDER_CANCELLED: 'Ordens de serviço canceladas não podem receber pagamentos.',
+  CONFLICT: 'Não foi possível concluir porque este registro já existe.',
 };
 const SAFE_DETAILS = new Set([...Object.values(LEGACY_ERROR_TRANSLATIONS), ...Object.values(CODE_ERROR_TRANSLATIONS)]);
 

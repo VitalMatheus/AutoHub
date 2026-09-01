@@ -7,6 +7,7 @@ type Props = { initial?: Partial<ProductInput>; submitting?: boolean; omitEmptyO
 const inputClass = 'w-full rounded-xl border border-slate-300 bg-white px-3 py-2.5 text-sm outline-none ring-blue-500 placeholder:text-slate-400 focus:ring-2';
 
 export function ProductForm({ initial, submitting = false, omitEmptyOptional = true, onSubmit, onCancel }: Props) {
+  const isEditing = Boolean(initial?.sku);
   const [value, setValue] = useState<ProductInput>({ name: initial?.name ?? '', description: initial?.description ?? '', sku: initial?.sku ?? '', salePrice: initial?.salePrice ?? '', stockQuantity: initial?.stockQuantity ?? 0, stockMinimum: initial?.stockMinimum ?? 0 });
   const [error, setError] = useState('');
   const update = (field: keyof ProductInput, next: string) => setValue((current) => ({ ...current, [field]: next }));
@@ -26,7 +27,7 @@ export function ProductForm({ initial, submitting = false, omitEmptyOptional = t
     {error && <div role="alert" className="rounded-xl border border-red-200 bg-red-50 p-3 text-sm text-red-700">{error}</div>}
     <div className="grid gap-5 md:grid-cols-2">
       <label className="space-y-1 text-sm font-medium">Nome<input aria-label="Nome" autoFocus className={inputClass} value={value.name} onChange={(e) => update('name', e.target.value)} /></label>
-      <label className="space-y-1 text-sm font-medium">SKU<input aria-label="SKU" className={`${inputClass} bg-slate-100`} value={value.sku || 'Gerado automaticamente'} readOnly /></label>
+      {isEditing && <label className="space-y-1 text-sm font-medium">SKU<input aria-label="SKU" className={`${inputClass} bg-slate-100`} value={value.sku} readOnly /></label>}
       <label className="space-y-1 text-sm font-medium">Preço de venda<input aria-label="Preço de venda" className={inputClass} inputMode="decimal" value={value.salePrice} onChange={(e) => update('salePrice', e.target.value)} /></label>
       <label className="space-y-1 text-sm font-medium">Estoque atual<input aria-label="Estoque atual" className={inputClass} type="number" min="0" step="1" value={value.stockQuantity} onChange={(e) => update('stockQuantity', e.target.value)} /></label>
       <label className="space-y-1 text-sm font-medium">Estoque mínimo<input aria-label="Estoque mínimo" className={inputClass} type="number" min="0" step="1" value={value.stockMinimum} onChange={(e) => update('stockMinimum', e.target.value)} /></label>

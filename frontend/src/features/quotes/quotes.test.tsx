@@ -6,7 +6,7 @@ import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { httpClient } from '@/shared/api/http';
 import { listQuotes } from './api/quotes-api';
-import { QuotesListPage } from './pages/quote-pages';
+import { QuoteDetailPage, QuotesListPage } from './pages/quote-pages';
 
 const customer = { id: 'customer-1', name: 'Maria Silva', active: true };
 const vehicle = { id: 'vehicle-1', customerId: 'customer-1', plate: 'ABC1D23', brand: 'Toyota', model: 'Corolla', active: true };
@@ -45,7 +45,7 @@ describe('Quotes list', () => {
     const user = userEvent.setup();
     vi.spyOn(httpClient, 'get').mockResolvedValue({ data: { data: [], meta: { page: 3, pageSize: 20, total: 0, totalPages: 0 } } } as never);
     renderPage(['/app/quotes?page=3&search=old&status=PENDING']);
-    const search = await screen.findByRole('textbox', { name: 'Buscar por número, Customer ou placa' });
+    const search = await screen.findByRole('textbox', { name: 'Buscar por número, cliente ou placa' });
     await user.clear(search);
     await user.type(search, 'Maria');
     await user.selectOptions(screen.getByRole('combobox', { name: 'Filtrar por status' }), 'APPROVED');
@@ -66,5 +66,31 @@ describe('Quotes list', () => {
     vi.spyOn(httpClient, 'get').mockRejectedValue(new Error('offline'));
     renderPage();
     expect(await screen.findByRole('alert')).toHaveTextContent('Não foi possível carregar os orçamentos.');
+  });
+
+  it('keeps an approved quote visible after submit and approve', async () => {
+    const user = userEvent.setup();
+    let current = { ...quote, status: 'DRAFT' };
+    vi.spyOn(httpClient, 'get').mockImplementation((url) => {
+      if (url === '/quotes') return Promise.resolve({ data: { data: [current], meta: { page: 1, pageSize: 20, total: 1, totalPages: 1 } } }) as never;
+      if (url === '/quotes/quote-1') return Promise.resolve({ data: current }) as never;
+      if (url === '/customers') return Promise.resolve({ data: { data: [customer] } }) as never;
+      if (url === '/vehicles') return Promise.resolve({ data: { data: [vehicle] } }) as never;
+      return Promise.resolve({ data: { data: [] } }) as never;
+    });
+    vi.spyOn(httpClient, 'post').mockImplementation((url) => {
+      current = { ...current, status: url.endsWith('/submit') ? 'PENDING' : 'APPROVED' };
+      return Promise.resolve({ data: current }) as never;
+    });
+
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    render(<QueryClientProvider client={client}><MemoryRouter initialEntries={['/app/quotes/quote-1']}><Routes><Route path="/app/quotes" element={<QuotesListPage />} /><Route path="/app/quotes/:id" element={<QuoteDetailPage />} /></Routes></MemoryRouter></QueryClientProvider>);
+
+    await user.click(await screen.findByRole('button', { name: 'Enviar para aprovação' }));
+    await user.click(await screen.findByRole('button', { name: 'Aprovar' }));
+    expect(await screen.findByText('Orçamento atualizado para Aprovado.')).toBeInTheDocument();
+    await user.click(screen.getByRole('link', { name: /Voltar para Orçamentos/ }));
+    expect((await screen.findAllByText('Aprovado')).length).toBeGreaterThan(1);
+    expect(screen.queryByText('APPROVED')).not.toBeInTheDocument();
   });
 });

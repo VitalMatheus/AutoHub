@@ -72,7 +72,7 @@ describe('Customer management through the routed application', () => {
   });
 
   it('sends empty optional fields when editing to clear them', async () => {
-    const user = userEvent.setup(); renderCustomers('/app/customers/customer-1/edit'); await screen.findByRole('heading', { name: 'Editar Customer' });
+    const user = userEvent.setup(); renderCustomers('/app/customers/customer-1/edit'); await screen.findByRole('heading', { name: 'Editar cliente' });
     const patch = vi.spyOn(httpClient, 'patch').mockResolvedValue({ data: customer } as never);
     await user.clear(screen.getByLabelText('E-mail')); await user.click(screen.getByRole('button', { name: 'Salvar cliente' }));
 

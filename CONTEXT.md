@@ -75,3 +75,19 @@ _Avoid_: reserva de estoque, venda registrada
 **Stock adjustment**:
 Correção explícita da Stock quantity após um Stock consumption, preservando o registro histórico do atendimento que originou a baixa.
 _Avoid_: reabrir o Work Order, apagar movimentação
+
+**Service history**:
+Registro dos serviços concluídos ou entregues para um Vehicle, derivado dos seus Work Orders e preservando o Customer associado no momento do atendimento.
+_Avoid_: histórico técnico, histórico do frontend
+
+**Recent activity**:
+Acontecimentos operacionais relevantes da oficina que já possuem registro confiável no sistema, como cadastro, criação, aprovação, conclusão ou pagamento.
+_Avoid_: movimentação recente, evento estimado
+
+**Primary supplier**:
+Fornecedor principal atualmente associado a um Product para orientar a oficina sobre quem contatar em caso de defeito; não representa a origem de cada unidade vendida.
+_Avoid_: fornecedor da venda, origem garantida da peça
+
+**User-facing status**:
+Nome em português usado pela oficina para representar um estado interno de Quote ou Work Order, sem expor enums técnicos.
+_Avoid_: status cru, enum

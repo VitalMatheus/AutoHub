@@ -205,7 +205,8 @@ describe('Organization Admin frontend shell', () => {
     vi.spyOn(httpClient, 'post').mockResolvedValue({ data: { accessToken: 'restored-token', expiresIn: 900, tokenType: 'Bearer' } } as never);
     vi.spyOn(httpClient, 'get').mockImplementation((url) => {
       if (url === '/auth/me') return Promise.resolve({ data: principal }) as never;
-      return Promise.resolve({ data: { meta: { total: 7 } } }) as never;
+      if (url === '/dashboard') return Promise.resolve({ data: { customers: 7, openWorkOrders: 0, pendingQuotes: 0 } }) as never;
+      return Promise.resolve({ data: { data: [], meta: { page: 1, pageSize: 20, total: 0, totalPages: 0 } } }) as never;
     });
 
     render(<AppProviders />);

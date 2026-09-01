@@ -34,7 +34,7 @@ describe('ProductsService', () => {
 
     const result = await subject.create(principal, { name: 'Oil filter', salePrice: '10.00', stockQuantity: 2, stockMinimum: 3 } as any);
 
-    expect(prisma.product.create).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ sku: expect.stringMatching(/^PROD-/), stockQuantity: 2, stockMinimum: 3 }) }));
+    expect(prisma.product.create).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ sku: expect.stringMatching(/^PRD-[A-Z0-9]{8}$/), stockQuantity: 2, stockMinimum: 3 }) }));
     expect(result).toMatchObject({ stockQuantity: 2, stockMinimum: 3, lowStock: true });
   });
 
@@ -53,8 +53,8 @@ describe('ProductsService', () => {
     const result = await subject.create(principal, { name: 'Oil filter', salePrice: '10.00' } as any);
 
     expect(prisma.product.create).toHaveBeenCalledTimes(2);
-    expect(prisma.product.create.mock.calls[0][0].data.sku).toMatch(/^PROD-/);
-    expect(prisma.product.create.mock.calls[1][0].data.sku).toMatch(/^PROD-/);
+    expect(prisma.product.create.mock.calls[0][0].data.sku).toMatch(/^PRD-[A-Z0-9]{8}$/);
+    expect(prisma.product.create.mock.calls[1][0].data.sku).toMatch(/^PRD-[A-Z0-9]{8}$/);
     expect(result.sku).toBe(prisma.product.create.mock.calls[1][0].data.sku);
   });
 

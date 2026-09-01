@@ -51,11 +51,19 @@ describe('Product catalog', () => {
     const user = userEvent.setup();
     vi.spyOn(httpClient, 'post').mockResolvedValue({ data: product } as never);
     renderPage(<NewProductPage />);
+    expect(screen.queryByLabelText('SKU')).not.toBeInTheDocument();
     await user.type(await screen.findByLabelText('Nome'), 'Pastilha de freio');
     await user.type(screen.getByLabelText('Preço de venda'), '89,90');
     await user.click(screen.getByRole('button', { name: 'Salvar produto' }));
     await waitFor(() => expect(httpClient.post).toHaveBeenCalledWith('/products', { name: 'Pastilha de freio', salePrice: '89.90', stockQuantity: 0, stockMinimum: 0 }));
     expect(httpClient.post).not.toHaveBeenCalledWith('/products', expect.objectContaining({ organizationId: expect.anything() }));
+  });
+
+  it('keeps the generated SKU visible when editing a product', async () => {
+    vi.spyOn(httpClient, 'get').mockResolvedValue({ data: product } as never);
+    renderPage(<EditProductPage />, ['/app/products/product-1/edit']);
+
+    expect(await screen.findByLabelText('SKU')).toHaveValue('FIL-001');
   });
 
   it('edits only changed fields and handles SKU conflict', async () => {
