@@ -17,10 +17,10 @@ export enum AuditAction {
   COMMERCIAL_ACCOUNT_CREATED = 'commercial_account.created',
   ORGANIZATION_CREATED = 'organization.created', ORGANIZATION_UPDATED = 'organization.updated',
   ORGANIZATION_ACTIVATED = 'organization.activated', ORGANIZATION_DEACTIVATED = 'organization.deactivated', ORGANIZATION_SUSPENDED = 'organization.suspended', ORGANIZATION_REACTIVATED = 'organization.reactivated',
-  USER_INVITATION_ISSUED = 'user.invitation_issued',
+  USER_INVITATION_ISSUED = 'user.invitation_issued', USER_ACTIVATED = 'user.activated', USER_DEACTIVATED = 'user.deactivated',
   PLAN_CREATED = 'plan.created', PLAN_UPDATED = 'plan.updated', PLAN_ARCHIVED = 'plan.archived',
   PLAN_VERSION_CREATED = 'plan_version.created', PLAN_VERSION_UPDATED = 'plan_version.updated', PLAN_VERSION_PUBLISHED = 'plan_version.published',
-  SUBSCRIPTION_CREATED = 'subscription.created', SUBSCRIPTION_MIGRATED_REGULARIZED = 'subscription.migrated_regularized',
+  SUBSCRIPTION_CREATED = 'subscription.created', SUBSCRIPTION_MIGRATED_REGULARIZED = 'subscription.migrated_regularized', SUBSCRIPTION_PLAN_CHANGE_SCHEDULED = 'subscription.plan_change_scheduled', SUBSCRIPTION_RECURRING_ADJUSTMENT_SCHEDULED = 'subscription.recurring_adjustment_scheduled', SUBSCRIPTION_PLAN_CHANGE_APPLIED = 'subscription.plan_change_applied', SUBSCRIPTION_RECURRING_ADJUSTMENT_APPLIED = 'subscription.recurring_adjustment_applied',
   SUBSCRIPTION_CHARGE_CREATED = 'subscription_charge.created', SUBSCRIPTION_CHARGE_UPDATED = 'subscription_charge.updated', SUBSCRIPTION_CHARGE_CANCELLED = 'subscription_charge.cancelled',
   CHARGE_SETTLEMENT_CREATED = 'charge_settlement.created', CHARGE_SETTLEMENT_REVERSED = 'charge_settlement.reversed',
 }

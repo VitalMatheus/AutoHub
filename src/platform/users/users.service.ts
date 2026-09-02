@@ -5,6 +5,8 @@ import { createHash, randomBytes } from 'node:crypto';
 import { PrismaService } from '../../prisma/prisma.service';
 import type { AuthenticatedPrincipal } from '../../auth/authenticated-principal';
 import { InviteUserDto } from './dto/invite-user.dto';
+import { AuditEventsService } from '../audit-events/audit-events.service';
+import { AuditAction, AuditTargetType } from '../audit-events/dto/list-audit-events.dto';
 
 const userSelect = {
   id: true,
@@ -22,6 +24,7 @@ export class UsersService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly config: ConfigService,
+    private readonly audit: AuditEventsService,
   ) {}
 
   private organizationId(principal: AuthenticatedPrincipal): string {
@@ -58,9 +61,10 @@ export class UsersService {
       return await this.prisma.$transaction(async (tx) => {
         const organization = await tx.organization.findFirst({
           where: { id: organizationId, operationalStatus: 'ACTIVE' },
-          select: { id: true },
+          select: { id: true, commercialAccountId: true },
         });
         if (!organization) throw new NotFoundException('Organization not found');
+        await this.enforceUserLimit(tx, organization.commercialAccountId, organizationId);
 
         const user = await tx.user.create({
           data: {
@@ -80,6 +84,7 @@ export class UsersService {
             expiresAt: new Date(Date.now() + expiresDays * 86_400_000),
           },
         });
+        await this.audit.record(tx, principal, { action: AuditAction.USER_INVITATION_ISSUED, targetType: AuditTargetType.USER, targetId: user.id, organizationId, commercialAccountId: organization.commercialAccountId ?? undefined, after: { name: user.name, email: user.email, role: user.role, status: user.status } });
         return { user, activationToken };
       });
     } catch (error) {
@@ -94,6 +99,9 @@ export class UsersService {
     const organizationId = this.organizationId(principal);
     try {
       return await this.prisma.$transaction(async (tx) => {
+        const existing = await tx.user.findFirst({ where: { id: userId, organizationId, role: 'ADMIN' }, select: { id: true, status: true, organization: { select: { commercialAccountId: true } } } });
+        if (!existing) throw new NotFoundException('User not found');
+        if (status === 'ACTIVE' && existing.status === 'DISABLED') await this.enforceUserLimit(tx, existing.organization?.commercialAccountId ?? null, organizationId);
         const updated = await tx.user.updateMany({
           where: { id: userId, organizationId, role: 'ADMIN' },
           data: { status },
@@ -105,7 +113,9 @@ export class UsersService {
             data: { revokedAt: new Date() },
           });
         }
-        return tx.user.findFirst({ where: { id: userId, organizationId }, select: userSelect });
+        const result = await tx.user.findFirst({ where: { id: userId, organizationId }, select: userSelect });
+        await this.audit.record(tx, principal, { action: status === 'ACTIVE' ? AuditAction.USER_ACTIVATED : AuditAction.USER_DEACTIVATED, targetType: AuditTargetType.USER, targetId: userId, organizationId, commercialAccountId: existing.organization?.commercialAccountId ?? undefined, before: { status: existing.status }, after: { status } });
+        return result;
       });
     } catch (error) {
       if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2025') {
@@ -113,6 +123,15 @@ export class UsersService {
       }
       throw error;
     }
+  }
+
+  private async enforceUserLimit(tx: any, commercialAccountId: string | null, organizationId: string) {
+    if (!commercialAccountId) return;
+    if (tx.$executeRaw) await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtextextended(${commercialAccountId}, 0))`;
+    const subscription = await tx.subscription.findFirst({ where: { commercialAccountId, status: { not: 'ENDED' } }, orderBy: { createdAt: 'desc' }, select: { contractedUserLimit: true } });
+    if (!subscription) return;
+    const count = await tx.user.count({ where: { organization: { commercialAccountId }, status: { not: 'DISABLED' } } });
+    if (count >= subscription.contractedUserLimit) throw new ConflictException({ code: 'PLAN_USER_LIMIT_REACHED', detail: `The Commercial Account allows at most ${subscription.contractedUserLimit} non-disabled Users.` });
   }
 
   async revokeSessions(principal: AuthenticatedPrincipal, userId: string): Promise<{ success: true }> {

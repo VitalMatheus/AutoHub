@@ -83,10 +83,11 @@ export class SubscriptionChargesService {
         if (offset > 0) {
           try {
             await this.prisma.$transaction(async (tx) => {
+              const effective = await this.applyScheduledChanges(tx, subscription.id, recifeMidnight(periodStart));
               const charge = await tx.subscriptionCharge.create({
                 data: {
                   commercialAccountId: subscription.commercialAccountId!, subscriptionId: subscription.id,
-                  amount: subscription.contractedPrice, dueDate: recifeMidnight(periodStart), nature: 'RENEWAL',
+                  amount: effective.contractedPrice ?? subscription.contractedPrice, dueDate: recifeMidnight(periodStart), nature: 'RENEWAL',
                   billingPeriodStart: recifeMidnight(periodStart), billingPeriodEnd: recifeMidnight(periodEnd),
                 }, select: { id: true },
               });
@@ -107,6 +108,50 @@ export class SubscriptionChargesService {
       }
     }
     return { created: first.created + chargeIds.length, chargeIds: [...first.chargeIds, ...chargeIds] };
+  }
+
+  /** Applies future commercial changes at a renewal, atomically with its Charge. */
+  private async applyScheduledChanges(tx: any, subscriptionId: string, periodStart: Date) {
+    // Lightweight unit doubles may not expose the new scheduling relation.
+    if (!tx.subscription?.findUnique) return { contractedPrice: undefined };
+    const current = await tx.subscription.findUnique({ where: { id: subscriptionId }, select: {
+      id: true, commercialAccountId: true, contractedPrice: true, contractedCurrency: true, contractedInterval: true,
+      contractedOrganizationLimit: true, contractedUserLimit: true, contractedWorkOrderLimit: true, contractedGracePeriodDays: true,
+      planVersionId: true, scheduledPlanVersionId: true, scheduledPlanEffectiveAt: true, scheduledPlanReason: true,
+      scheduledRecurringAdjustment: true, scheduledAdjustmentEffectiveAt: true, scheduledAdjustmentReason: true,
+    } });
+    if (!current) return { contractedPrice: undefined };
+    let price = current.contractedPrice as Prisma.Decimal;
+    const planDue = current.scheduledPlanVersionId && current.scheduledPlanEffectiveAt && current.scheduledPlanEffectiveAt <= periodStart;
+    const adjustmentDue = current.scheduledRecurringAdjustment !== null && current.scheduledAdjustmentEffectiveAt && current.scheduledAdjustmentEffectiveAt <= periodStart;
+    let plan = null;
+    if (planDue) {
+      plan = await tx.planVersion.findUnique({ where: { id: current.scheduledPlanVersionId }, select: { id: true, price: true, currency: true, interval: true, organizationLimit: true, userLimit: true, workOrderLimit: true, gracePeriodDays: true } });
+      if (!plan) throw new ConflictException('Scheduled Plan Version no longer exists');
+      const organizations = await tx.organization.count({ where: { commercialAccountId: current.commercialAccountId, operationalStatus: { not: 'INACTIVE' } } });
+      const users = await tx.user.count({ where: { organization: { commercialAccountId: current.commercialAccountId }, status: { not: 'DISABLED' } } });
+      // A downgrade remains pending until usage complies. Existing data is never removed.
+      if (organizations > plan.organizationLimit || users > plan.userLimit) plan = null;
+    }
+    const data: Record<string, unknown> = {};
+    if (plan) {
+      price = plan.price;
+      data.planVersionId = plan.id; data.contractedPrice = plan.price; data.contractedCurrency = plan.currency;
+      data.contractedInterval = plan.interval; data.contractedOrganizationLimit = plan.organizationLimit; data.contractedUserLimit = plan.userLimit;
+      data.contractedWorkOrderLimit = plan.workOrderLimit; data.contractedGracePeriodDays = plan.gracePeriodDays;
+      data.scheduledPlanVersionId = null; data.scheduledPlanEffectiveAt = null; data.scheduledPlanReason = null;
+    }
+    if (adjustmentDue) {
+      const next = price.add(current.scheduledRecurringAdjustment);
+      if (next.lt(0)) throw new ConflictException('Contracted Price cannot become negative');
+      price = next; data.contractedPrice = next; data.scheduledRecurringAdjustment = null; data.scheduledAdjustmentEffectiveAt = null; data.scheduledAdjustmentReason = null;
+    }
+    if (Object.keys(data).length) {
+      const updated = await tx.subscription.update({ where: { id: subscriptionId }, data, select: { contractedPrice: true, planVersionId: true } });
+      if (plan) await this.audit.record(tx, null, { action: AuditAction.SUBSCRIPTION_PLAN_CHANGE_APPLIED, targetType: AuditTargetType.SUBSCRIPTION, targetId: subscriptionId, commercialAccountId: current.commercialAccountId, after: { planVersionId: updated.planVersionId, effectiveAt: periodStart, system: true } });
+      if (adjustmentDue) await this.audit.record(tx, null, { action: AuditAction.SUBSCRIPTION_RECURRING_ADJUSTMENT_APPLIED, targetType: AuditTargetType.SUBSCRIPTION, targetId: subscriptionId, commercialAccountId: current.commercialAccountId, after: { contractedPrice: updated.contractedPrice.toFixed(2), effectiveAt: periodStart, system: true } });
+    }
+    return { contractedPrice: price };
   }
 
   async list(dto: ListChargesDto) {

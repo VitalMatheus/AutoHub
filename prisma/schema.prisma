@@ -124,8 +124,9 @@ model PlanVersion {
   publishedAt       DateTime?         @db.Timestamptz(3)
   createdAt         DateTime          @default(now()) @db.Timestamptz(3)
 
-  plan          Plan           @relation(fields: [planId], references: [id], onDelete: Restrict)
-  subscriptions Subscription[]
+  plan                   Plan           @relation(fields: [planId], references: [id], onDelete: Restrict)
+  subscriptions          Subscription[]
+  scheduledSubscriptions Subscription[] @relation("ScheduledSubscriptionPlan")
 
   @@unique([planId, version])
   @@index([status, publishedAt])
@@ -134,38 +135,46 @@ model PlanVersion {
 // Minimal contract reference for protecting versions already used by a later
 // commercial module. It intentionally has no lifecycle or API in this scope.
 model Subscription {
-  id                         String             @id @default(uuid()) @db.Uuid
-  commercialAccountId        String?            @db.Uuid
-  planVersionId              String             @db.Uuid
-  status                     SubscriptionStatus @default(SCHEDULED)
-  contractedPrice            Decimal            @default(0) @db.Decimal(12, 2)
-  contractedCurrency         String             @default("BRL") @db.Char(3)
-  contractedInterval         BillingInterval   @default(MONTHLY)
-  contractedOrganizationLimit Int                @default(1)
-  contractedUserLimit        Int                @default(1)
-  contractedWorkOrderLimit   Int?
-  contractedGracePeriodDays  Int                @default(5)
-  migratedAt                 DateTime?          @db.Timestamptz(3)
-  regularizedAt              DateTime?          @db.Timestamptz(3)
-  regularizationReason       String?
-  commercialStartAt          DateTime?          @db.Timestamptz(3)
-  trialEnabled               Boolean             @default(true)
-  trialStartsAt              DateTime?          @db.Timestamptz(3)
-  trialEndsAt                DateTime?          @db.Timestamptz(3)
-  firstPaidPeriodStartedAt   DateTime?          @db.Timestamptz(3)
-  firstPaymentReceivedAt     DateTime?          @db.Timestamptz(3)
-  currentPeriodStart         DateTime?          @db.Timestamptz(3)
-  currentPeriodEnd           DateTime?          @db.Timestamptz(3)
-  cancellationRequestedAt    DateTime?          @db.Timestamptz(3)
-  effectiveCancellationAt    DateTime?          @db.Timestamptz(3)
-  createdAt                  DateTime           @default(now()) @db.Timestamptz(3)
+  id                             String             @id @default(uuid()) @db.Uuid
+  commercialAccountId            String?            @db.Uuid
+  planVersionId                  String             @db.Uuid
+  status                         SubscriptionStatus @default(SCHEDULED)
+  contractedPrice                Decimal            @default(0) @db.Decimal(12, 2)
+  contractedCurrency             String             @default("BRL") @db.Char(3)
+  contractedInterval             BillingInterval    @default(MONTHLY)
+  contractedOrganizationLimit    Int                @default(1)
+  contractedUserLimit            Int                @default(1)
+  contractedWorkOrderLimit       Int?
+  contractedGracePeriodDays      Int                @default(5)
+  migratedAt                     DateTime?          @db.Timestamptz(3)
+  regularizedAt                  DateTime?          @db.Timestamptz(3)
+  regularizationReason           String?
+  commercialStartAt              DateTime?          @db.Timestamptz(3)
+  trialEnabled                   Boolean            @default(true)
+  trialStartsAt                  DateTime?          @db.Timestamptz(3)
+  trialEndsAt                    DateTime?          @db.Timestamptz(3)
+  firstPaidPeriodStartedAt       DateTime?          @db.Timestamptz(3)
+  firstPaymentReceivedAt         DateTime?          @db.Timestamptz(3)
+  currentPeriodStart             DateTime?          @db.Timestamptz(3)
+  currentPeriodEnd               DateTime?          @db.Timestamptz(3)
+  cancellationRequestedAt        DateTime?          @db.Timestamptz(3)
+  effectiveCancellationAt        DateTime?          @db.Timestamptz(3)
+  scheduledPlanVersionId         String?            @db.Uuid
+  scheduledPlanEffectiveAt       DateTime?          @db.Timestamptz(3)
+  scheduledPlanReason            String?
+  scheduledRecurringAdjustment   Decimal?           @db.Decimal(12, 2)
+  scheduledAdjustmentEffectiveAt DateTime?          @db.Timestamptz(3)
+  scheduledAdjustmentReason      String?
+  createdAt                      DateTime           @default(now()) @db.Timestamptz(3)
 
-  commercialAccount CommercialAccount? @relation(fields: [commercialAccountId], references: [id], onDelete: Restrict)
-  planVersion       PlanVersion        @relation(fields: [planVersionId], references: [id], onDelete: Restrict)
-  charges           SubscriptionCharge[]
+  commercialAccount    CommercialAccount?   @relation(fields: [commercialAccountId], references: [id], onDelete: Restrict)
+  planVersion          PlanVersion          @relation(fields: [planVersionId], references: [id], onDelete: Restrict)
+  scheduledPlanVersion PlanVersion?         @relation("ScheduledSubscriptionPlan", fields: [scheduledPlanVersionId], references: [id], onDelete: Restrict)
+  charges              SubscriptionCharge[]
 
   @@index([planVersionId, status])
   @@index([commercialAccountId, status])
+  @@index([scheduledPlanVersionId, scheduledPlanEffectiveAt])
 }
 
 model CommercialAccount {
@@ -180,8 +189,8 @@ model CommercialAccount {
 
   organizations              Organization[]
   subscriptions              Subscription[]
-  primaryContact             User?          @relation("CommercialAccountPrimaryContact", fields: [primaryContactOrganizationId, primaryContactUserId], references: [organizationId, id], onDelete: SetNull)
-  primaryContactOrganization Organization?  @relation("CommercialAccountPrimaryContactOrganization", fields: [id, primaryContactOrganizationId], references: [commercialAccountId, id], onDelete: Restrict)
+  primaryContact             User?                @relation("CommercialAccountPrimaryContact", fields: [primaryContactOrganizationId, primaryContactUserId], references: [organizationId, id], onDelete: SetNull)
+  primaryContactOrganization Organization?        @relation("CommercialAccountPrimaryContactOrganization", fields: [id, primaryContactOrganizationId], references: [commercialAccountId, id], onDelete: Restrict)
   charges                    SubscriptionCharge[]
 
   @@index([name])
@@ -276,8 +285,8 @@ model Organization {
   workOrderItems         WorkOrderItem[]
   payments               Payment[]
   stockMovements         StockMovement[]
-  commercialAccount      CommercialAccount?  @relation(fields: [commercialAccountId], references: [id], onDelete: Restrict)
-  primaryContactAccounts CommercialAccount[] @relation("CommercialAccountPrimaryContactOrganization")
+  commercialAccount      CommercialAccount?   @relation(fields: [commercialAccountId], references: [id], onDelete: Restrict)
+  primaryContactAccounts CommercialAccount[]  @relation("CommercialAccountPrimaryContactOrganization")
   subscriptionCharges    SubscriptionCharge[]
 
   @@unique([commercialAccountId, id])
@@ -286,24 +295,24 @@ model Organization {
 }
 
 model SubscriptionCharge {
-  id                  String                 @id @default(uuid()) @db.Uuid
-  commercialAccountId String                 @db.Uuid
-  subscriptionId      String                 @db.Uuid
-  organizationId      String?                @db.Uuid
-  amount              Decimal                @db.Decimal(12, 2)
-  dueDate             DateTime               @db.Date
+  id                  String                   @id @default(uuid()) @db.Uuid
+  commercialAccountId String                   @db.Uuid
+  subscriptionId      String                   @db.Uuid
+  organizationId      String?                  @db.Uuid
+  amount              Decimal                  @db.Decimal(12, 2)
+  dueDate             DateTime                 @db.Date
   nature              SubscriptionChargeNature
-  billingPeriodStart  DateTime?              @db.Date
-  billingPeriodEnd    DateTime?              @db.Date
+  billingPeriodStart  DateTime?                @db.Date
+  billingPeriodEnd    DateTime?                @db.Date
   provider            String?
   externalId          String?
-  cancelledAt         DateTime?              @db.Timestamptz(3)
-  createdAt           DateTime               @default(now()) @db.Timestamptz(3)
-  updatedAt           DateTime               @updatedAt @db.Timestamptz(3)
+  cancelledAt         DateTime?                @db.Timestamptz(3)
+  createdAt           DateTime                 @default(now()) @db.Timestamptz(3)
+  updatedAt           DateTime                 @updatedAt @db.Timestamptz(3)
 
-  commercialAccount CommercialAccount @relation(fields: [commercialAccountId], references: [id], onDelete: Restrict)
-  subscription      Subscription      @relation(fields: [subscriptionId], references: [id], onDelete: Restrict)
-  organization      Organization?    @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  commercialAccount CommercialAccount  @relation(fields: [commercialAccountId], references: [id], onDelete: Restrict)
+  subscription      Subscription       @relation(fields: [subscriptionId], references: [id], onDelete: Restrict)
+  organization      Organization?      @relation(fields: [organizationId], references: [id], onDelete: Restrict)
   settlements       ChargeSettlement[]
 
   @@unique([provider, externalId])
@@ -314,20 +323,20 @@ model SubscriptionCharge {
 }
 
 model ChargeSettlement {
-  id                 String              @id @default(uuid()) @db.Uuid
-  chargeId           String              @db.Uuid
-  originalSettlementId String?           @db.Uuid
-  kind               ChargeSettlementKind @default(RECEIPT)
-  amount             Decimal             @db.Decimal(12, 2)
-  receivedAt         DateTime            @db.Timestamptz(3)
-  effectiveAt        DateTime?           @db.Timestamptz(3)
-  reason             String?
-  provider           String?
-  externalId         String?
-  createdAt          DateTime            @default(now()) @db.Timestamptz(3)
+  id                   String               @id @default(uuid()) @db.Uuid
+  chargeId             String               @db.Uuid
+  originalSettlementId String?              @db.Uuid
+  kind                 ChargeSettlementKind @default(RECEIPT)
+  amount               Decimal              @db.Decimal(12, 2)
+  receivedAt           DateTime             @db.Timestamptz(3)
+  effectiveAt          DateTime?            @db.Timestamptz(3)
+  reason               String?
+  provider             String?
+  externalId           String?
+  createdAt            DateTime             @default(now()) @db.Timestamptz(3)
 
   charge             SubscriptionCharge @relation(fields: [chargeId], references: [id], onDelete: Restrict)
-  originalSettlement ChargeSettlement? @relation("SettlementReversals", fields: [originalSettlementId], references: [id], onDelete: Restrict)
+  originalSettlement ChargeSettlement?  @relation("SettlementReversals", fields: [originalSettlementId], references: [id], onDelete: Restrict)
   reversals          ChargeSettlement[] @relation("SettlementReversals")
 
   @@unique([provider, externalId])

@@ -7,6 +7,8 @@ import type { Request } from 'express';
 import { CreateSubscriptionDto } from './dto/create-subscription.dto';
 import { ListSubscriptionsDto } from './dto/list-subscriptions.dto';
 import { RegularizeSubscriptionDto } from './dto/regularize-subscription.dto';
+import { SchedulePlanChangeDto } from './dto/schedule-plan-change.dto';
+import { ScheduleRecurringAdjustmentDto } from './dto/schedule-recurring-adjustment.dto';
 import { SubscriptionsService } from './subscriptions.service';
 
 type AuthenticatedRequest = Request & { user?: AuthenticatedPrincipal };
@@ -22,4 +24,6 @@ export class SubscriptionsController {
   create(@Req() req: AuthenticatedRequest, @Body() dto: CreateSubscriptionDto) { return this.subscriptions.create(req.user!, dto); }
   @Post(':id/regularize') @ApiOperation({ summary: 'Explicitly regularize a migrated Subscription' }) @ApiResponse({ status: 201, description: 'Migrated Subscription regularized with an audit event.' }) @ApiUnauthorizedResponse({ description: 'Authentication required.' }) @ApiForbiddenResponse({ description: 'Super Admin access required.' }) @ApiNotFoundResponse({ description: 'Subscription not found.' })
   regularize(@Req() req: AuthenticatedRequest, @Param('id') id: string, @Body() dto: RegularizeSubscriptionDto) { return this.subscriptions.regularize(req.user!, id, dto); }
+  @Post(':id/plan-change') schedulePlanChange(@Req() req: AuthenticatedRequest, @Param('id') id: string, @Body() dto: SchedulePlanChangeDto) { return this.subscriptions.schedulePlanChange(req.user!, id, dto); }
+  @Post(':id/recurring-price-adjustment') scheduleRecurringAdjustment(@Req() req: AuthenticatedRequest, @Param('id') id: string, @Body() dto: ScheduleRecurringAdjustmentDto) { return this.subscriptions.scheduleRecurringAdjustment(req.user!, id, dto); }
 }

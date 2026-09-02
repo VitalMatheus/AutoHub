@@ -1,4 +1,4 @@
-import { deriveSubscriptionConditions } from './subscriptions.service';
+import { deriveSubscriptionConditions, SubscriptionsService } from './subscriptions.service';
 import { Prisma } from '@prisma/client';
 
 const base = {
@@ -33,5 +33,20 @@ describe('deriveSubscriptionConditions', () => {
     };
     expect(deriveSubscriptionConditions(subscription, new Date('2026-09-20T03:00:00Z'))).toMatchObject({ delinquent: true, paymentGracePeriod: true, commercialAccess: 'PAYMENT_GRACE_PERIOD' });
     expect(deriveSubscriptionConditions(subscription, new Date('2026-09-21T03:00:00Z')).commercialAccess).toBe('PAYMENT_BLOCKED');
+  });
+});
+
+describe('scheduled commercial changes', () => {
+  it('rejects a recurring adjustment that would make the Contracted Price negative', async () => {
+    const tx = {
+      subscription: { findUnique: jest.fn().mockResolvedValue({ id: 's', status: 'CURRENT', contractedPrice: new Prisma.Decimal('5.00') }) },
+    };
+    const service = new SubscriptionsService({ $transaction: (cb: (arg: unknown) => unknown) => cb(tx) } as never, { record: jest.fn() } as never);
+    await expect(service.scheduleRecurringAdjustment({} as never, 's', { amount: '-5.01', effectiveAt: '2099-01-01T00:00:00Z', reason: 'correction' })).rejects.toThrow('negative');
+  });
+
+  it('requires scheduled changes to have a future effective date', async () => {
+    const service = new SubscriptionsService({} as never, {} as never);
+    await expect(service.scheduleRecurringAdjustment({} as never, 's', { amount: '1.00', effectiveAt: '2020-01-01T00:00:00Z', reason: 'correction' })).rejects.toThrow('future');
   });
 });

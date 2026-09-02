@@ -37,7 +37,18 @@ export class OrganizationsService {
         const explicitTrialStart = dto.trialStartsAt ? new Date(dto.trialStartsAt) : null;
         const trialEndsAt = explicitTrialStart ? new Date(explicitTrialStart) : null;
         if (trialEndsAt) trialEndsAt.setUTCDate(trialEndsAt.getUTCDate() + 14);
-        const commercialAccount = await tx.commercialAccount.create({ data: { name: dto.name.trim(), billingEmail: dto.email ? this.normalizeEmail(dto.email) : undefined, billingDocument: dto.document ? this.normalizeDocument(dto.document) : undefined } });
+        let existingSubscription: any = null;
+        const existingAccount = dto.commercialAccountId
+          ? await tx.commercialAccount.findUnique({ where: { id: dto.commercialAccountId }, select: { id: true, name: true, billingEmail: true, billingDocument: true, primaryContactOrganizationId: true, primaryContactUserId: true, createdAt: true, updatedAt: true } })
+          : null;
+        if (dto.commercialAccountId && !existingAccount) throw new NotFoundException('Commercial Account not found');
+        if (existingAccount) {
+          await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtextextended(${existingAccount.id}, 0))`;
+          existingSubscription = await tx.subscription.findFirst({ where: { commercialAccountId: existingAccount.id, status: { not: 'ENDED' } }, orderBy: { createdAt: 'desc' }, select: { id: true, planVersionId: true, status: true, trialEnabled: true, trialStartsAt: true, trialEndsAt: true, contractedPrice: true, contractedOrganizationLimit: true } });
+          const organizationCount = await tx.organization.count({ where: { commercialAccountId: existingAccount.id, operationalStatus: { not: 'INACTIVE' } } });
+          if (existingSubscription && organizationCount >= existingSubscription.contractedOrganizationLimit) throw new ConflictException({ code: 'PLAN_ORGANIZATION_LIMIT_REACHED', detail: `The Commercial Account allows at most ${existingSubscription.contractedOrganizationLimit} non-inactive Organizations.` });
+        }
+        const commercialAccount = existingAccount ?? await tx.commercialAccount.create({ data: { name: dto.name.trim(), billingEmail: dto.email ? this.normalizeEmail(dto.email) : undefined, billingDocument: dto.document ? this.normalizeDocument(dto.document) : undefined } });
         const organization = await tx.organization.create({ data: {
           commercialAccountId: commercialAccount.id,
           name: dto.name.trim(), document: dto.document ? this.normalizeDocument(dto.document) : undefined, phone: dto.phone, email: dto.email ? this.normalizeEmail(dto.email) : undefined,
@@ -47,8 +58,8 @@ export class OrganizationsService {
           organizationId: organization.id, name: adminName.trim(), email: this.normalizeEmail(adminEmail), role: 'ADMIN', status: 'PENDING_ACTIVATION',
         }, select: { id: true, name: true, email: true, role: true, status: true, organizationId: true } });
         await tx.actionToken.create({ data: { userId: admin.id, purpose: 'ACTIVATE_ACCOUNT', tokenHash: this.hashToken(activationToken), expiresAt: new Date(Date.now() + expiresDays * 86400000) } });
-        await tx.commercialAccount.update({ where: { id: commercialAccount.id }, data: { primaryContactOrganizationId: organization.id, primaryContactUserId: admin.id } });
-        const subscription = await tx.subscription.create({ data: {
+        if (!existingAccount || !existingAccount.primaryContactUserId) await tx.commercialAccount.update({ where: { id: commercialAccount.id }, data: { primaryContactOrganizationId: organization.id, primaryContactUserId: admin.id } });
+        const subscription = existingSubscription ?? await tx.subscription.create({ data: {
           commercialAccountId: commercialAccount.id, planVersionId: version.id, status: 'SCHEDULED',
           contractedPrice: version.price, contractedCurrency: version.currency, contractedInterval: version.interval,
           contractedOrganizationLimit: version.organizationLimit, contractedUserLimit: version.userLimit,
@@ -56,17 +67,17 @@ export class OrganizationsService {
           trialEnabled: dto.trialEnabled !== false, trialStartsAt: dto.trialEnabled !== false ? explicitTrialStart : null,
           trialEndsAt: dto.trialEnabled !== false ? trialEndsAt : null, commercialStartAt: dto.trialEnabled !== false ? explicitTrialStart : null,
         }, select: { id: true, planVersionId: true, status: true, trialEnabled: true, trialStartsAt: true, trialEndsAt: true, contractedPrice: true } });
-        await this.auditEvents.record(tx, principal, { action: AuditAction.COMMERCIAL_ACCOUNT_CREATED, targetType: AuditTargetType.COMMERCIAL_ACCOUNT, targetId: commercialAccount.id, commercialAccountId: commercialAccount.id, after: { name: commercialAccount.name, organizationId: organization.id, primaryContactId: admin.id } });
+        if (!existingAccount) await this.auditEvents.record(tx, principal, { action: AuditAction.COMMERCIAL_ACCOUNT_CREATED, targetType: AuditTargetType.COMMERCIAL_ACCOUNT, targetId: commercialAccount.id, commercialAccountId: commercialAccount.id, after: { name: commercialAccount.name, organizationId: organization.id, primaryContactId: admin.id } });
         await this.auditEvents.record(tx, principal, { action: AuditAction.ORGANIZATION_CREATED, targetType: AuditTargetType.ORGANIZATION, targetId: organization.id, organizationId: organization.id, after: { name: organization.name, operationalStatus: organization.operationalStatus, initialAdminId: admin.id, initialAdminName: admin.name, initialAdminEmail: admin.email } });
         await this.auditEvents.record(tx, principal, { action: AuditAction.USER_INVITATION_ISSUED, targetType: AuditTargetType.USER, targetId: admin.id, organizationId: organization.id, after: { name: admin.name, email: admin.email, role: admin.role, status: admin.status } });
-        await this.auditEvents.record(tx, principal, { action: AuditAction.SUBSCRIPTION_CREATED, targetType: AuditTargetType.SUBSCRIPTION, targetId: subscription.id, commercialAccountId: commercialAccount.id, after: { planVersionId: subscription.planVersionId, status: subscription.status, trialEnabled: subscription.trialEnabled, trialStartsAt: subscription.trialStartsAt, trialEndsAt: subscription.trialEndsAt, contractedPrice: subscription.contractedPrice } });
-        if (dto.trialEnabled === false) {
+        if (!existingSubscription) await this.auditEvents.record(tx, principal, { action: AuditAction.SUBSCRIPTION_CREATED, targetType: AuditTargetType.SUBSCRIPTION, targetId: subscription.id, commercialAccountId: commercialAccount.id, after: { planVersionId: subscription.planVersionId, status: subscription.status, trialEnabled: subscription.trialEnabled, trialStartsAt: subscription.trialStartsAt, trialEndsAt: subscription.trialEndsAt, contractedPrice: subscription.contractedPrice } });
+        if (!existingSubscription && dto.trialEnabled === false) {
           const charge = await tx.subscriptionCharge.create({ data: { commercialAccountId: commercialAccount.id, subscriptionId: subscription.id, organizationId: organization.id, amount: version.price, dueDate: recifeMidnight(recifeCivilDate(new Date())), nature: 'FIRST_PAYMENT' }, select: { id: true, dueDate: true } });
           await this.auditEvents.record(tx, principal, { action: AuditAction.SUBSCRIPTION_CHARGE_CREATED, targetType: AuditTargetType.SUBSCRIPTION_CHARGE, targetId: charge.id, commercialAccountId: commercialAccount.id, organizationId: organization.id, after: { nature: 'FIRST_PAYMENT', dueDate: charge.dueDate } });
         }
         return {
           organization: { ...organization, commercialAccount: { ...organization.commercialAccount, primaryContactUserId: admin.id } },
-          commercialAccount: { ...commercialAccount, primaryContactOrganizationId: organization.id, primaryContactUserId: admin.id },
+          commercialAccount: { ...commercialAccount, primaryContactOrganizationId: existingAccount?.primaryContactOrganizationId ?? organization.id, primaryContactUserId: existingAccount?.primaryContactUserId ?? admin.id },
           admin,
           subscription,
         };

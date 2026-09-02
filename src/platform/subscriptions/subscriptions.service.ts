@@ -7,6 +7,8 @@ import { AuditAction, AuditTargetType } from '../audit-events/dto/list-audit-eve
 import { CreateSubscriptionDto } from './dto/create-subscription.dto';
 import { ListSubscriptionsDto } from './dto/list-subscriptions.dto';
 import { RegularizeSubscriptionDto } from './dto/regularize-subscription.dto';
+import { SchedulePlanChangeDto } from './dto/schedule-plan-change.dto';
+import { ScheduleRecurringAdjustmentDto } from './dto/schedule-recurring-adjustment.dto';
 import { addCivilDays, recifeCivilDate, recifeMidnight } from '../billing/civil-dates';
 import { deriveCommercialAccess, AccessCharge } from '../billing/commercial-access';
 
@@ -16,6 +18,8 @@ const subscriptionSelect = {
   contractedGracePeriodDays: true, migratedAt: true, regularizedAt: true, regularizationReason: true, commercialStartAt: true,
   firstPaymentReceivedAt: true, firstPaidPeriodStartedAt: true, trialEnabled: true, trialStartsAt: true, trialEndsAt: true, currentPeriodStart: true,
   currentPeriodEnd: true, cancellationRequestedAt: true, effectiveCancellationAt: true, createdAt: true,
+  scheduledPlanVersionId: true, scheduledPlanEffectiveAt: true, scheduledPlanReason: true,
+  scheduledRecurringAdjustment: true, scheduledAdjustmentEffectiveAt: true, scheduledAdjustmentReason: true,
   planVersion: { select: { id: true, version: true, plan: { select: { id: true, name: true } } } },
   commercialAccount: { select: { id: true, name: true } },
   charges: { select: { nature: true, dueDate: true, amount: true, cancelledAt: true, settlements: { select: { amount: true } } } },
@@ -46,7 +50,7 @@ export function deriveSubscriptionConditions(subscription: {
 
 function present(subscription: Prisma.SubscriptionGetPayload<{ select: typeof subscriptionSelect }>, asOf = new Date()) {
   const { contractedPrice, charges: _charges, ...rest } = subscription;
-  return { ...rest, contractedPrice: contractedPrice.toFixed(2), conditions: deriveSubscriptionConditions(subscription, asOf) };
+  return { ...rest, contractedPrice: contractedPrice.toFixed(2), scheduledRecurringAdjustment: rest.scheduledRecurringAdjustment?.toFixed(2) ?? null, conditions: deriveSubscriptionConditions(subscription, asOf) };
 }
 
 @Injectable()
@@ -115,6 +119,44 @@ export class SubscriptionsService {
         firstPaidPeriodStartedAt: firstPaymentReceivedAt, status: firstPaymentReceivedAt ? 'CURRENT' : 'SCHEDULED',
       }, select: subscriptionSelect });
       await this.auditEvents.record(tx, principal, { action: AuditAction.SUBSCRIPTION_MIGRATED_REGULARIZED, targetType: AuditTargetType.SUBSCRIPTION, targetId: id, commercialAccountId: updated.commercialAccountId ?? undefined, reason: dto.reason.trim(), before: present(before), after: present(updated) });
+      return present(updated);
+    });
+  }
+
+  private futureDate(value: string) {
+    const date = new Date(value);
+    if (!Number.isFinite(date.getTime()) || date <= new Date()) throw new BadRequestException('Effective date must be in the future');
+    return date;
+  }
+
+  async schedulePlanChange(principal: AuthenticatedPrincipal, id: string, dto: SchedulePlanChangeDto) {
+    const effectiveAt = this.futureDate(dto.effectiveAt);
+    const reason = dto.reason.trim();
+    return this.prisma.$transaction(async (tx) => {
+      const before = await tx.subscription.findUnique({ where: { id }, select: subscriptionSelect });
+      if (!before) throw new NotFoundException('Subscription not found');
+      if (before.status === 'ENDED') throw new ConflictException('Ended Subscription cannot be changed');
+      const version = await tx.planVersion.findUnique({ where: { id: dto.planVersionId }, select: { id: true, status: true, price: true, currency: true, interval: true, organizationLimit: true, userLimit: true, workOrderLimit: true, gracePeriodDays: true, plan: { select: { archivedAt: true } } } });
+      if (!version) throw new NotFoundException('Plan Version not found');
+      if (version.status !== 'PUBLISHED' || version.plan.archivedAt) throw new ConflictException('Only published versions from an active Plan can be scheduled');
+      const updated = await tx.subscription.update({ where: { id }, data: { scheduledPlanVersionId: version.id, scheduledPlanEffectiveAt: effectiveAt, scheduledPlanReason: reason }, select: subscriptionSelect });
+      await this.auditEvents.record(tx, principal, { action: AuditAction.SUBSCRIPTION_PLAN_CHANGE_SCHEDULED, targetType: AuditTargetType.SUBSCRIPTION, targetId: id, commercialAccountId: updated.commercialAccountId ?? undefined, reason, before: { scheduledPlanVersionId: before.scheduledPlanVersionId, scheduledPlanEffectiveAt: before.scheduledPlanEffectiveAt }, after: { scheduledPlanVersionId: version.id, scheduledPlanEffectiveAt: effectiveAt } });
+      return present(updated);
+    });
+  }
+
+  async scheduleRecurringAdjustment(principal: AuthenticatedPrincipal, id: string, dto: ScheduleRecurringAdjustmentDto) {
+    const effectiveAt = this.futureDate(dto.effectiveAt);
+    const amount = new Prisma.Decimal(dto.amount);
+    const reason = dto.reason.trim();
+    return this.prisma.$transaction(async (tx) => {
+      const before = await tx.subscription.findUnique({ where: { id }, select: subscriptionSelect });
+      if (!before) throw new NotFoundException('Subscription not found');
+      if (before.status === 'ENDED') throw new ConflictException('Ended Subscription cannot be changed');
+      const next = before.contractedPrice.add(amount);
+      if (next.lt(0)) throw new ConflictException('Contracted Price cannot become negative');
+      const updated = await tx.subscription.update({ where: { id }, data: { scheduledRecurringAdjustment: amount, scheduledAdjustmentEffectiveAt: effectiveAt, scheduledAdjustmentReason: reason }, select: subscriptionSelect });
+      await this.auditEvents.record(tx, principal, { action: AuditAction.SUBSCRIPTION_RECURRING_ADJUSTMENT_SCHEDULED, targetType: AuditTargetType.SUBSCRIPTION, targetId: id, commercialAccountId: updated.commercialAccountId ?? undefined, reason, before: { scheduledRecurringAdjustment: before.scheduledRecurringAdjustment?.toFixed(2) ?? null, scheduledAdjustmentEffectiveAt: before.scheduledAdjustmentEffectiveAt }, after: { scheduledRecurringAdjustment: amount.toFixed(2), scheduledAdjustmentEffectiveAt: effectiveAt } });
       return present(updated);
     });
   }

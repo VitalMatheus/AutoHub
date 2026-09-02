@@ -39,6 +39,10 @@ export class CreateOrganizationDto {
   @IsOptional() @IsUUID()
   planVersionId?: string;
 
+  @ApiPropertyOptional({ format: 'uuid', description: 'Existing Commercial Account to which this Organization is added.' })
+  @IsOptional() @IsUUID()
+  commercialAccountId?: string;
+
   @ApiPropertyOptional({ default: true, description: 'Whether the 14-day Trial Period is enabled.' })
   @IsOptional() @IsBoolean()
   trialEnabled?: boolean;
