@@ -1,8 +1,10 @@
-import { Body, Controller, Get, Param, ParseIntPipe, Patch, Post, Query, Req, UseGuards } from '@nestjs/common';
-import { ApiBearerAuth, ApiOperation, ApiResponse, ApiTags } from '@nestjs/swagger';
+import { Body, Controller, Get, Param, Patch, Post, Query, Req, UseGuards } from '@nestjs/common';
+import { ApiBearerAuth, ApiForbiddenResponse, ApiNotFoundResponse, ApiOperation, ApiResponse, ApiTags, ApiUnauthorizedResponse } from '@nestjs/swagger';
 import { JwtAuthGuard } from '../../auth/guards/jwt-auth.guard';
 import { SuperAdminGuard } from '../../common/guards/super-admin.guard';
 import { CreateOrganizationDto, CreateOrganizationResponseDto } from './dto/create-organization.dto';
+import { ListOrganizationsDto } from './dto/list-organizations.dto';
+import { OrganizationResponseDto, OrganizationsResponseDto } from './dto/organization-response.dto';
 import { UpdateOrganizationDto } from './dto/update-organization.dto';
 import { OrganizationTransitionDto } from './dto/organization-transition.dto';
 import { OrganizationsService } from './organizations.service';
@@ -20,8 +22,10 @@ export class OrganizationsController {
 
   @Post() @ApiResponse({ status: 201, type: CreateOrganizationResponseDto })
   create(@Req() request: AuthenticatedRequest, @Body() dto: CreateOrganizationDto) { return this.organizations.create(request.user!, dto); }
-  @Get() list(@Query('page', new ParseIntPipe({ optional: true })) page?: number, @Query('pageSize', new ParseIntPipe({ optional: true })) pageSize?: number) { return this.organizations.list(page, pageSize); }
-  @Get(':id') findOne(@Param('id') id: string) { return this.organizations.findOne(id); }
+  @Get() @ApiOperation({ summary: 'List enriched Organizations' }) @ApiResponse({ status: 200, type: OrganizationsResponseDto }) @ApiUnauthorizedResponse({ description: 'Authentication required.' }) @ApiForbiddenResponse({ description: 'Super Admin access required.' })
+  list(@Query() dto: ListOrganizationsDto) { return this.organizations.list(dto); }
+  @Get(':id') @ApiOperation({ summary: 'Inspect an enriched Organization' }) @ApiResponse({ status: 200, type: OrganizationResponseDto }) @ApiUnauthorizedResponse({ description: 'Authentication required.' }) @ApiForbiddenResponse({ description: 'Super Admin access required.' }) @ApiNotFoundResponse({ description: 'Organization not found.' })
+  findOne(@Param('id') id: string) { return this.organizations.findOne(id); }
   @Patch(':id') update(@Req() request: AuthenticatedRequest, @Param('id') id: string, @Body() dto: UpdateOrganizationDto) { return this.organizations.update(request.user!, id, dto); }
   @Post(':id/activate') @ApiOperation({ summary: 'Activate an Organization' }) @ApiResponse({ status: 409, description: 'Invalid operational transition.' })
   activate(@Req() request: AuthenticatedRequest, @Param('id') id: string) { return this.organizations.transition(request.user!, id, 'activate'); }

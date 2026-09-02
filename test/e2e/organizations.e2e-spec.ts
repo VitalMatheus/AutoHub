@@ -68,6 +68,23 @@ describe('Platform Organizations and activation (e2e)', () => {
     await prisma.user.create({ data: { organizationId: organization.id, name: 'Tenant Admin', email, role: 'ADMIN', status: 'ACTIVE', passwordHash: await argon2.hash(superPassword, { type: argon2.argon2id }) } });
     const login = await request(app.getHttpServer()).post('/api/v1/auth/login').send({ email, password: superPassword }).expect(201);
     await request(app.getHttpServer()).get('/api/v1/platform/organizations').set('Authorization', `Bearer ${login.body.accessToken}`).expect(403);
+    await request(app.getHttpServer()).get('/api/v1/platform/organizations/not-visible-to-admin').set('Authorization', `Bearer ${login.body.accessToken}`).expect(403);
+  });
+
+  it('enriches Organization search, combinable filters and detail for Super Admins', async () => {
+    const login = await request(app.getHttpServer()).post('/api/v1/auth/login').send({ email: superEmail, password: superPassword }).expect(201);
+    const organization = await prisma.organization.create({ data: { name: `Searchable-${Date.now()}`, operationalStatus: 'ACTIVE' } });
+    const list = await request(app.getHttpServer()).get('/api/v1/platform/organizations')
+      .query({ search: organization.name.toLowerCase(), operationalStatus: 'ACTIVE', commercialAccess: 'PAYMENT_BLOCKED', sort: 'name', page: 1, pageSize: 10 })
+      .set('Authorization', `Bearer ${login.body.accessToken}`).expect(200);
+    expect(list.body).toEqual(expect.objectContaining({ data: expect.any(Array), meta: expect.objectContaining({ page: 1, pageSize: 10 }) }));
+    const detail = await request(app.getHttpServer()).get(`/api/v1/platform/organizations/${organization.id}`).set('Authorization', `Bearer ${login.body.accessToken}`).expect(200);
+    expect(detail.body).toEqual(expect.objectContaining({ id: organization.id, commercialAccount: null, primaryContact: null, lifecycle: expect.any(Array), effectiveAccess: expect.any(Object), administrativePending: expect.any(Array) }));
+  });
+
+  it('requires authentication for enriched Organization list and detail', async () => {
+    await request(app.getHttpServer()).get('/api/v1/platform/organizations').expect(401);
+    await request(app.getHttpServer()).get('/api/v1/platform/organizations/not-found').expect(401);
   });
 
   it('suspending an Organization revokes sessions and blocks the next request', async () => {

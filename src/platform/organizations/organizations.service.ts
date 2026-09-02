@@ -10,8 +10,30 @@ import { AuditEventsService } from '../audit-events/audit-events.service';
 import { AuditAction, AuditTargetType } from '../audit-events/dto/list-audit-events.dto';
 import { OrganizationTransitionDto } from './dto/organization-transition.dto';
 import { recifeCivilDate, recifeMidnight } from '../billing/civil-dates';
+import { addCivilDays } from '../billing/civil-dates';
+import { chargeBalance, deriveCommercialAccess } from '../billing/commercial-access';
+import { deriveSubscriptionConditions } from '../subscriptions/subscriptions.service';
+import { ListOrganizationsDto, OrganizationCommercialAccessFilter, OrganizationLifecycleFilter, OrganizationSort } from './dto/list-organizations.dto';
 
-const organizationSelect = { id: true, name: true, document: true, phone: true, email: true, addressLine1: true, addressLine2: true, city: true, state: true, postalCode: true, operationalStatus: true, createdAt: true, updatedAt: true, commercialAccount: { select: { id: true, name: true, primaryContactUserId: true } } } as const;
+const organizationSelect = {
+  id: true, name: true, document: true, phone: true, email: true, addressLine1: true, addressLine2: true,
+  city: true, state: true, postalCode: true, operationalStatus: true, createdAt: true, updatedAt: true,
+  commercialAccount: { select: {
+    id: true, name: true, billingEmail: true, billingDocument: true, primaryContactUserId: true,
+    primaryContactOrganizationId: true,
+    primaryContact: { select: { id: true, name: true, email: true, role: true, status: true, organizationId: true } },
+    subscriptions: { orderBy: { createdAt: 'desc' as const }, take: 1, select: {
+      id: true, status: true, contractedPrice: true, contractedCurrency: true, contractedInterval: true,
+      contractedOrganizationLimit: true, contractedUserLimit: true, contractedWorkOrderLimit: true,
+      migratedAt: true, regularizedAt: true, commercialStartAt: true, trialEnabled: true, trialStartsAt: true,
+      trialEndsAt: true, firstPaymentReceivedAt: true, firstPaidPeriodStartedAt: true, currentPeriodStart: true,
+      currentPeriodEnd: true, cancellationRequestedAt: true, effectiveCancellationAt: true,
+      planVersion: { select: { id: true, version: true, plan: { select: { id: true, name: true } } } },
+      charges: { select: { nature: true, dueDate: true, amount: true, cancelledAt: true, settlements: { select: { amount: true } } } },
+    } },
+    organizations: { select: { id: true, operationalStatus: true, users: { where: { status: { not: 'DISABLED' } }, select: { id: true } } } },
+  } },
+} as const;
 
 @Injectable()
 export class OrganizationsService {
@@ -89,19 +111,99 @@ export class OrganizationsService {
     }
   }
 
-  async list(page = 1, pageSize = 20) {
-    const safePage = Math.max(1, page); const safeSize = Math.min(100, Math.max(1, pageSize));
-    const [data, total] = await this.prisma.$transaction([
-      this.prisma.organization.findMany({ select: organizationSelect, orderBy: { createdAt: 'desc' }, skip: (safePage - 1) * safeSize, take: safeSize }),
-      this.prisma.organization.count(),
-    ]);
-    return { data, meta: { page: safePage, pageSize: safeSize, total, totalPages: Math.ceil(total / safeSize) } };
+  async list(dto: ListOrganizationsDto = new ListOrganizationsDto()) {
+    const page = dto.page ?? 1;
+    const pageSize = dto.pageSize ?? 20;
+    const search = dto.search?.trim();
+    const normalizedDocument = search?.replace(/\D/g, '');
+    const where: Prisma.OrganizationWhereInput = {
+      ...(dto.operationalStatus ? { operationalStatus: dto.operationalStatus } : {}),
+      ...(search ? { OR: [
+        { name: { contains: search, mode: 'insensitive' } },
+        { email: { contains: search, mode: 'insensitive' } },
+        ...(normalizedDocument ? [{ document: { contains: normalizedDocument } }] : []),
+        { commercialAccount: { name: { contains: search, mode: 'insensitive' } } },
+        { commercialAccount: { primaryContact: { name: { contains: search, mode: 'insensitive' } } } },
+        { commercialAccount: { primaryContact: { email: { contains: search, mode: 'insensitive' } } } },
+      ] } : {}),
+    };
+    const rows = await this.prisma.organization.findMany({ where, select: organizationSelect });
+    const projected = rows.map((row) => this.present(row));
+    const filtered = projected.filter((row) =>
+      (!dto.lifecycle?.length || dto.lifecycle.some((value) => row.lifecycle.includes(value))) &&
+      (!dto.commercialAccess?.length || dto.commercialAccess.includes(row.commercialAccess as OrganizationCommercialAccessFilter)),
+    );
+    filtered.sort(this.sorter(dto.sort ?? OrganizationSort.CREATED_AT_DESC));
+    const data = filtered.slice((page - 1) * pageSize, page * pageSize);
+    return { data, meta: { page, pageSize, total: filtered.length, totalPages: Math.ceil(filtered.length / pageSize) } };
   }
 
   async findOne(id: string) {
     const organization = await this.prisma.organization.findUnique({ where: { id }, select: { ...organizationSelect, users: { where: { role: 'ADMIN' }, select: { id: true, name: true, email: true, status: true } } } });
     if (!organization) throw new NotFoundException('Organization not found');
-    return organization;
+    return { ...this.present(organization), users: organization.users };
+  }
+
+  private present(row: Prisma.OrganizationGetPayload<{ select: typeof organizationSelect }>, asOf = new Date()) {
+    const account = row.commercialAccount;
+    const subscription = account?.subscriptions[0];
+    const contact = account?.primaryContact && account.primaryContact.role === 'ADMIN' && account.primaryContact.status === 'ACTIVE'
+      ? account.primaryContact : null;
+    const charges = subscription?.charges ?? [];
+    const access = subscription ? deriveCommercialAccess(charges, asOf) : { commercialAccess: 'PAYMENT_BLOCKED' as const, delinquent: false, paymentGracePeriod: false };
+    const conditions = subscription ? deriveSubscriptionConditions(subscription, asOf) : {
+      pendingCommercialSetup: false, trial: false, awaitingFirstPayment: false, delinquent: false,
+      paymentGracePeriod: false, scheduledCancellation: false, effectiveCancellation: false, commercialAccess: 'PAYMENT_BLOCKED' as const,
+    };
+    const openCharges = charges.filter((charge) => chargeBalance(charge).gt(0));
+    const nextCharge = [...openCharges].sort((a, b) => a.dueDate.getTime() - b.dueDate.getTime())[0];
+    const blockDate = nextCharge ? recifeMidnight(addCivilDays(recifeCivilDate(nextCharge.dueDate), nextCharge.nature === 'RENEWAL' ? 6 : 1)) : null;
+    const paidAmount = charges.reduce((sum, charge) => sum.add(charge.amount.sub(chargeBalance(charge))), new Prisma.Decimal(0));
+    const outstandingAmount = openCharges.reduce((sum, charge) => sum.add(chargeBalance(charge)), new Prisma.Decimal(0));
+    const lifecycle: OrganizationLifecycleFilter[] = [];
+    if (conditions.trial) lifecycle.push(OrganizationLifecycleFilter.TRIAL);
+    if (conditions.pendingCommercialSetup) lifecycle.push(OrganizationLifecycleFilter.PENDING_COMMERCIAL_SETUP);
+    if (conditions.awaitingFirstPayment) lifecycle.push(OrganizationLifecycleFilter.AWAITING_FIRST_PAYMENT);
+    if (conditions.delinquent) lifecycle.push(OrganizationLifecycleFilter.DELINQUENT);
+    if (conditions.effectiveCancellation) lifecycle.push(OrganizationLifecycleFilter.EFFECTIVELY_CANCELLED);
+    if (subscription && subscription.firstPaymentReceivedAt && !conditions.effectiveCancellation && !conditions.trial) lifecycle.push(OrganizationLifecycleFilter.PAID_CURRENT);
+    const activeOrganizations = account?.organizations.filter((organization) => organization.operationalStatus !== 'INACTIVE').length ?? 0;
+    const activeUsers = account?.organizations.reduce((total, organization) => total + organization.users.length, 0) ?? 0;
+    const administrativePending: string[] = [];
+    if (subscription && activeOrganizations === 0) administrativePending.push('SUBSCRIPTION_WITHOUT_ACTIVE_ORGANIZATION');
+    if (account && !contact) administrativePending.push('MISSING_PRIMARY_CONTACT');
+    if (subscription && activeOrganizations > subscription.contractedOrganizationLimit) administrativePending.push('ORGANIZATION_LIMIT_EXCEEDED');
+    if (subscription && activeUsers > subscription.contractedUserLimit) administrativePending.push('USER_LIMIT_EXCEEDED');
+    return {
+      ...row,
+      commercialAccount: account ? { id: account.id, name: account.name, billingEmail: account.billingEmail, billingDocument: account.billingDocument } : null,
+      primaryContact: contact,
+      plan: subscription?.planVersion ? {
+        ...subscription.planVersion.plan, version: subscription.planVersion.version, planVersionId: subscription.planVersion.id,
+        contractedPrice: subscription.contractedPrice.toFixed(2), contractedCurrency: subscription.contractedCurrency,
+        contractedInterval: subscription.contractedInterval, organizationLimit: subscription.contractedOrganizationLimit,
+        userLimit: subscription.contractedUserLimit, workOrderLimit: subscription.contractedWorkOrderLimit,
+      } : null,
+      lifecycle,
+      conditions,
+      trial: { enabled: subscription?.trialEnabled ?? false, startsAt: subscription?.trialStartsAt ?? null, endsAt: subscription?.trialEndsAt ?? null },
+      payment: { condition: access.delinquent ? 'OVERDUE' : outstandingAmount.isZero() ? 'PAID' : 'OPEN', paidAmount: paidAmount.toFixed(2), outstandingAmount: outstandingAmount.toFixed(2) },
+      commercialAccess: access.commercialAccess,
+      effectiveAccess: { allowed: row.operationalStatus === 'ACTIVE' && access.commercialAccess !== 'PAYMENT_BLOCKED', operationalStatus: row.operationalStatus, commercialAccess: access.commercialAccess },
+      nextBillingDate: subscription?.currentPeriodEnd ?? nextCharge?.dueDate ?? null,
+      blockDate,
+      administrativePending,
+    };
+  }
+
+  private sorter(sort: OrganizationSort) {
+    const direction = sort.startsWith('-') ? -1 : 1;
+    const field = sort.replace(/^-/, '') as 'name' | 'createdAt' | 'operationalStatus';
+    return (a: ReturnType<OrganizationsService['present']>, b: ReturnType<OrganizationsService['present']>) => {
+      const left = field === 'name' ? a.name.toLocaleLowerCase() : field === 'createdAt' ? a.createdAt.getTime() : a.operationalStatus;
+      const right = field === 'name' ? b.name.toLocaleLowerCase() : field === 'createdAt' ? b.createdAt.getTime() : b.operationalStatus;
+      return (left < right ? -1 : left > right ? 1 : a.id.localeCompare(b.id)) * direction;
+    };
   }
 
   async update(principal: AuthenticatedPrincipal, id: string, dto: UpdateOrganizationDto) {
