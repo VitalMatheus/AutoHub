@@ -42,7 +42,7 @@ export function PlatformConfirmation({ title, description, confirmLabel = 'Confi
   return <div ref={dialogRef} role="dialog" aria-modal="true" aria-labelledby={titleId} className="rounded-2xl border border-slate-200 bg-white p-6 shadow-xl"><h2 id={titleId} className="text-lg font-semibold">{title}</h2><p className="mt-2 text-sm text-slate-600">{description}</p><div className="mt-6 flex justify-end gap-3"><button type="button" onClick={onCancel} className="rounded-lg border border-slate-300 px-4 py-2 text-sm font-medium">Cancelar</button><button type="button" onClick={onConfirm} className="rounded-lg bg-violet-600 px-4 py-2 text-sm font-medium text-white hover:bg-violet-700">{confirmLabel}</button></div></div>;
 }
 
-export function PlatformSection({ title, children }: { title: string; children: ReactNode }) {
+export function PlatformSection({ title, children, pageHeading }: { title: string; children: ReactNode; pageHeading?: string }) {
   const titleId = useId();
-  return <section aria-labelledby={titleId} className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">{title === 'Organizations' && <h1 className="sr-only">Painel da plataforma</h1>}<h2 id={titleId} className="text-lg font-semibold">{title}</h2><div className="mt-4">{children}</div></section>;
+  return <section aria-labelledby={titleId} className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">{pageHeading && <h1 className="sr-only">{pageHeading}</h1>}<h2 id={titleId} className="text-lg font-semibold">{title}</h2><div className="mt-4">{children}</div></section>;
 }
