@@ -61,13 +61,12 @@ export function AppRouter() {
         <Route path="/platform" element={<PlatformLayout />}>
           <Route index element={<Navigate to="dashboard" replace />} />
           <Route path="dashboard" element={<PlatformHomePage />} />
-          <Route path="organizations" element={<FutureModulePage title="Organizations" />} />
-          <Route path="users" element={<FutureModulePage title="Users" />} />
-          <Route path="commercial-accounts" element={<FutureModulePage title="Commercial Accounts" />} />
-          <Route path="plans" element={<FutureModulePage title="Plans" />} />
-          <Route path="subscriptions" element={<FutureModulePage title="Subscriptions" />} />
-          <Route path="charges" element={<FutureModulePage title="Subscription Charges" />} />
-          <Route path="audit-events" element={<FutureModulePage title="Audit Events" />} />
+          <Route path="organizations" element={<FutureModulePage title="Oficinas" />} />
+          <Route path="commercial-accounts" element={<FutureModulePage title="Contas comerciais" />} />
+          <Route path="subscriptions" element={<FutureModulePage title="Assinaturas" />} />
+          <Route path="charges" element={<FutureModulePage title="Cobranças" />} />
+          <Route path="plans" element={<FutureModulePage title="Planos" />} />
+          <Route path="audit-events" element={<FutureModulePage title="Auditoria" />} />
         </Route>
       </Route>
       <Route path="*" element={<HomeRedirect />} />

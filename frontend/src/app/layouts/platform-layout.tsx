@@ -1,18 +1,17 @@
 import { useEffect, useRef, useState } from 'react';
 import { Link, NavLink, Outlet, useLocation } from 'react-router-dom';
-import { Building2, CreditCard, FileClock, LayoutDashboard, LogOut, Menu, Receipt, Users, X, BriefcaseBusiness } from 'lucide-react';
+import { Building2, CreditCard, FileClock, LayoutDashboard, LogOut, Menu, Receipt, X, BriefcaseBusiness } from 'lucide-react';
 import { useAuth } from '@/features/auth/auth-context';
 import { cn } from '@/shared/utils/cn';
 
 const navigation = [
   { to: '/platform/dashboard', label: 'Dashboard', icon: LayoutDashboard, end: true },
-  { to: '/platform/organizations', label: 'Organizations', icon: Building2 },
-  { to: '/platform/users', label: 'Users', icon: Users },
-  { to: '/platform/commercial-accounts', label: 'Commercial Accounts', icon: BriefcaseBusiness },
-  { to: '/platform/plans', label: 'Plans', icon: CreditCard },
-  { to: '/platform/subscriptions', label: 'Subscriptions', icon: Receipt },
-  { to: '/platform/charges', label: 'Subscription Charges', icon: CreditCard },
-  { to: '/platform/audit-events', label: 'Audit Events', icon: FileClock },
+  { to: '/platform/organizations', label: 'Oficinas', icon: Building2 },
+  { to: '/platform/commercial-accounts', label: 'Contas comerciais', icon: BriefcaseBusiness },
+  { to: '/platform/subscriptions', label: 'Assinaturas', icon: Receipt },
+  { to: '/platform/charges', label: 'Cobranças', icon: CreditCard },
+  { to: '/platform/plans', label: 'Planos', icon: CreditCard },
+  { to: '/platform/audit-events', label: 'Auditoria', icon: FileClock },
 ];
 
 export function PlatformLayout() {

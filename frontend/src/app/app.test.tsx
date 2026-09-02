@@ -160,7 +160,10 @@ describe('Organization Admin frontend shell', () => {
 
   it('sends a restored Super Admin to the separate platform shell', async () => {
     vi.spyOn(httpClient, 'post').mockResolvedValue({ data: { accessToken: 'restored-token', expiresIn: 900, tokenType: 'Bearer' } } as never);
-    vi.spyOn(httpClient, 'get').mockResolvedValue({ data: superAdmin } as never);
+    vi.spyOn(httpClient, 'get').mockImplementation((url) => {
+      if (/customers|vehicles|quotes|work-orders|payments/.test(url)) return Promise.reject(new Error('Operational API must not be requested')) as never;
+      return Promise.resolve({ data: superAdmin }) as never;
+    });
 
     render(<AppProviders />);
 
@@ -212,8 +215,8 @@ describe('Organization Admin frontend shell', () => {
     render(<AppProviders />);
     expect(await screen.findByRole('heading', { name: 'Painel da plataforma' })).toBeInTheDocument();
     expect(window.location.pathname).toBe('/platform/dashboard');
-    await user.click(screen.getByRole('link', { name: 'Organizations' }));
-    expect(await screen.findByRole('heading', { name: 'Organizations', level: 2 })).toBeInTheDocument();
+    await user.click(screen.getByRole('link', { name: 'Oficinas' }));
+    expect(await screen.findByRole('heading', { name: 'Oficinas', level: 2 })).toBeInTheDocument();
     expect(screen.queryByRole('heading', { name: 'Clientes' })).not.toBeInTheDocument();
     expect(screen.queryByRole('heading', { name: 'Ordens de Serviço' })).not.toBeInTheDocument();
   });
