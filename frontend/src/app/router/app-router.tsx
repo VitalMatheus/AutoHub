@@ -15,6 +15,7 @@ import { EditProductPage, NewProductPage, ProductDetailPage, ProductsListPage } 
 import { EditServicePage, NewServicePage, ServiceDetailPage, ServicesListPage } from '@/features/services/pages/service-pages';
 import { ReportsPage } from '@/features/reports/pages/reports-page';
 import { SettingsPage } from '@/features/settings/pages/settings-pages';
+import { CommercialAccountDetailPage, CommercialAccountsListPage } from '@/features/platform/pages/commercial-account-pages';
 
 function HomeRedirect() {
   const { principal, isAuthenticated, isRestoring } = useAuth();
@@ -62,7 +63,8 @@ export function AppRouter() {
           <Route index element={<Navigate to="dashboard" replace />} />
           <Route path="dashboard" element={<PlatformHomePage />} />
           <Route path="organizations" element={<FutureModulePage title="Oficinas" />} />
-          <Route path="commercial-accounts" element={<FutureModulePage title="Contas comerciais" />} />
+          <Route path="commercial-accounts" element={<CommercialAccountsListPage />} />
+          <Route path="commercial-accounts/:id" element={<CommercialAccountDetailPage />} />
           <Route path="subscriptions" element={<FutureModulePage title="Assinaturas" />} />
           <Route path="charges" element={<FutureModulePage title="Cobranças" />} />
           <Route path="plans" element={<FutureModulePage title="Planos" />} />
