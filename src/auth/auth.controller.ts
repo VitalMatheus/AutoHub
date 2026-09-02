@@ -70,7 +70,7 @@ export class AuthController {
   async logout(@Req() request: AuthenticatedRequest, @Res({ passthrough: true }) response: Response) {
     if (this.hasRefreshCookie(request)) this.assertAllowedCookieOrigin(request);
     await this.auth.logout(request.sessionId!);
-    response.clearCookie(REFRESH_COOKIE_NAME, this.cookieOptions());
+    response.clearCookie(REFRESH_COOKIE_NAME, this.clearCookieOptions());
     return { success: true };
   }
 
@@ -91,6 +91,11 @@ export class AuthController {
       path: `/${prefix}/auth`,
       maxAge: ttlDays * 24 * 60 * 60 * 1000,
     };
+  }
+
+  private clearCookieOptions(): CookieOptions {
+    const { maxAge: _maxAge, ...options } = this.cookieOptions();
+    return options;
   }
 
   private readRefreshCookie(request: Request): string {

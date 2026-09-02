@@ -52,6 +52,7 @@ describe('Authentication (e2e)', () => {
     expect(response.headers['set-cookie'][0]).toContain('HttpOnly');
     expect(response.headers['set-cookie'][0]).toContain('Path=/api/v1/auth');
     expect(response.headers['set-cookie'][0]).toContain('SameSite=Lax');
+    expect(response.headers['set-cookie'][0]).not.toContain('Secure');
     const sessions = await prisma.session.findMany({ where: { user: { email } } });
     expect(sessions).toHaveLength(1);
     expect(sessions[0].refreshTokenHash).toMatch(/^[a-f0-9]{64}$/);
@@ -107,6 +108,24 @@ describe('Authentication (e2e)', () => {
       .set('Cookie', cookie).set('Origin', 'https://attacker.example').expect(403);
   });
 
+  it('rejects cookie-authenticated refresh without an Origin', async () => {
+    const login = await request(app.getHttpServer()).post('/api/v1/auth/login')
+      .send({ email, password }).expect(201);
+    const cookie = login.headers['set-cookie'][0].split(';')[0];
+
+    await request(app.getHttpServer()).post('/api/v1/auth/refresh')
+      .set('Cookie', cookie).expect(403);
+  });
+
+  it('rejects malformed refresh cookies without leaking their value', async () => {
+    const response = await request(app.getHttpServer()).post('/api/v1/auth/refresh')
+      .set('Cookie', 'autohub_refresh=%E0%A4%A')
+      .set('Origin', 'http://localhost:5173')
+      .expect(401);
+
+    expect(JSON.stringify(response.body)).not.toContain('%E0%A4%A');
+  });
+
   it('allows multiple sessions, then logs out only the current session', async () => {
     const firstAgent = request.agent(app.getHttpServer());
     const first = await firstAgent.post('/api/v1/auth/login')
@@ -131,6 +150,7 @@ describe('Authentication (e2e)', () => {
     const logout = await agent.post('/api/v1/auth/logout')
       .set('Authorization', `Bearer ${login.body.accessToken}`).set('Origin', 'http://localhost:5173').expect(201);
     expect(logout.headers['set-cookie'][0]).toMatch(/^autohub_refresh=;/);
+    expect(logout.headers['set-cookie'][0]).not.toContain('Max-Age=');
     await agent.post('/api/v1/auth/refresh').set('Origin', 'http://localhost:5173').expect(401);
   });
 
@@ -158,5 +178,31 @@ describe('Authentication (e2e)', () => {
 
     await prisma.user.delete({ where: { id: admin.id } });
     await prisma.organization.delete({ where: { id: organization.id } });
+  });
+
+  it('rejects refresh for disabled users and expired sessions', async () => {
+    const disabledEmail = `disabled-user-${Date.now()}@example.com`;
+    const disabledUser = await prisma.user.create({ data: {
+      name: 'Disabled User', email: disabledEmail, role: 'SUPER_ADMIN', status: 'ACTIVE',
+      passwordHash: await argon2.hash(password, { type: argon2.argon2id }),
+    } });
+    const disabledLogin = await request(app.getHttpServer()).post('/api/v1/auth/login')
+      .send({ email: disabledEmail, password }).expect(201);
+    const disabledCookie = disabledLogin.headers['set-cookie'][0].split(';')[0];
+    await prisma.user.update({ where: { id: disabledUser.id }, data: { status: 'DISABLED' } });
+    await request(app.getHttpServer()).post('/api/v1/auth/refresh')
+      .set('Cookie', disabledCookie).set('Origin', 'http://localhost:5173').expect(401);
+
+    const expiredLogin = await request(app.getHttpServer()).post('/api/v1/auth/login')
+      .send({ email, password }).expect(201);
+    const expiredCookie = expiredLogin.headers['set-cookie'][0].split(';')[0];
+    await prisma.session.updateMany({
+      where: { userId: (await prisma.user.findUniqueOrThrow({ where: { email } })).id, revokedAt: null },
+      data: { expiresAt: new Date(Date.now() - 1_000) },
+    });
+    await request(app.getHttpServer()).post('/api/v1/auth/refresh')
+      .set('Cookie', expiredCookie).set('Origin', 'http://localhost:5173').expect(401);
+
+    await prisma.user.delete({ where: { id: disabledUser.id } });
   });
 });
