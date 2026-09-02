@@ -130,8 +130,9 @@ export class SubscriptionChargesService {
       if (!plan) throw new ConflictException('Scheduled Plan Version no longer exists');
       const organizations = await tx.organization.count({ where: { commercialAccountId: current.commercialAccountId, operationalStatus: { not: 'INACTIVE' } } });
       const users = await tx.user.count({ where: { organization: { commercialAccountId: current.commercialAccountId }, status: { not: 'DISABLED' } } });
+      const workOrders = plan.workOrderLimit === null ? 0 : await tx.workOrder.count({ where: { organization: { commercialAccountId: current.commercialAccountId } } });
       // A downgrade remains pending until usage complies. Existing data is never removed.
-      if (organizations > plan.organizationLimit || users > plan.userLimit) plan = null;
+      if (organizations > plan.organizationLimit || users > plan.userLimit || (plan.workOrderLimit !== null && workOrders > plan.workOrderLimit)) plan = null;
     }
     const data: Record<string, unknown> = {};
     if (plan) {
@@ -148,8 +149,8 @@ export class SubscriptionChargesService {
     }
     if (Object.keys(data).length) {
       const updated = await tx.subscription.update({ where: { id: subscriptionId }, data, select: { contractedPrice: true, planVersionId: true } });
-      if (plan) await this.audit.record(tx, null, { action: AuditAction.SUBSCRIPTION_PLAN_CHANGE_APPLIED, targetType: AuditTargetType.SUBSCRIPTION, targetId: subscriptionId, commercialAccountId: current.commercialAccountId, after: { planVersionId: updated.planVersionId, effectiveAt: periodStart, system: true } });
-      if (adjustmentDue) await this.audit.record(tx, null, { action: AuditAction.SUBSCRIPTION_RECURRING_ADJUSTMENT_APPLIED, targetType: AuditTargetType.SUBSCRIPTION, targetId: subscriptionId, commercialAccountId: current.commercialAccountId, after: { contractedPrice: updated.contractedPrice.toFixed(2), effectiveAt: periodStart, system: true } });
+      if (plan) await this.audit.record(tx, null, { action: AuditAction.SUBSCRIPTION_PLAN_CHANGE_APPLIED, targetType: AuditTargetType.SUBSCRIPTION, targetId: subscriptionId, commercialAccountId: current.commercialAccountId, before: { planVersionId: current.planVersionId, contractedPrice: current.contractedPrice.toFixed(2) }, after: { planVersionId: updated.planVersionId, contractedPrice: updated.contractedPrice.toFixed(2), effectiveAt: periodStart, system: true } });
+      if (adjustmentDue) await this.audit.record(tx, null, { action: AuditAction.SUBSCRIPTION_RECURRING_ADJUSTMENT_APPLIED, targetType: AuditTargetType.SUBSCRIPTION, targetId: subscriptionId, commercialAccountId: current.commercialAccountId, before: { contractedPrice: current.contractedPrice.toFixed(2) }, after: { contractedPrice: updated.contractedPrice.toFixed(2), effectiveAt: periodStart, system: true } });
     }
     return { contractedPrice: price };
   }

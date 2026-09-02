@@ -144,6 +144,9 @@ export class OrganizationsService {
         if (!(rule.from as readonly string[]).includes(before.operationalStatus)) {
           throw new ConflictException({ code: 'ORGANIZATION_INVALID_TRANSITION', detail: `Organization cannot ${action} from ${before.operationalStatus}.` });
         }
+        if (action === 'activate' || action === 'reactivate') {
+          await this.enforceOrganizationLimit(tx, before.commercialAccount?.id ?? null);
+        }
         const organization = await tx.organization.update({ where: { id }, data: { operationalStatus: rule.to }, select: organizationSelect });
         if (action === 'deactivate' || action === 'suspend') {
           await tx.session.updateMany({ where: { user: { organizationId: id }, revokedAt: null }, data: { revokedAt: new Date() } });
@@ -154,6 +157,26 @@ export class OrganizationsService {
     } catch (error) {
       if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2025') throw new NotFoundException('Organization not found');
       throw error;
+    }
+  }
+
+  private async enforceOrganizationLimit(tx: any, commercialAccountId: string | null) {
+    if (!commercialAccountId) return;
+    await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtextextended(${commercialAccountId}, 0))`;
+    const subscription = await tx.subscription.findFirst({
+      where: { commercialAccountId, status: { not: 'ENDED' } },
+      orderBy: { createdAt: 'desc' },
+      select: { contractedOrganizationLimit: true },
+    });
+    if (!subscription) return;
+    const count = await tx.organization.count({
+      where: { commercialAccountId, operationalStatus: { not: 'INACTIVE' } },
+    });
+    if (count >= subscription.contractedOrganizationLimit) {
+      throw new ConflictException({
+        code: 'PLAN_ORGANIZATION_LIMIT_REACHED',
+        detail: `The Commercial Account allows at most ${subscription.contractedOrganizationLimit} non-inactive Organizations.`,
+      });
     }
   }
 
