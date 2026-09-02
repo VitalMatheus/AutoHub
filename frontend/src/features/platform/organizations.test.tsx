@@ -6,7 +6,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { httpClient } from '@/shared/api/http';
 import { OrganizationsListPage } from './pages/organization-pages';
 
-const organization = { id: 'org-1', name: 'Motor Recife', operationalStatus: 'ACTIVE', commercialAccount: { id: 'account-1', name: 'Grupo Motor' }, primaryContact: { name: 'Ana Lima', email: 'ana@motor.test' }, plan: { name: 'AutoHub Básico', contractedPrice: '79.00', contractedCurrency: 'BRL', contractedInterval: 'MONTHLY' }, nextBillingDate: '2026-02-15T00:00:00Z', payment: { condition: 'PAID', paidAmount: '79.00', outstandingAmount: '0.00' }, commercialAccess: 'ACCESS_ALLOWED', effectiveAccess: { allowed: true, operationalStatus: 'ACTIVE', commercialAccess: 'ACCESS_ALLOWED' }, lifecycle: ['PAID_CURRENT'] };
+const organization = { id: 'org-1', name: 'Motor Recife', operationalStatus: 'ACTIVE', commercialAccount: { id: 'account-1', name: 'Grupo Motor' }, primaryContact: { name: 'Ana Lima', email: 'ana@motor.test' }, plan: { name: 'AutoHub Básico', contractedPrice: '79.00', contractedCurrency: 'BRL', contractedInterval: 'MONTHLY' }, nextBillingDate: '2026-02-15T00:00:00Z', payment: { condition: 'PAID', paidAmount: '79.00', outstandingAmount: '0.00' }, commercialAccess: 'ACCESS_ALLOWED', effectiveAccess: { allowed: true, operationalStatus: 'ACTIVE', commercialAccess: 'ACCESS_ALLOWED' }, lifecycle: ['PAID_CURRENT'], administrativePending: ['USER_LIMIT_EXCEEDED'] };
 const wrapper = ({ children }: { children: React.ReactNode }) => <QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}>{children}</QueryClientProvider>;
 
 describe('Platform Organizations', () => {
@@ -17,6 +17,8 @@ describe('Platform Organizations', () => {
     expect(await screen.findByText('Motor Recife')).toBeInTheDocument();
     expect(screen.getByText('Ana Lima')).toBeInTheDocument();
     expect(screen.getByText('AutoHub Básico')).toBeInTheDocument();
+    expect(screen.getByText('Atual')).toBeInTheDocument();
+    expect(screen.getByText(/USER_LIMIT_EXCEEDED/)).toBeInTheDocument();
     expect(screen.getByRole('cell', { name: 'Ativo' })).toBeInTheDocument();
     expect(screen.getAllByRole('cell', { name: 'Permitido' })).toHaveLength(2);
     expect(screen.getByText('Acesso efetivo')).toBeInTheDocument();
