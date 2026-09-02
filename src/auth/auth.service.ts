@@ -30,7 +30,7 @@ export class AuthService {
       where: { email: this.normalizeEmail(email) },
       include: { organization: true },
     });
-    if (!user?.passwordHash || user.status !== 'ACTIVE' || user.organization?.active === false) {
+    if (!user?.passwordHash || user.status !== 'ACTIVE' || (user.organization && user.organization.operationalStatus !== 'ACTIVE')) {
       throw new UnauthorizedException(INVALID_CREDENTIALS);
     }
     const valid = await argon2.verify(user.passwordHash, password).catch(() => false);
@@ -85,10 +85,10 @@ export class AuthService {
   async resolvePrincipal(userId: string, sessionId: string): Promise<AuthenticatedPrincipal> {
     const session = await this.prisma.session.findFirst({
       where: { id: sessionId, userId, revokedAt: null, expiresAt: { gt: new Date() } },
-      select: { user: { select: { ...PRINCIPAL_SELECT, status: true, organization: { select: { active: true } } } } },
+      select: { user: { select: { ...PRINCIPAL_SELECT, status: true, organization: { select: { operationalStatus: true } } } } },
     });
     const user = session?.user;
-    if (!user || user.status !== 'ACTIVE' || user.organization?.active === false) {
+    if (!user || user.status !== 'ACTIVE' || (user.organization && user.organization.operationalStatus !== 'ACTIVE')) {
       throw new UnauthorizedException(AUTHENTICATION_REQUIRED);
     }
     return {
@@ -122,7 +122,7 @@ export class AuthService {
       if (!action) throw new UnauthorizedException('Activation token is invalid or expired');
       const claimed = await tx.actionToken.updateMany({ where: { id: action.id, usedAt: null, expiresAt: { gt: now } }, data: { usedAt: now } });
       if (claimed.count !== 1) throw new UnauthorizedException('Activation token is invalid or expired');
-      const activated = await tx.user.updateMany({ where: { id: action.userId, status: 'PENDING_ACTIVATION', organization: { active: true } }, data: { passwordHash, status: 'ACTIVE' } });
+      const activated = await tx.user.updateMany({ where: { id: action.userId, status: 'PENDING_ACTIVATION', organization: { operationalStatus: 'ACTIVE' } }, data: { passwordHash, status: 'ACTIVE' } });
       if (activated.count !== 1) throw new UnauthorizedException('Account cannot be activated');
     });
     return { success: true };

@@ -57,7 +57,7 @@ export class UsersService {
     try {
       return await this.prisma.$transaction(async (tx) => {
         const organization = await tx.organization.findFirst({
-          where: { id: organizationId, active: true },
+          where: { id: organizationId, operationalStatus: 'ACTIVE' },
           select: { id: true },
         });
         if (!organization) throw new NotFoundException('Organization not found');

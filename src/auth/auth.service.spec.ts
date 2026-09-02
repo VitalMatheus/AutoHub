@@ -16,7 +16,7 @@ describe('AuthService session rules', () => {
         })
         .mockResolvedValueOnce({ user: {
           id: 'user-1', name: 'User', email: 'user@example.com', role: 'ADMIN',
-          organizationId: 'org-1', status: 'ACTIVE', organization: { active: true },
+          organizationId: 'org-1', status: 'ACTIVE', organization: { operationalStatus: 'ACTIVE' },
         } }) },
       $transaction: jest.fn(async (callback: (tx: unknown) => unknown) => callback({ session: { updateMany, findUnique } })),
     } as never;
@@ -71,11 +71,11 @@ describe('AuthService session rules', () => {
       .mockResolvedValueOnce({ user: {
         id: 'user-1', name: 'User', email: 'user@example.com', role: 'ADMIN',
         organizationId: 'org-1', status: 'ACTIVE', passwordHash: 'secret',
-        organization: { active: true },
+        organization: { operationalStatus: 'ACTIVE' },
       } })
       .mockResolvedValueOnce({ user: {
         id: 'user-1', name: 'User', email: 'user@example.com', role: 'ADMIN',
-        organizationId: 'org-1', status: 'DISABLED', organization: { active: true },
+        organizationId: 'org-1', status: 'DISABLED', organization: { operationalStatus: 'ACTIVE' },
       } });
     const prisma = { session: { findFirst } } as never;
     const service = new AuthService(prisma, jwt, config);

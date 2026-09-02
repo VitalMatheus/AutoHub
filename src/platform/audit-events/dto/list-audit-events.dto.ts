@@ -15,8 +15,10 @@ export enum AuditTargetType {
 
 export enum AuditAction {
   ORGANIZATION_CREATED = 'organization.created', ORGANIZATION_UPDATED = 'organization.updated',
-  ORGANIZATION_ACTIVATED = 'organization.activated', ORGANIZATION_DEACTIVATED = 'organization.deactivated',
+  ORGANIZATION_ACTIVATED = 'organization.activated', ORGANIZATION_DEACTIVATED = 'organization.deactivated', ORGANIZATION_SUSPENDED = 'organization.suspended', ORGANIZATION_REACTIVATED = 'organization.reactivated',
   USER_INVITATION_ISSUED = 'user.invitation_issued',
+  PLAN_CREATED = 'plan.created', PLAN_UPDATED = 'plan.updated', PLAN_ARCHIVED = 'plan.archived',
+  PLAN_VERSION_CREATED = 'plan_version.created', PLAN_VERSION_UPDATED = 'plan_version.updated', PLAN_VERSION_PUBLISHED = 'plan_version.published',
 }
 
 export class ListAuditEventsDto {

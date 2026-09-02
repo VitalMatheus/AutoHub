@@ -51,8 +51,28 @@ describe('Platform Organizations and activation (e2e)', () => {
     await prisma.user.create({ data: { organizationId: organization.id, name: 'Suspended Admin', email, role: 'ADMIN', status: 'ACTIVE', passwordHash: await argon2.hash(superPassword, { type: argon2.argon2id }) } });
     const adminLogin = await request(app.getHttpServer()).post('/api/v1/auth/login').send({ email, password: superPassword }).expect(201);
     const platformLogin = await request(app.getHttpServer()).post('/api/v1/auth/login').send({ email: superEmail, password: superPassword }).expect(201);
-    await request(app.getHttpServer()).post(`/api/v1/platform/organizations/${organization.id}/deactivate`).set('Authorization', `Bearer ${platformLogin.body.accessToken}`).expect(201);
+    await request(app.getHttpServer()).post(`/api/v1/platform/organizations/${organization.id}/suspend`).set('Authorization', `Bearer ${platformLogin.body.accessToken}`).send({ reason: 'Security review' }).expect(201);
     await request(app.getHttpServer()).get('/api/v1/auth/me').set('Authorization', `Bearer ${adminLogin.body.accessToken}`).expect(401);
     expect(await prisma.session.count({ where: { user: { email }, revokedAt: { not: null } } })).toBe(1);
+  });
+
+  it('supports explicit operational transitions, idempotency and conflicts', async () => {
+    const organization = await prisma.organization.create({ data: { name: `Transitions-${Date.now()}` } });
+    const auth = await request(app.getHttpServer()).post('/api/v1/auth/login').send({ email: superEmail, password: superPassword });
+    const base = `/api/v1/platform/organizations/${organization.id}`;
+    await request(app.getHttpServer()).post(`${base}/suspend`).set('Authorization', `Bearer ${auth.body.accessToken}`).send({ reason: 'Review' }).expect(201);
+    await request(app.getHttpServer()).post(`${base}/suspend`).set('Authorization', `Bearer ${auth.body.accessToken}`).send({ reason: 'Repeated' }).expect(201);
+    await request(app.getHttpServer()).post(`${base}/reactivate`).set('Authorization', `Bearer ${auth.body.accessToken}`).expect(201);
+    await request(app.getHttpServer()).post(`${base}/deactivate`).set('Authorization', `Bearer ${auth.body.accessToken}`).send({ reason: 'Closed' }).expect(201);
+    await request(app.getHttpServer()).post(`${base}/suspend`).set('Authorization', `Bearer ${auth.body.accessToken}`).send({ reason: 'Invalid' }).expect(409);
+    expect(await prisma.auditEvent.count({ where: { organizationId: organization.id, action: 'organization.suspended' } })).toBe(1);
+  });
+
+  it('requires a reason for suspension and deactivation', async () => {
+    const organization = await prisma.organization.create({ data: { name: `Reason-${Date.now()}` } });
+    const auth = await request(app.getHttpServer()).post('/api/v1/auth/login').send({ email: superEmail, password: superPassword });
+    const base = `/api/v1/platform/organizations/${organization.id}`;
+    await request(app.getHttpServer()).post(`${base}/suspend`).set('Authorization', `Bearer ${auth.body.accessToken}`).send({}).expect(400);
+    await request(app.getHttpServer()).post(`${base}/deactivate`).set('Authorization', `Bearer ${auth.body.accessToken}`).send({}).expect(400);
   });
 });

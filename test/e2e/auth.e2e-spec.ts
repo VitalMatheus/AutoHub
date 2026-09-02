@@ -152,7 +152,7 @@ describe('Authentication (e2e)', () => {
     const login = await request(app.getHttpServer()).post('/api/v1/auth/login')
       .send({ email: adminEmail, password }).expect(201);
 
-    await prisma.organization.update({ where: { id: organization.id }, data: { active: false } });
+    await prisma.organization.update({ where: { id: organization.id }, data: { operationalStatus: 'INACTIVE' } });
     await request(app.getHttpServer()).get('/api/v1/auth/me')
       .set('Authorization', `Bearer ${login.body.accessToken}`).expect(401);
 

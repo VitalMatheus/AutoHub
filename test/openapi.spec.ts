@@ -27,6 +27,12 @@ describe('OpenAPI structure', () => {
     const auditResponseContent = auditResponse && 'content' in auditResponse ? auditResponse.content : undefined;
     expect(auditResponseContent?.['application/json']?.schema).toEqual({ $ref: '#/components/schemas/AuditEventsResponseDto' });
     expect(schemas.AuditEventsResponseDto).toBeDefined();
+    expect(paths['/api/v1/platform/organizations/{id}/activate']?.post).toBeDefined();
+    expect(paths['/api/v1/platform/organizations/{id}/deactivate']?.post).toBeDefined();
+    expect(paths['/api/v1/platform/organizations/{id}/suspend']?.post).toBeDefined();
+    expect(paths['/api/v1/platform/organizations/{id}/reactivate']?.post).toBeDefined();
+    expect(paths['/api/v1/platform/plans']?.get).toBeDefined();
+    expect(paths['/api/v1/platform/plans/{id}/versions/{versionId}/publish']?.post).toBeDefined();
     expect(Object.keys(paths).some((path) => path.includes('/payments'))).toBe(true);
     expect(schemas.ProblemDetails).toEqual(expect.objectContaining({ type: 'object' }));
     expect(schemas.DecimalString).toEqual(expect.objectContaining({ type: 'string', pattern: expect.any(String) }));

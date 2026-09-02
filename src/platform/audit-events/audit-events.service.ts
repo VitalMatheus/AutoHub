@@ -41,7 +41,7 @@ export class AuditEventsService {
   private snapshot(targetType: string, value?: Record<string, unknown>): Prisma.InputJsonValue | undefined {
     if (!value) return undefined;
     const fields: Record<string, string[]> = {
-      ORGANIZATION: ['name', 'document', 'phone', 'email', 'addressLine1', 'addressLine2', 'city', 'state', 'postalCode', 'active', 'initialAdminId', 'initialAdminName', 'initialAdminEmail'],
+      ORGANIZATION: ['name', 'document', 'phone', 'email', 'addressLine1', 'addressLine2', 'city', 'state', 'postalCode', 'operationalStatus', 'initialAdminId', 'initialAdminName', 'initialAdminEmail'],
       USER: ['id', 'name', 'email', 'role', 'status'], COMMERCIAL_ACCOUNT: ['name', 'billingEmail', 'billingDocument', 'primaryContactId'],
       PLAN: ['name', 'archivedAt'], PLAN_VERSION: ['price', 'currency', 'interval', 'organizationLimit', 'userLimit', 'workOrderLimit', 'gracePeriodDays'],
       SUBSCRIPTION: ['planVersionId', 'contractedPrice', 'status', 'startsAt', 'currentPeriodStart', 'currentPeriodEnd', 'cancellationRequestedAt', 'effectiveCancellationAt'],

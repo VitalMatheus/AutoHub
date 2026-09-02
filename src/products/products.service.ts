@@ -37,7 +37,7 @@ export class ProductsService {
     return normalized || undefined;
   }
 
-  private generateSku(): string { return `PRD-${randomUUID().replaceAll('-', '').slice(0, 8).toUpperCase()}`; }
+  private generateSku(): string { return `PROD-${randomUUID().replaceAll('-', '').slice(0, 8).toUpperCase()}`; }
 
   async create(principal: AuthenticatedPrincipal, dto: CreateProductDto) {
     const organizationId = this.tenant(principal);

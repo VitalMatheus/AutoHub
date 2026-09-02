@@ -18,6 +18,12 @@ enum UserStatus {
   DISABLED
 }
 
+enum OrganizationOperationalStatus {
+  ACTIVE
+  INACTIVE
+  SUSPENDED
+}
+
 enum ActionTokenPurpose {
   ACTIVATE_ACCOUNT
 }
@@ -66,6 +72,66 @@ enum AuditActorType {
   SYSTEM
 }
 
+enum PlanVersionStatus {
+  DRAFT
+  PUBLISHED
+}
+
+enum BillingInterval {
+  MONTHLY
+}
+
+enum SubscriptionStatus {
+  SCHEDULED
+  CURRENT
+  ENDED
+}
+
+model Plan {
+  id         String    @id @default(uuid()) @db.Uuid
+  name       String    @unique
+  archivedAt DateTime? @db.Timestamptz(3)
+  createdAt  DateTime  @default(now()) @db.Timestamptz(3)
+  updatedAt  DateTime  @updatedAt @db.Timestamptz(3)
+
+  versions PlanVersion[]
+}
+
+model PlanVersion {
+  id                String            @id @default(uuid()) @db.Uuid
+  planId            String            @db.Uuid
+  version           Int
+  status            PlanVersionStatus @default(DRAFT)
+  price             Decimal           @db.Decimal(12, 2)
+  currency          String            @default("BRL") @db.Char(3)
+  interval          BillingInterval   @default(MONTHLY)
+  organizationLimit Int
+  userLimit         Int
+  workOrderLimit    Int?
+  gracePeriodDays   Int               @default(5)
+  publishedAt       DateTime?         @db.Timestamptz(3)
+  createdAt         DateTime          @default(now()) @db.Timestamptz(3)
+
+  plan          Plan           @relation(fields: [planId], references: [id], onDelete: Restrict)
+  subscriptions Subscription[]
+
+  @@unique([planId, version])
+  @@index([status, publishedAt])
+}
+
+// Minimal contract reference for protecting versions already used by a later
+// commercial module. It intentionally has no lifecycle or API in this scope.
+model Subscription {
+  id            String             @id @default(uuid()) @db.Uuid
+  planVersionId String             @db.Uuid
+  status        SubscriptionStatus @default(SCHEDULED)
+  createdAt     DateTime           @default(now()) @db.Timestamptz(3)
+
+  planVersion PlanVersion @relation(fields: [planVersionId], references: [id], onDelete: Restrict)
+
+  @@index([planVersionId, status])
+}
+
 model User {
   id             String     @id @default(uuid()) @db.Uuid
   organizationId String?    @db.Uuid
@@ -77,7 +143,7 @@ model User {
   createdAt      DateTime   @default(now()) @db.Timestamptz(3)
   updatedAt      DateTime   @updatedAt @db.Timestamptz(3)
 
-  sessions Session[]
+  sessions     Session[]
   organization Organization? @relation(fields: [organizationId], references: [id], onDelete: Restrict)
   actionTokens ActionToken[]
   auditEvents  AuditEvent[]
@@ -86,20 +152,20 @@ model User {
 }
 
 model AuditEvent {
-  id             String         @id @default(uuid()) @db.Uuid
-  actorType      AuditActorType
-  actorUserId    String?        @db.Uuid
-  actorName      String?
-  actorEmail     String?
-  occurredAt     DateTime       @default(now()) @db.Timestamptz(3)
-  action         String
-  targetType     String
-  targetId       String
-  commercialAccountId String?    @db.Uuid
-  organizationId String?        @db.Uuid
-  reason         String?
-  before         Json?
-  after          Json?
+  id                  String         @id @default(uuid()) @db.Uuid
+  actorType           AuditActorType
+  actorUserId         String?        @db.Uuid
+  actorName           String?
+  actorEmail          String?
+  occurredAt          DateTime       @default(now()) @db.Timestamptz(3)
+  action              String
+  targetType          String
+  targetId            String
+  commercialAccountId String?        @db.Uuid
+  organizationId      String?        @db.Uuid
+  reason              String?
+  before              Json?
+  after               Json?
 
   actorUser User? @relation(fields: [actorUserId], references: [id], onDelete: SetNull)
 
@@ -124,35 +190,35 @@ model ActionToken {
 }
 
 model Organization {
-  id        String   @id @default(uuid()) @db.Uuid
-  name      String
-  document  String?  @unique
-  phone     String?
-  email     String?
-  addressLine1 String?
-  addressLine2 String?
-  city      String?
-  state     String?
-  postalCode String?
-  active    Boolean  @default(true)
-  nextQuoteNumber Int @default(1)
-  nextWorkOrderNumber Int @default(1)
-  createdAt DateTime @default(now()) @db.Timestamptz(3)
-  updatedAt DateTime @updatedAt @db.Timestamptz(3)
+  id                  String                        @id @default(uuid()) @db.Uuid
+  name                String
+  document            String?                       @unique
+  phone               String?
+  email               String?
+  addressLine1        String?
+  addressLine2        String?
+  city                String?
+  state               String?
+  postalCode          String?
+  operationalStatus   OrganizationOperationalStatus @default(ACTIVE)
+  nextQuoteNumber     Int                           @default(1)
+  nextWorkOrderNumber Int                           @default(1)
+  createdAt           DateTime                      @default(now()) @db.Timestamptz(3)
+  updatedAt           DateTime                      @updatedAt @db.Timestamptz(3)
 
-  users User[]
-  customers Customer[]
-  vehicles Vehicle[]
-  services Service[]
-  products Product[]
-  quotes Quote[]
-  quoteItems QuoteItem[]
-  workOrders WorkOrder[]
+  users          User[]
+  customers      Customer[]
+  vehicles       Vehicle[]
+  services       Service[]
+  products       Product[]
+  quotes         Quote[]
+  quoteItems     QuoteItem[]
+  workOrders     WorkOrder[]
   workOrderItems WorkOrderItem[]
   payments       Payment[]
   stockMovements StockMovement[]
 
-  @@index([active])
+  @@index([operationalStatus])
 }
 
 model Session {
@@ -228,7 +294,7 @@ model Service {
   createdAt      DateTime @default(now()) @db.Timestamptz(3)
   updatedAt      DateTime @updatedAt @db.Timestamptz(3)
 
-  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  organization   Organization    @relation(fields: [organizationId], references: [id], onDelete: Restrict)
   quoteItems     QuoteItem[]
   workOrderItems WorkOrderItem[]
 
@@ -249,7 +315,7 @@ model Product {
   createdAt      DateTime @default(now()) @db.Timestamptz(3)
   updatedAt      DateTime @updatedAt @db.Timestamptz(3)
 
-  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  organization   Organization    @relation(fields: [organizationId], references: [id], onDelete: Restrict)
   quoteItems     QuoteItem[]
   workOrderItems WorkOrderItem[]
   stockMovements StockMovement[]
@@ -320,12 +386,12 @@ model WorkOrder {
   createdAt              DateTime        @default(now()) @db.Timestamptz(3)
   updatedAt              DateTime        @updatedAt @db.Timestamptz(3)
 
-  organization Organization    @relation(fields: [organizationId], references: [id], onDelete: Restrict)
-  customer     Customer        @relation(fields: [organizationId, customerId], references: [organizationId, id], onDelete: Restrict)
-  vehicle      Vehicle         @relation(fields: [organizationId, vehicleId], references: [organizationId, id], onDelete: Restrict)
-  quote        Quote?          @relation(fields: [organizationId, quoteId], references: [organizationId, id], onDelete: Restrict)
-  items        WorkOrderItem[]
-  payments     Payment[]
+  organization   Organization    @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  customer       Customer        @relation(fields: [organizationId, customerId], references: [organizationId, id], onDelete: Restrict)
+  vehicle        Vehicle         @relation(fields: [organizationId, vehicleId], references: [organizationId, id], onDelete: Restrict)
+  quote          Quote?          @relation(fields: [organizationId, quoteId], references: [organizationId, id], onDelete: Restrict)
+  items          WorkOrderItem[]
+  payments       Payment[]
   stockMovements StockMovement[]
 
   @@unique([organizationId, id])

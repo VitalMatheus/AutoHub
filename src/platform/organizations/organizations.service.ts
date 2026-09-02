@@ -8,8 +8,9 @@ import { UpdateOrganizationDto } from './dto/update-organization.dto';
 import type { AuthenticatedPrincipal } from '../../auth/authenticated-principal';
 import { AuditEventsService } from '../audit-events/audit-events.service';
 import { AuditAction, AuditTargetType } from '../audit-events/dto/list-audit-events.dto';
+import { OrganizationTransitionDto } from './dto/organization-transition.dto';
 
-const organizationSelect = { id: true, name: true, document: true, phone: true, email: true, addressLine1: true, addressLine2: true, city: true, state: true, postalCode: true, active: true, createdAt: true, updatedAt: true } as const;
+const organizationSelect = { id: true, name: true, document: true, phone: true, email: true, addressLine1: true, addressLine2: true, city: true, state: true, postalCode: true, operationalStatus: true, createdAt: true, updatedAt: true } as const;
 
 @Injectable()
 export class OrganizationsService {
@@ -35,7 +36,7 @@ export class OrganizationsService {
           organizationId: organization.id, name: adminName.trim(), email: this.normalizeEmail(adminEmail), role: 'ADMIN', status: 'PENDING_ACTIVATION',
         }, select: { id: true, name: true, email: true, role: true, status: true, organizationId: true } });
         await tx.actionToken.create({ data: { userId: admin.id, purpose: 'ACTIVATE_ACCOUNT', tokenHash: this.hashToken(activationToken), expiresAt: new Date(Date.now() + expiresDays * 86400000) } });
-        await this.auditEvents.record(tx, principal, { action: AuditAction.ORGANIZATION_CREATED, targetType: AuditTargetType.ORGANIZATION, targetId: organization.id, organizationId: organization.id, after: { name: organization.name, active: organization.active, initialAdminId: admin.id, initialAdminName: admin.name, initialAdminEmail: admin.email } });
+        await this.auditEvents.record(tx, principal, { action: AuditAction.ORGANIZATION_CREATED, targetType: AuditTargetType.ORGANIZATION, targetId: organization.id, organizationId: organization.id, after: { name: organization.name, operationalStatus: organization.operationalStatus, initialAdminId: admin.id, initialAdminName: admin.name, initialAdminEmail: admin.email } });
         await this.auditEvents.record(tx, principal, { action: AuditAction.USER_INVITATION_ISSUED, targetType: AuditTargetType.USER, targetId: admin.id, organizationId: organization.id, after: { name: admin.name, email: admin.email, role: admin.role, status: admin.status } });
         return { organization, admin };
       });
@@ -84,17 +85,28 @@ export class OrganizationsService {
     }
   }
 
-  async setActive(principal: AuthenticatedPrincipal, id: string, active: boolean) {
+  async transition(principal: AuthenticatedPrincipal, id: string, action: 'activate' | 'deactivate' | 'suspend' | 'reactivate', dto?: OrganizationTransitionDto) {
+    const transitions = {
+      activate: { from: ['INACTIVE'], to: 'ACTIVE', audit: AuditAction.ORGANIZATION_ACTIVATED },
+      deactivate: { from: ['ACTIVE', 'SUSPENDED'], to: 'INACTIVE', audit: AuditAction.ORGANIZATION_DEACTIVATED },
+      suspend: { from: ['ACTIVE'], to: 'SUSPENDED', audit: AuditAction.ORGANIZATION_SUSPENDED },
+      reactivate: { from: ['SUSPENDED'], to: 'ACTIVE', audit: AuditAction.ORGANIZATION_REACTIVATED },
+    } as const;
+    const rule = transitions[action];
+    if ((action === 'deactivate' || action === 'suspend') && !dto?.reason?.trim()) throw new BadRequestException('Reason is required');
     try {
       return await this.prisma.$transaction(async (tx) => {
         const before = await tx.organization.findUnique({ where: { id }, select: organizationSelect });
         if (!before) throw new NotFoundException('Organization not found');
-        if (before.active === active) return before;
-        const organization = await tx.organization.update({ where: { id }, data: { active }, select: organizationSelect });
-        if (!active) {
+        if (before.operationalStatus === rule.to) return before;
+        if (!(rule.from as readonly string[]).includes(before.operationalStatus)) {
+          throw new ConflictException({ code: 'ORGANIZATION_INVALID_TRANSITION', detail: `Organization cannot ${action} from ${before.operationalStatus}.` });
+        }
+        const organization = await tx.organization.update({ where: { id }, data: { operationalStatus: rule.to }, select: organizationSelect });
+        if (action === 'deactivate' || action === 'suspend') {
           await tx.session.updateMany({ where: { user: { organizationId: id }, revokedAt: null }, data: { revokedAt: new Date() } });
         }
-        await this.auditEvents.record(tx, principal, { action: active ? AuditAction.ORGANIZATION_ACTIVATED : AuditAction.ORGANIZATION_DEACTIVATED, targetType: AuditTargetType.ORGANIZATION, targetId: id, organizationId: id, before: { active: before.active }, after: { active: organization.active } });
+        await this.auditEvents.record(tx, principal, { action: rule.audit, targetType: AuditTargetType.ORGANIZATION, targetId: id, organizationId: id, reason: dto?.reason?.trim(), before: { operationalStatus: before.operationalStatus }, after: { operationalStatus: organization.operationalStatus } });
         return organization;
       });
     } catch (error) {

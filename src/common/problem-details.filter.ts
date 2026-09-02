@@ -47,6 +47,7 @@ const SAFE_MESSAGE_TRANSLATIONS: Record<string, string> = {
   'Only approved Quotes can be converted into Work Orders.': 'Apenas orçamentos aprovados podem ser convertidos em ordens de serviço.',
   'An approved Quote can generate only one Work Order.': 'Um orçamento aprovado pode gerar apenas uma ordem de serviço.',
   'Work Order cannot complete from OPEN.': 'A transição solicitada para a ordem de serviço não é permitida.',
+  'Reason is required': 'O motivo é obrigatório.',
 };
 
 const SAFE_CODES = new Set([
@@ -58,6 +59,7 @@ const SAFE_CODES = new Set([
   'PAYMENT_EXCEEDS_BALANCE',
   'PAYMENT_ALREADY_CANCELLED',
   'INSUFFICIENT_STOCK',
+  'ORGANIZATION_INVALID_TRANSITION',
 ]);
 
 const SAFE_CODE_DETAILS: Record<string, string> = {
@@ -69,6 +71,7 @@ const SAFE_CODE_DETAILS: Record<string, string> = {
   PAYMENT_EXCEEDS_BALANCE: 'O pagamento excede o saldo da ordem de serviço.',
   PAYMENT_ALREADY_CANCELLED: 'O pagamento já está cancelado.',
   INSUFFICIENT_STOCK: 'Não há estoque suficiente para concluir a ordem de serviço.',
+  ORGANIZATION_INVALID_TRANSITION: 'A transição operacional solicitada para a oficina não é permitida.',
 };
 
 const TITLES: Record<number, string> = {
