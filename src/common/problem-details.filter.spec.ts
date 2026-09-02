@@ -90,4 +90,17 @@ describe('ProblemDetailsFilter', () => {
       event: 'rate_limit.failure', status: 429,
     }));
   });
+
+  it('uses distinct stable problem types for commercial and operational blocks', () => {
+    for (const [code, type] of [
+      ['COMMERCIAL_ACCESS_BLOCKED', 'https://api.autohub.local/problems/commercial-access-blocked'],
+      ['ORGANIZATION_OPERATIONAL_BLOCKED', 'https://api.autohub.local/problems/organization-operational-blocked'],
+    ] as const) {
+      const { host, json } = makeHost();
+      new ProblemDetailsFilter({ record: jest.fn() } as never).catch(
+        new HttpException({ code }, 403), host,
+      );
+      expect(json).toHaveBeenCalledWith(expect.objectContaining({ status: 403, code, type }));
+    }
+  });
 });

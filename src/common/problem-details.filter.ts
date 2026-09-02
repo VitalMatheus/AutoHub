@@ -59,6 +59,7 @@ const SAFE_CODES = new Set([
   'PAYMENT_EXCEEDS_BALANCE',
   'PAYMENT_ALREADY_CANCELLED',
   'COMMERCIAL_ACCESS_BLOCKED',
+  'ORGANIZATION_OPERATIONAL_BLOCKED',
   'INSUFFICIENT_STOCK',
   'ORGANIZATION_INVALID_TRANSITION',
 ]);
@@ -72,6 +73,7 @@ const SAFE_CODE_DETAILS: Record<string, string> = {
   PAYMENT_EXCEEDS_BALANCE: 'O pagamento excede o saldo da ordem de serviço.',
   PAYMENT_ALREADY_CANCELLED: 'O pagamento já está cancelado.',
   COMMERCIAL_ACCESS_BLOCKED: 'O acesso comercial está bloqueado até a liquidação da primeira cobrança.',
+  ORGANIZATION_OPERATIONAL_BLOCKED: 'A operação desta oficina está suspensa administrativamente.',
   INSUFFICIENT_STOCK: 'Não há estoque suficiente para concluir a ordem de serviço.',
   ORGANIZATION_INVALID_TRANSITION: 'A transição operacional solicitada para a oficina não é permitida.',
 };
@@ -114,7 +116,7 @@ export class ProblemDetailsFilter implements ExceptionFilter {
       });
     }
     response.status(status).type('application/problem+json').json({
-      type: `https://api.autohub.local/problems/${status}`,
+      type: this.problemType(customProblem.code, status),
       title: TITLES[status] ?? 'Erro',
       status,
       detail,
@@ -149,5 +151,11 @@ export class ProblemDetailsFilter implements ExceptionFilter {
 
   private safeCode(code: unknown, status: number): string {
     return typeof code === 'string' && SAFE_CODES.has(code) ? code : `HTTP_${status}`;
+  }
+
+  private problemType(code: unknown, status: number): string {
+    if (code === 'COMMERCIAL_ACCESS_BLOCKED') return 'https://api.autohub.local/problems/commercial-access-blocked';
+    if (code === 'ORGANIZATION_OPERATIONAL_BLOCKED') return 'https://api.autohub.local/problems/organization-operational-blocked';
+    return `https://api.autohub.local/problems/${status}`;
   }
 }

@@ -61,7 +61,7 @@ export class AuthService {
     // Validate the account before consuming the current credential. A disabled
     // user or organization must not lose a still-valid session as a side
     // effect of an unauthorized refresh attempt.
-    const principal = await this.resolvePrincipal(session.userId, session.id);
+    const principal = await this.resolvePrincipal(session.userId, session.id, true);
 
     const nextRefreshToken = randomBytes(32).toString('base64url');
     const rotated = await this.prisma.$transaction(async (tx) => {
@@ -87,14 +87,20 @@ export class AuthService {
     };
   }
 
-  async resolvePrincipal(userId: string, sessionId: string): Promise<AuthenticatedPrincipal> {
+  async resolvePrincipal(userId: string, sessionId: string, allowInactiveOrganization = false): Promise<AuthenticatedPrincipal> {
     const session = await this.prisma.session.findFirst({
       where: { id: sessionId, userId, revokedAt: null, expiresAt: { gt: new Date() } },
       select: { user: { select: { ...PRINCIPAL_SELECT, status: true, organization: { select: { operationalStatus: true } } } } },
     });
     const user = session?.user;
-    if (!user || user.status !== 'ACTIVE' || (user.organization && user.organization.operationalStatus !== 'ACTIVE')) {
+    if (!user || user.status !== 'ACTIVE') {
       throw new UnauthorizedException(AUTHENTICATION_REQUIRED);
+    }
+    if (!allowInactiveOrganization && user.organization && user.organization.operationalStatus !== 'ACTIVE') {
+      throw new ForbiddenException({
+        code: 'ORGANIZATION_OPERATIONAL_BLOCKED',
+        detail: 'The Organization is not operationally active.',
+      });
     }
     return {
       id: user.id,
@@ -103,6 +109,19 @@ export class AuthService {
       role: user.role,
       organizationId: user.organizationId,
     };
+  }
+
+  async assertOperationalAccess(organizationId: string): Promise<void> {
+    const organization = await this.prisma.organization.findUnique({
+      where: { id: organizationId },
+      select: { operationalStatus: true },
+    });
+    if (organization?.operationalStatus !== 'ACTIVE') {
+      throw new ForbiddenException({
+        code: 'ORGANIZATION_OPERATIONAL_BLOCKED',
+        detail: 'The Organization is not operationally active.',
+      });
+    }
   }
 
   async hasCommercialAccess(organizationId: string): Promise<boolean> {

@@ -28,8 +28,15 @@ export class JwtAuthGuard implements CanActivate {
     try {
       const payload = await this.jwt.verifyAsync<AccessTokenPayload>(token);
       if (!payload.sub || !payload.sid) throw new UnauthorizedException('Authentication required');
-      const principal = await this.auth.resolvePrincipal(payload.sub, payload.sid);
+      const principal = await this.auth.resolvePrincipal(payload.sub, payload.sid, true);
+      // Keep this allowlist explicit and endpoint-specific. Commercial access
+      // must not be bypassed by a broad path prefix, while status and session
+      // management remain available so a blocked workshop can recover.
       const commercialAccessExempt = new Set(['/api/v1/auth/me', '/api/v1/auth/logout', '/api/v1/account/access-status']);
+      const operationalAccessExempt = new Set(['/api/v1/auth/logout', '/api/v1/account/access-status']);
+      if (principal.role === 'ADMIN' && principal.organizationId && !operationalAccessExempt.has(request.path)) {
+        await this.auth.assertOperationalAccess(principal.organizationId);
+      }
       if (principal.role === 'ADMIN' && principal.organizationId && !commercialAccessExempt.has(request.path)) {
         const accessAllowed = await this.auth.hasCommercialAccess(principal.organizationId);
         if (!accessAllowed) throw new ForbiddenException({ code: 'COMMERCIAL_ACCESS_BLOCKED', detail: 'Commercial access is blocked until the first Subscription Charge is settled.' });

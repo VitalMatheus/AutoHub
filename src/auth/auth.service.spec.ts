@@ -103,4 +103,53 @@ describe('AuthService session rules', () => {
     });
     await expect(service.resolvePrincipal('user-1', 'session-1')).rejects.toBeInstanceOf(UnauthorizedException);
   });
+
+  it('returns a stable operational authorization error for a suspended Organization', async () => {
+    const prisma = { session: { findFirst: jest.fn().mockResolvedValue({ user: {
+      id: 'user-1', name: 'User', email: 'user@example.com', role: 'ADMIN',
+      organizationId: 'org-1', status: 'ACTIVE', organization: { operationalStatus: 'SUSPENDED' },
+    } }) } } as never;
+    const service = new AuthService(prisma, jwt, config);
+
+    await expect(service.resolvePrincipal('user-1', 'session-1')).rejects.toMatchObject({
+      response: expect.objectContaining({ code: 'ORGANIZATION_OPERATIONAL_BLOCKED' }),
+      status: 403,
+    });
+  });
+
+  it('allows session recovery for an inactive Organization when explicitly requested', async () => {
+    const prisma = { session: { findFirst: jest.fn().mockResolvedValue({ user: {
+      id: 'user-1', name: 'User', email: 'user@example.com', role: 'ADMIN',
+      organizationId: 'org-1', status: 'ACTIVE', organization: { operationalStatus: 'INACTIVE' },
+    } }) } } as never;
+    const service = new AuthService(prisma, jwt, config);
+
+    await expect(service.resolvePrincipal('user-1', 'session-1', true)).resolves.toMatchObject({ id: 'user-1' });
+  });
+
+  it('exposes only the safe access-status fields', async () => {
+    const findSubscription = jest.fn().mockResolvedValue({
+      trialEnabled: false, trialStartsAt: null, trialEndsAt: null,
+      firstPaymentReceivedAt: new Date('2026-01-01T00:00:00Z'), migratedAt: null,
+      regularizedAt: new Date('2026-01-01T00:00:00Z'), effectiveCancellationAt: null,
+      charges: [],
+    });
+    const prisma = { subscription: { findFirst: findSubscription } } as never;
+    const service = new AuthService(prisma, jwt, config);
+
+    const result = await service.accessStatus('org-1');
+    expect(result).toEqual({
+      commercialAccess: 'ACCESS_ALLOWED', nextDueDate: null, blockDate: null,
+      remainingDays: 0, instruction: 'Your account is available.',
+    });
+    expect(result).not.toHaveProperty('price');
+    expect(result).not.toHaveProperty('history');
+    expect(result).not.toHaveProperty('organizations');
+    expect(findSubscription).toHaveBeenCalledWith(expect.objectContaining({
+      where: expect.objectContaining({
+        commercialAccount: { organizations: { some: { id: 'org-1' } } },
+      }),
+    }));
+    expect(findSubscription.mock.calls[0][0].select).not.toHaveProperty('contractedPrice');
+  });
 });

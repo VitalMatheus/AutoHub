@@ -145,6 +145,7 @@ export class AccountController {
   @ApiOperation({ summary: 'Return the safe commercial access status for the current Organization.' })
   @ApiResponse({ status: 200, type: AccountAccessStatusDto })
   @ApiResponse({ status: 401, description: 'Authentication required.' })
+  @ApiResponse({ status: 403, description: 'The Organization is not operationally active.', content: { 'application/problem+json': { schema: { $ref: '#/components/schemas/ProblemDetails' } } } })
   accessStatus(@Req() request: AuthenticatedRequest) {
     if (!request.user?.organizationId) return { commercialAccess: 'ACCESS_ALLOWED', nextDueDate: null, blockDate: null, remainingDays: null, instruction: 'Your account is available.' };
     return this.auth.accessStatus(request.user.organizationId);

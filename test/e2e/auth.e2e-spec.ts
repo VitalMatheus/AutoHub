@@ -162,7 +162,7 @@ describe('Authentication (e2e)', () => {
       .set('Authorization', `Bearer ${login.body.accessToken}`).expect(201);
   });
 
-  it('removes access when an organization is disabled', async () => {
+  it('returns an operational-block Problem Details when an organization is disabled', async () => {
     const organization = await prisma.organization.create({ data: { name: 'Disabled Workshop' } });
     const adminEmail = `disabled-${Date.now()}@example.com`;
     const admin = await prisma.user.create({ data: {
@@ -174,7 +174,13 @@ describe('Authentication (e2e)', () => {
 
     await prisma.organization.update({ where: { id: organization.id }, data: { operationalStatus: 'INACTIVE' } });
     await request(app.getHttpServer()).get('/api/v1/auth/me')
-      .set('Authorization', `Bearer ${login.body.accessToken}`).expect(401);
+      .set('Authorization', `Bearer ${login.body.accessToken}`).expect(403)
+      .expect(({ body }) => {
+        expect(body).toEqual(expect.objectContaining({
+          code: 'ORGANIZATION_OPERATIONAL_BLOCKED',
+          type: 'https://api.autohub.local/problems/organization-operational-blocked',
+        }));
+      });
 
     await prisma.user.delete({ where: { id: admin.id } });
     await prisma.organization.delete({ where: { id: organization.id } });
