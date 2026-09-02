@@ -205,7 +205,7 @@ describe('Organization Admin frontend shell', () => {
     vi.spyOn(httpClient, 'post').mockResolvedValue({ data: { accessToken: 'restored-token', expiresIn: 900, tokenType: 'Bearer' } } as never);
     vi.spyOn(httpClient, 'get').mockImplementation((url) => {
       if (url === '/auth/me') return Promise.resolve({ data: principal }) as never;
-      if (url === '/dashboard') return Promise.resolve({ data: { customers: 7, openWorkOrders: 0, pendingQuotes: 0 } }) as never;
+      if (url === '/customers') return Promise.resolve({ data: { data: [], meta: { page: 1, pageSize: 1, total: 7, totalPages: 7 } } }) as never;
       return Promise.resolve({ data: { data: [], meta: { page: 1, pageSize: 20, total: 0, totalPages: 0 } } }) as never;
     });
 
@@ -220,6 +220,9 @@ describe('Organization Admin frontend shell', () => {
     expect(screen.getByRole('navigation', { name: 'Módulos da oficina' })).toBeInTheDocument();
     expect(screen.getByRole('link', { name: 'Dashboard' })).not.toHaveAttribute('aria-current');
     expect(screen.getByRole('link', { name: 'Clientes' })).toHaveAttribute('aria-current', 'page');
+    await user.click(screen.getByRole('link', { name: 'Financeiro' }));
+    expect(await screen.findByRole('heading', { name: 'Financeiro', level: 2 })).toBeInTheDocument();
+    expect(screen.getByText('Em breve')).toBeInTheDocument();
   });
 
   it('opens and closes the mobile drawer with its close button, backdrop, and Escape', async () => {

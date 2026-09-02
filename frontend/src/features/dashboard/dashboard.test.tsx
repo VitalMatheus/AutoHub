@@ -10,7 +10,7 @@ describe('Dashboard', () => {
   beforeEach(() => vi.restoreAllMocks());
 
   it('shows the customer count and marks unsupported dashboard metrics and actions as unavailable', async () => {
-    vi.spyOn(httpClient, 'get').mockResolvedValue({ data: { customers: 8 } } as never);
+    vi.spyOn(httpClient, 'get').mockResolvedValue({ data: { data: [], meta: { page: 1, pageSize: 1, total: 8, totalPages: 8 } } } as never);
     const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
 
     render(<QueryClientProvider client={queryClient}><MemoryRouter initialEntries={['/app/dashboard']}><AppHomePage /></MemoryRouter></QueryClientProvider>);
