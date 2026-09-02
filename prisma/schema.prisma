@@ -61,6 +61,11 @@ enum PaymentStatus {
   CANCELLED
 }
 
+enum AuditActorType {
+  USER
+  SYSTEM
+}
+
 model User {
   id             String     @id @default(uuid()) @db.Uuid
   organizationId String?    @db.Uuid
@@ -75,8 +80,33 @@ model User {
   sessions Session[]
   organization Organization? @relation(fields: [organizationId], references: [id], onDelete: Restrict)
   actionTokens ActionToken[]
+  auditEvents  AuditEvent[]
 
   @@index([organizationId, status])
+}
+
+model AuditEvent {
+  id             String         @id @default(uuid()) @db.Uuid
+  actorType      AuditActorType
+  actorUserId    String?        @db.Uuid
+  actorName      String?
+  actorEmail     String?
+  occurredAt     DateTime       @default(now()) @db.Timestamptz(3)
+  action         String
+  targetType     String
+  targetId       String
+  commercialAccountId String?    @db.Uuid
+  organizationId String?        @db.Uuid
+  reason         String?
+  before         Json?
+  after          Json?
+
+  actorUser User? @relation(fields: [actorUserId], references: [id], onDelete: SetNull)
+
+  @@index([occurredAt, id])
+  @@index([actorUserId, occurredAt, id])
+  @@index([action, occurredAt, id])
+  @@index([targetType, targetId, occurredAt, id])
 }
 
 model ActionToken {

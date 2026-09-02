@@ -5,18 +5,21 @@ import { createHash, randomBytes } from 'node:crypto';
 import { Prisma } from '@prisma/client';
 import { CreateOrganizationDto } from './dto/create-organization.dto';
 import { UpdateOrganizationDto } from './dto/update-organization.dto';
+import type { AuthenticatedPrincipal } from '../../auth/authenticated-principal';
+import { AuditEventsService } from '../audit-events/audit-events.service';
+import { AuditAction, AuditTargetType } from '../audit-events/dto/list-audit-events.dto';
 
 const organizationSelect = { id: true, name: true, document: true, phone: true, email: true, addressLine1: true, addressLine2: true, city: true, state: true, postalCode: true, active: true, createdAt: true, updatedAt: true } as const;
 
 @Injectable()
 export class OrganizationsService {
-  constructor(private readonly prisma: PrismaService, private readonly config: ConfigService) {}
+  constructor(private readonly prisma: PrismaService, private readonly config: ConfigService, private readonly auditEvents: AuditEventsService) {}
 
   private normalizeEmail(email: string) { return email.trim().toLowerCase(); }
   private normalizeDocument(document: string) { return document.replace(/\D/g, ''); }
   private hashToken(token: string) { return createHash('sha256').update(token).digest('hex'); }
 
-  async create(dto: CreateOrganizationDto) {
+  async create(principal: AuthenticatedPrincipal, dto: CreateOrganizationDto) {
     const adminName = dto.admin?.name ?? dto.adminName;
     const adminEmail = dto.admin?.email ?? dto.adminEmail;
     if (!adminName || !adminEmail) throw new BadRequestException('First Organization Admin is required');
@@ -32,6 +35,8 @@ export class OrganizationsService {
           organizationId: organization.id, name: adminName.trim(), email: this.normalizeEmail(adminEmail), role: 'ADMIN', status: 'PENDING_ACTIVATION',
         }, select: { id: true, name: true, email: true, role: true, status: true, organizationId: true } });
         await tx.actionToken.create({ data: { userId: admin.id, purpose: 'ACTIVATE_ACCOUNT', tokenHash: this.hashToken(activationToken), expiresAt: new Date(Date.now() + expiresDays * 86400000) } });
+        await this.auditEvents.record(tx, principal, { action: AuditAction.ORGANIZATION_CREATED, targetType: AuditTargetType.ORGANIZATION, targetId: organization.id, organizationId: organization.id, after: { name: organization.name, active: organization.active, initialAdminId: admin.id, initialAdminName: admin.name, initialAdminEmail: admin.email } });
+        await this.auditEvents.record(tx, principal, { action: AuditAction.USER_INVITATION_ISSUED, targetType: AuditTargetType.USER, targetId: admin.id, organizationId: organization.id, after: { name: admin.name, email: admin.email, role: admin.role, status: admin.status } });
         return { organization, admin };
       });
       return { ...result, activationToken };
@@ -56,9 +61,22 @@ export class OrganizationsService {
     return organization;
   }
 
-  async update(id: string, dto: UpdateOrganizationDto) {
+  async update(principal: AuthenticatedPrincipal, id: string, dto: UpdateOrganizationDto) {
     try {
-      return await this.prisma.organization.update({ where: { id }, data: { ...dto, name: dto.name?.trim(), email: dto.email ? this.normalizeEmail(dto.email) : undefined, document: dto.document ? this.normalizeDocument(dto.document) : undefined }, select: organizationSelect });
+      return await this.prisma.$transaction(async (tx) => {
+        const before = await tx.organization.findUnique({ where: { id }, select: organizationSelect });
+        if (!before) throw new NotFoundException('Organization not found');
+        const data = { ...dto, name: dto.name?.trim(), email: dto.email ? this.normalizeEmail(dto.email) : undefined, document: dto.document ? this.normalizeDocument(dto.document) : undefined };
+        const organization = await tx.organization.update({ where: { id }, data, select: organizationSelect });
+        const fields = ['name', 'document', 'phone', 'email', 'addressLine1', 'addressLine2', 'city', 'state', 'postalCode'] as const;
+        const changed = fields.filter((field) => before[field] !== organization[field]);
+        if (changed.length) {
+          const beforeSnapshot = Object.fromEntries(changed.map((field) => [field, before[field]]));
+          const afterSnapshot = Object.fromEntries(changed.map((field) => [field, organization[field]]));
+          await this.auditEvents.record(tx, principal, { action: AuditAction.ORGANIZATION_UPDATED, targetType: AuditTargetType.ORGANIZATION, targetId: id, organizationId: id, before: beforeSnapshot, after: afterSnapshot });
+        }
+        return organization;
+      });
     } catch (error) {
       if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2025') throw new NotFoundException('Organization not found');
       if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002') throw new ConflictException('Organization document already exists');
@@ -66,13 +84,17 @@ export class OrganizationsService {
     }
   }
 
-  async setActive(id: string, active: boolean) {
+  async setActive(principal: AuthenticatedPrincipal, id: string, active: boolean) {
     try {
       return await this.prisma.$transaction(async (tx) => {
+        const before = await tx.organization.findUnique({ where: { id }, select: organizationSelect });
+        if (!before) throw new NotFoundException('Organization not found');
+        if (before.active === active) return before;
         const organization = await tx.organization.update({ where: { id }, data: { active }, select: organizationSelect });
         if (!active) {
           await tx.session.updateMany({ where: { user: { organizationId: id }, revokedAt: null }, data: { revokedAt: new Date() } });
         }
+        await this.auditEvents.record(tx, principal, { action: active ? AuditAction.ORGANIZATION_ACTIVATED : AuditAction.ORGANIZATION_DEACTIVATED, targetType: AuditTargetType.ORGANIZATION, targetId: id, organizationId: id, before: { active: before.active }, after: { active: organization.active } });
         return organization;
       });
     } catch (error) {

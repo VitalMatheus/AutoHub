@@ -16,6 +16,7 @@ import { WorkOrdersModule } from './work-orders/work-orders.module';
 import { PaymentsModule } from './payments/payments.module';
 import { SecurityLogger } from './common/security.logger';
 import { DashboardModule } from './dashboard/dashboard.module';
+import { AuditEventsModule } from './platform/audit-events/audit-events.module';
 
 @Module({
   imports: [
@@ -38,6 +39,7 @@ import { DashboardModule } from './dashboard/dashboard.module';
     WorkOrdersModule,
     PaymentsModule,
     DashboardModule,
+    AuditEventsModule,
   ],
   providers: [SecurityLogger],
   exports: [SecurityLogger],

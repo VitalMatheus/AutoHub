@@ -19,6 +19,7 @@ describe('OpenAPI structure', () => {
     expect(document.components?.securitySchemes?.bearer).toBeDefined();
     expect(paths['/api/v1/health']).toBeDefined();
     expect(paths['/api/v1/quotes/{id}/approve']).toBeDefined();
+    expect(paths['/api/v1/platform/audit-events']?.get).toBeDefined();
     expect(Object.keys(paths).some((path) => path.includes('/payments'))).toBe(true);
     expect(schemas.ProblemDetails).toEqual(expect.objectContaining({ type: 'object' }));
     expect(schemas.DecimalString).toEqual(expect.objectContaining({ type: 'string', pattern: expect.any(String) }));
