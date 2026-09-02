@@ -1,0 +1,2 @@
+import { Module } from '@nestjs/common'; import { AuthModule } from '../../auth/auth.module'; import { AuditEventsModule } from '../audit-events/audit-events.module'; import { SubscriptionChargesController } from './subscription-charges.controller'; import { SubscriptionChargesService } from './subscription-charges.service';
+@Module({imports:[AuthModule,AuditEventsModule],controllers:[SubscriptionChargesController],providers:[SubscriptionChargesService]}) export class SubscriptionChargesModule {}

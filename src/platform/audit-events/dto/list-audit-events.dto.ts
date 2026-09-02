@@ -21,6 +21,8 @@ export enum AuditAction {
   PLAN_CREATED = 'plan.created', PLAN_UPDATED = 'plan.updated', PLAN_ARCHIVED = 'plan.archived',
   PLAN_VERSION_CREATED = 'plan_version.created', PLAN_VERSION_UPDATED = 'plan_version.updated', PLAN_VERSION_PUBLISHED = 'plan_version.published',
   SUBSCRIPTION_CREATED = 'subscription.created', SUBSCRIPTION_MIGRATED_REGULARIZED = 'subscription.migrated_regularized',
+  SUBSCRIPTION_CHARGE_CREATED = 'subscription_charge.created', SUBSCRIPTION_CHARGE_UPDATED = 'subscription_charge.updated', SUBSCRIPTION_CHARGE_CANCELLED = 'subscription_charge.cancelled',
+  CHARGE_SETTLEMENT_CREATED = 'charge_settlement.created', CHARGE_SETTLEMENT_REVERSED = 'charge_settlement.reversed',
 }
 
 export class ListAuditEventsDto {
