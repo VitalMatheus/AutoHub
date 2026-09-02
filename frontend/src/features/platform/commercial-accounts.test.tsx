@@ -4,6 +4,7 @@ import { render, screen } from '@testing-library/react';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { httpClient } from '@/shared/api/http';
+import { listAllSubscriptionCharges } from './api/commercial-accounts-api';
 import { CommercialAccountDetailPage, CommercialAccountsListPage } from './pages/commercial-account-pages';
 
 const account = { id: 'account-1', name: 'Grupo Motor', billingEmail: 'financeiro@motor.test', billingDocument: '12.345.678/0001-90', primaryContact: { id: 'user-1', name: 'Ana Lima', email: 'ana@motor.test', role: 'ADMIN', status: 'ACTIVE', organizationId: 'org-1' }, missingPrimaryContact: false, organizations: [{ id: 'org-1', name: 'Motor Recife', operationalStatus: 'ACTIVE', createdAt: '2026-01-01T00:00:00Z' }], subscriptions: [{ id: 'sub-1', status: 'CURRENT', createdAt: '2026-01-01T00:00:00Z', contractedPrice: '79.00', contractedCurrency: 'BRL', contractedInterval: 'MONTHLY', contractedOrganizationLimit: 1, contractedUserLimit: 3, contractedWorkOrderLimit: null, contractedGracePeriodDays: 5, planVersion: { id: 'version-1', version: 1, plan: { id: 'plan-1', name: 'AutoHub Básico' } } }], createdAt: '2026-01-01T00:00:00Z', updatedAt: '2026-01-02T00:00:00Z' };
@@ -48,5 +49,12 @@ describe('Commercial accounts', () => {
     expect(await screen.findByText('Nenhuma conta encontrada')).toBeInTheDocument();
     expect(screen.getByText('Tente ajustar sua busca.')).toBeInTheDocument();
     expect(screen.getByDisplayValue('Inexistente')).toBeInTheDocument();
+  });
+  it('loads every charge page before calculating an account summary', async () => {
+    const get = vi.spyOn(httpClient, 'get').mockResolvedValueOnce({ data: { data: [{ id: 'charge-1' }], meta: { totalPages: 2 } } } as never).mockResolvedValueOnce({ data: { data: [{ id: 'charge-2' }], meta: { totalPages: 2 } } } as never);
+    const charges = await listAllSubscriptionCharges('account-1');
+    expect(charges).toHaveLength(2);
+    expect(get).toHaveBeenCalledTimes(2);
+    expect(get).toHaveBeenLastCalledWith('/platform/subscription-charges', { params: { commercialAccountId: 'account-1', page: 2, pageSize: 100 } });
   });
 });

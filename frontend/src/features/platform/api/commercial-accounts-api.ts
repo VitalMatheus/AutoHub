@@ -12,3 +12,17 @@ export const getCommercialAccount = (id: string) => httpClient.get<CommercialAcc
 export type SubscriptionCharge = { id: string; amount: string; condition: string; paidAmount: string; outstandingAmount: string; dueDate: string; settlements: Array<{ amount: string; kind: string }> };
 export type ChargeList = { data: SubscriptionCharge[]; meta: { page: number; pageSize: number; total: number; totalPages: number } };
 export const listSubscriptionCharges = (commercialAccountId: string) => httpClient.get<ChargeList>('/platform/subscription-charges', { params: { commercialAccountId, page: 1, pageSize: 100 } }).then((response) => response.data);
+/** Loads the complete filtered collection for account summaries. Requests are bounded in batches. */
+export async function listAllSubscriptionCharges(commercialAccountId: string): Promise<SubscriptionCharge[]> {
+  const first = await listSubscriptionCharges(commercialAccountId);
+  const totalPages = first.meta.totalPages || 1;
+  const maxPages = 1000;
+  if (totalPages > maxPages) throw new Error('O histórico de cobranças excede o limite de consulta.');
+  const pages: SubscriptionCharge[] = [...first.data];
+  for (let start = 2; start <= totalPages; start += 10) {
+    const pageNumbers = Array.from({ length: Math.min(10, totalPages - start + 1) }, (_, index) => start + index);
+    const responses = await Promise.all(pageNumbers.map((page) => httpClient.get<ChargeList>('/platform/subscription-charges', { params: { commercialAccountId, page, pageSize: 100 } }).then((response) => response.data)));
+    responses.forEach((response) => pages.push(...response.data));
+  }
+  return pages;
+}
