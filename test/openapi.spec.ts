@@ -47,6 +47,8 @@ describe('OpenAPI structure', () => {
     expect(paths['/api/v1/platform/organizations/{id}/suspend']?.post).toBeDefined();
     expect(paths['/api/v1/platform/organizations/{id}/reactivate']?.post).toBeDefined();
     expect(paths['/api/v1/platform/plans']?.get).toBeDefined();
+    expect(paths['/api/v1/platform/commercial-accounts']?.get).toBeDefined();
+    expect(paths['/api/v1/platform/commercial-accounts/{id}']?.get).toBeDefined();
     expect(paths['/api/v1/platform/plans/{id}/versions/{versionId}/publish']?.post).toBeDefined();
     expect(Object.keys(paths).some((path) => path.includes('/payments'))).toBe(true);
     expect(schemas.ProblemDetails).toEqual(expect.objectContaining({ type: 'object' }));

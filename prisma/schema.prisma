@@ -122,14 +122,35 @@ model PlanVersion {
 // Minimal contract reference for protecting versions already used by a later
 // commercial module. It intentionally has no lifecycle or API in this scope.
 model Subscription {
-  id            String             @id @default(uuid()) @db.Uuid
-  planVersionId String             @db.Uuid
-  status        SubscriptionStatus @default(SCHEDULED)
-  createdAt     DateTime           @default(now()) @db.Timestamptz(3)
+  id                  String             @id @default(uuid()) @db.Uuid
+  commercialAccountId String?            @db.Uuid
+  planVersionId       String             @db.Uuid
+  status              SubscriptionStatus @default(SCHEDULED)
+  createdAt           DateTime           @default(now()) @db.Timestamptz(3)
 
-  planVersion PlanVersion @relation(fields: [planVersionId], references: [id], onDelete: Restrict)
+  commercialAccount CommercialAccount? @relation(fields: [commercialAccountId], references: [id], onDelete: Restrict)
+  planVersion       PlanVersion        @relation(fields: [planVersionId], references: [id], onDelete: Restrict)
 
   @@index([planVersionId, status])
+}
+
+model CommercialAccount {
+  id                           String   @id @default(uuid()) @db.Uuid
+  name                         String
+  billingEmail                 String?
+  billingDocument              String?
+  primaryContactOrganizationId String?  @db.Uuid
+  primaryContactUserId         String?  @db.Uuid
+  createdAt                    DateTime @default(now()) @db.Timestamptz(3)
+  updatedAt                    DateTime @updatedAt @db.Timestamptz(3)
+
+  organizations              Organization[]
+  subscriptions              Subscription[]
+  primaryContact             User?          @relation("CommercialAccountPrimaryContact", fields: [primaryContactOrganizationId, primaryContactUserId], references: [organizationId, id], onDelete: SetNull)
+  primaryContactOrganization Organization?  @relation("CommercialAccountPrimaryContactOrganization", fields: [id, primaryContactOrganizationId], references: [commercialAccountId, id], onDelete: Restrict)
+
+  @@index([name])
+  @@index([primaryContactUserId])
 }
 
 model User {
@@ -143,11 +164,13 @@ model User {
   createdAt      DateTime   @default(now()) @db.Timestamptz(3)
   updatedAt      DateTime   @updatedAt @db.Timestamptz(3)
 
-  sessions     Session[]
-  organization Organization? @relation(fields: [organizationId], references: [id], onDelete: Restrict)
-  actionTokens ActionToken[]
-  auditEvents  AuditEvent[]
+  sessions               Session[]
+  organization           Organization?       @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  actionTokens           ActionToken[]
+  auditEvents            AuditEvent[]
+  primaryContactAccounts CommercialAccount[] @relation("CommercialAccountPrimaryContact")
 
+  @@unique([organizationId, id])
   @@index([organizationId, status])
 }
 
@@ -191,6 +214,7 @@ model ActionToken {
 
 model Organization {
   id                  String                        @id @default(uuid()) @db.Uuid
+  commercialAccountId String?                       @db.Uuid
   name                String
   document            String?                       @unique
   phone               String?
@@ -206,19 +230,23 @@ model Organization {
   createdAt           DateTime                      @default(now()) @db.Timestamptz(3)
   updatedAt           DateTime                      @updatedAt @db.Timestamptz(3)
 
-  users          User[]
-  customers      Customer[]
-  vehicles       Vehicle[]
-  services       Service[]
-  products       Product[]
-  quotes         Quote[]
-  quoteItems     QuoteItem[]
-  workOrders     WorkOrder[]
-  workOrderItems WorkOrderItem[]
-  payments       Payment[]
-  stockMovements StockMovement[]
+  users                  User[]
+  customers              Customer[]
+  vehicles               Vehicle[]
+  services               Service[]
+  products               Product[]
+  quotes                 Quote[]
+  quoteItems             QuoteItem[]
+  workOrders             WorkOrder[]
+  workOrderItems         WorkOrderItem[]
+  payments               Payment[]
+  stockMovements         StockMovement[]
+  commercialAccount      CommercialAccount?  @relation(fields: [commercialAccountId], references: [id], onDelete: Restrict)
+  primaryContactAccounts CommercialAccount[] @relation("CommercialAccountPrimaryContactOrganization")
 
+  @@unique([commercialAccountId, id])
   @@index([operationalStatus])
+  @@index([commercialAccountId])
 }
 
 model Session {

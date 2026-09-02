@@ -128,6 +128,14 @@ export class AuthService {
       if (claimed.count !== 1) throw new UnauthorizedException('Activation token is invalid or expired');
       const activated = await tx.user.updateMany({ where: { id: action.userId, status: 'PENDING_ACTIVATION', organization: { operationalStatus: 'ACTIVE' } }, data: { passwordHash, status: 'ACTIVE' } });
       if (activated.count !== 1) throw new UnauthorizedException('Account cannot be activated');
+      const user = await tx.user.findUnique({ where: { id: action.userId }, select: { id: true, organizationId: true } });
+      if (user?.organizationId) {
+        const firstActiveAdmin = await tx.user.findFirst({ where: { organizationId: user.organizationId, role: 'ADMIN', status: 'ACTIVE' }, orderBy: [{ createdAt: 'asc' }, { id: 'asc' }], select: { id: true } });
+        await tx.commercialAccount.updateMany({
+          where: { organizations: { some: { id: user.organizationId } }, primaryContactUserId: null },
+          data: { primaryContactOrganizationId: user.organizationId, primaryContactUserId: firstActiveAdmin?.id },
+        });
+      }
     });
     return { success: true };
   }

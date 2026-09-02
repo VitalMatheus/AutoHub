@@ -119,7 +119,7 @@ async function main(): Promise<void> {
         city: 'Recife',
         state: 'PE',
         postalCode: '50000-000',
-        active: true,
+        operationalStatus: 'ACTIVE',
       },
       create: {
         id: DEVELOPMENT_ORGANIZATION_ID,
@@ -131,10 +131,20 @@ async function main(): Promise<void> {
         city: 'Recife',
         state: 'PE',
         postalCode: '50000-000',
-        active: true,
+        operationalStatus: 'ACTIVE',
       },
       select: { id: true },
     });
+
+    let commercialAccount = await tx.commercialAccount.findFirst({ where: { organizations: { some: { id: organization.id } } }, select: { id: true } });
+    if (!commercialAccount) {
+      commercialAccount = await tx.commercialAccount.create({ data: { name: organization.name, billingEmail: 'desenvolvimento@autohub.example', billingDocument: DEVELOPMENT_ORGANIZATION_DOCUMENT }, select: { id: true } });
+      await tx.organization.update({ where: { id: organization.id }, data: { commercialAccountId: commercialAccount.id } });
+    }
+    const basicVersion = await tx.planVersion.findFirst({ where: { plan: { name: 'AutoHub Básico' }, status: 'PUBLISHED' }, orderBy: { version: 'desc' }, select: { id: true } });
+    if (basicVersion && !(await tx.subscription.findFirst({ where: { commercialAccountId: commercialAccount.id } }))) {
+      await tx.subscription.create({ data: { commercialAccountId: commercialAccount.id, planVersionId: basicVersion.id } });
+    }
 
     const existingUser = await tx.user.findUnique({ where: { email }, select: { role: true, organizationId: true } });
     if (existingUser && (existingUser.role !== 'ADMIN' || existingUser.organizationId !== organization.id)) {

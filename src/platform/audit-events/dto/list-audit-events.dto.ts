@@ -14,6 +14,7 @@ export enum AuditTargetType {
 }
 
 export enum AuditAction {
+  COMMERCIAL_ACCOUNT_CREATED = 'commercial_account.created',
   ORGANIZATION_CREATED = 'organization.created', ORGANIZATION_UPDATED = 'organization.updated',
   ORGANIZATION_ACTIVATED = 'organization.activated', ORGANIZATION_DEACTIVATED = 'organization.deactivated', ORGANIZATION_SUSPENDED = 'organization.suspended', ORGANIZATION_REACTIVATED = 'organization.reactivated',
   USER_INVITATION_ISSUED = 'user.invitation_issued',
