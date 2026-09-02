@@ -7,6 +7,7 @@ import { AuditAction, AuditTargetType } from '../audit-events/dto/list-audit-eve
 import { CreateSubscriptionDto } from './dto/create-subscription.dto';
 import { ListSubscriptionsDto } from './dto/list-subscriptions.dto';
 import { RegularizeSubscriptionDto } from './dto/regularize-subscription.dto';
+import { addCivilDays, recifeCivilDate, recifeMidnight } from '../billing/civil-dates';
 
 const subscriptionSelect = {
   id: true, commercialAccountId: true, planVersionId: true, status: true, contractedPrice: true, contractedCurrency: true,
@@ -22,7 +23,7 @@ export function deriveSubscriptionConditions(subscription: {
   status: SubscriptionStatus; migratedAt: Date | null; regularizedAt: Date | null; trialEnabled?: boolean; trialStartsAt: Date | null; trialEndsAt: Date | null;
   firstPaymentReceivedAt: Date | null; cancellationRequestedAt: Date | null; effectiveCancellationAt: Date | null;
 }, asOf = new Date()) {
-  const trial = subscription.trialEnabled !== false && !!subscription.trialStartsAt && !!subscription.trialEndsAt && asOf >= subscription.trialStartsAt && asOf <= subscription.trialEndsAt && !subscription.effectiveCancellationAt;
+  const trial = subscription.trialEnabled !== false && !!subscription.trialStartsAt && !!subscription.trialEndsAt && asOf >= subscription.trialStartsAt && asOf < subscription.trialEndsAt && !subscription.effectiveCancellationAt;
   const pendingCommercialSetup = !!subscription.migratedAt && !subscription.regularizedAt;
   const awaitingFirstPayment = !pendingCommercialSetup && !subscription.firstPaymentReceivedAt && !trial && subscription.status !== 'ENDED' && !subscription.effectiveCancellationAt;
   return {
@@ -68,14 +69,21 @@ export class SubscriptionsService {
         if (!account) throw new NotFoundException('Commercial Account not found');
         if (!version) throw new NotFoundException('Plan Version not found');
         if (version.status !== 'PUBLISHED') throw new ConflictException('Only published Plan Versions can be contracted');
-        const startsAt = dto.trialStartsAt ? new Date(dto.trialStartsAt) : new Date();
+        const trialEnabled = dto.trialEnabled !== false;
+        const startsAt = dto.trialStartsAt ? new Date(dto.trialStartsAt) : null;
+        const startDate = startsAt ? recifeCivilDate(startsAt) : null;
+        const trialEndsAt = trialEnabled && startDate ? recifeMidnight(addCivilDays(startDate, 14)) : null;
         const subscription = await tx.subscription.create({ data: {
           commercialAccountId: account.id, planVersionId: version.id, contractedPrice: version.price, contractedCurrency: version.currency,
           contractedInterval: version.interval, contractedOrganizationLimit: version.organizationLimit, contractedUserLimit: version.userLimit,
           contractedWorkOrderLimit: version.workOrderLimit, contractedGracePeriodDays: version.gracePeriodDays,
-          status: dto.trialEnabled ? 'SCHEDULED' : 'CURRENT', commercialStartAt: startsAt,
-          trialStartsAt: dto.trialEnabled ? startsAt : null, trialEndsAt: dto.trialEnabled ? new Date(startsAt.getTime() + 14 * 86400000) : null,
+          status: trialEnabled ? 'SCHEDULED' : 'CURRENT', commercialStartAt: startsAt,
+          trialStartsAt: trialEnabled ? startsAt : null, trialEndsAt,
         }, select: subscriptionSelect });
+        if (!trialEnabled) {
+          const charge = await tx.subscriptionCharge.create({ data: { commercialAccountId: account.id, subscriptionId: subscription.id, amount: version.price, dueDate: recifeMidnight(startDate ?? recifeCivilDate(new Date())), nature: 'FIRST_PAYMENT' }, select: { id: true, dueDate: true } });
+          await this.auditEvents.record(tx, principal, { action: AuditAction.SUBSCRIPTION_CHARGE_CREATED, targetType: AuditTargetType.SUBSCRIPTION_CHARGE, targetId: charge.id, commercialAccountId: account.id, after: { nature: 'FIRST_PAYMENT', dueDate: charge.dueDate } });
+        }
         await this.auditEvents.record(tx, principal, { action: AuditAction.SUBSCRIPTION_CREATED, targetType: AuditTargetType.SUBSCRIPTION, targetId: subscription.id, commercialAccountId: account.id, after: present(subscription) });
         return present(subscription);
       });

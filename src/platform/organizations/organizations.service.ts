@@ -9,6 +9,7 @@ import type { AuthenticatedPrincipal } from '../../auth/authenticated-principal'
 import { AuditEventsService } from '../audit-events/audit-events.service';
 import { AuditAction, AuditTargetType } from '../audit-events/dto/list-audit-events.dto';
 import { OrganizationTransitionDto } from './dto/organization-transition.dto';
+import { recifeCivilDate, recifeMidnight } from '../billing/civil-dates';
 
 const organizationSelect = { id: true, name: true, document: true, phone: true, email: true, addressLine1: true, addressLine2: true, city: true, state: true, postalCode: true, operationalStatus: true, createdAt: true, updatedAt: true, commercialAccount: { select: { id: true, name: true, primaryContactUserId: true } } } as const;
 
@@ -59,6 +60,10 @@ export class OrganizationsService {
         await this.auditEvents.record(tx, principal, { action: AuditAction.ORGANIZATION_CREATED, targetType: AuditTargetType.ORGANIZATION, targetId: organization.id, organizationId: organization.id, after: { name: organization.name, operationalStatus: organization.operationalStatus, initialAdminId: admin.id, initialAdminName: admin.name, initialAdminEmail: admin.email } });
         await this.auditEvents.record(tx, principal, { action: AuditAction.USER_INVITATION_ISSUED, targetType: AuditTargetType.USER, targetId: admin.id, organizationId: organization.id, after: { name: admin.name, email: admin.email, role: admin.role, status: admin.status } });
         await this.auditEvents.record(tx, principal, { action: AuditAction.SUBSCRIPTION_CREATED, targetType: AuditTargetType.SUBSCRIPTION, targetId: subscription.id, commercialAccountId: commercialAccount.id, after: { planVersionId: subscription.planVersionId, status: subscription.status, trialEnabled: subscription.trialEnabled, trialStartsAt: subscription.trialStartsAt, trialEndsAt: subscription.trialEndsAt, contractedPrice: subscription.contractedPrice } });
+        if (dto.trialEnabled === false) {
+          const charge = await tx.subscriptionCharge.create({ data: { commercialAccountId: commercialAccount.id, subscriptionId: subscription.id, organizationId: organization.id, amount: version.price, dueDate: recifeMidnight(recifeCivilDate(new Date())), nature: 'FIRST_PAYMENT' }, select: { id: true, dueDate: true } });
+          await this.auditEvents.record(tx, principal, { action: AuditAction.SUBSCRIPTION_CHARGE_CREATED, targetType: AuditTargetType.SUBSCRIPTION_CHARGE, targetId: charge.id, commercialAccountId: commercialAccount.id, organizationId: organization.id, after: { nature: 'FIRST_PAYMENT', dueDate: charge.dueDate } });
+        }
         return {
           organization: { ...organization, commercialAccount: { ...organization.commercialAccount, primaryContactUserId: admin.id } },
           commercialAccount: { ...commercialAccount, primaryContactOrganizationId: organization.id, primaryContactUserId: admin.id },

@@ -12,10 +12,10 @@ describe('deriveSubscriptionConditions', () => {
     });
   });
 
-  it('includes both endpoints of the fourteen-day trial', () => {
+  it('keeps trial through day 14 and blocks at day 15 midnight', () => {
     const subscription = { ...base, trialStartsAt: new Date('2026-01-01T00:00:00Z'), trialEndsAt: new Date('2026-01-15T00:00:00Z') };
-    expect(deriveSubscriptionConditions(subscription, new Date('2026-01-15T00:00:00Z')).trial).toBe(true);
-    expect(deriveSubscriptionConditions(subscription, new Date('2026-01-15T00:00:01Z')).trial).toBe(false);
+    expect(deriveSubscriptionConditions(subscription, new Date('2026-01-14T23:59:59Z')).trial).toBe(true);
+    expect(deriveSubscriptionConditions(subscription, new Date('2026-01-15T00:00:00Z')).trial).toBe(false);
   });
 
   it('derives Awaiting First Payment and scheduled cancellation independently', () => {

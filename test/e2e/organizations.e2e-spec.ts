@@ -6,6 +6,7 @@ import * as argon2 from 'argon2';
 import { AppModule } from '../../src/app.module';
 import { configureApplication } from '../../src/bootstrap';
 import { PrismaService } from '../../src/prisma/prisma.service';
+import { addCivilDays, recifeCivilDate, recifeMidnight } from '../../src/platform/billing/civil-dates';
 
 describe('Platform Organizations and activation (e2e)', () => {
   let app: INestApplication;
@@ -41,7 +42,7 @@ describe('Platform Organizations and activation (e2e)', () => {
     await request(app.getHttpServer()).post('/api/v1/auth/activate').send({ token: response.body.activationToken, password: 'new secure password 123' }).expect(201);
     const activatedSubscription = await prisma.subscription.findFirst({ where: { commercialAccountId: account!.id } });
     expect(activatedSubscription).toEqual(expect.objectContaining({ status: 'CURRENT', trialEnabled: true, trialStartsAt: expect.any(Date), trialEndsAt: expect.any(Date) }));
-    expect(activatedSubscription!.trialEndsAt!.getTime() - activatedSubscription!.trialStartsAt!.getTime()).toBe(14 * 24 * 60 * 60 * 1000);
+    expect(activatedSubscription!.trialEndsAt).toEqual(recifeMidnight(addCivilDays(recifeCivilDate(activatedSubscription!.trialStartsAt!), 14)));
     await request(app.getHttpServer()).post('/api/v1/auth/activate').send({ token: response.body.activationToken, password: 'another secure password' }).expect(401);
     expect((await prisma.user.findUnique({ where: { email } }))!.status).toBe('ACTIVE');
     const auditEvents = await prisma.auditEvent.findMany({ where: { commercialAccountId: account!.id } });

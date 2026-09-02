@@ -7,6 +7,7 @@ import { createHash, randomBytes } from 'node:crypto';
 import { Prisma } from '@prisma/client';
 import type { AccessTokenPayload, AuthenticatedPrincipal } from './authenticated-principal';
 import { PRINCIPAL_SELECT } from './authenticated-principal';
+import { addCivilDays, recifeCivilDate, recifeMidnight } from '../platform/billing/civil-dates';
 
 export const INVALID_CREDENTIALS = 'Invalid email or password';
 const AUTHENTICATION_REQUIRED = 'Authentication required';
@@ -108,12 +109,25 @@ export class AuthService {
     const subscription = await this.prisma.subscription.findFirst({
       where: { commercialAccount: { organizations: { some: { id: organizationId } } }, status: { not: 'ENDED' } },
       orderBy: { createdAt: 'desc' },
-      select: { trialEnabled: true, trialStartsAt: true, trialEndsAt: true, firstPaymentReceivedAt: true, effectiveCancellationAt: true },
+      select: { trialEnabled: true, trialStartsAt: true, trialEndsAt: true, firstPaymentReceivedAt: true, effectiveCancellationAt: true, migratedAt: true, regularizedAt: true,
+        charges: { select: { nature: true, dueDate: true, amount: true, cancelledAt: true, settlements: { select: { amount: true } } } } },
     });
     if (!subscription) return true;
+    if (subscription.migratedAt && !subscription.regularizedAt) return true;
     const now = new Date();
-    const trial = subscription.trialEnabled && !!subscription.trialStartsAt && !!subscription.trialEndsAt && now >= subscription.trialStartsAt && now <= subscription.trialEndsAt && !subscription.effectiveCancellationAt;
-    return trial || (!!subscription.firstPaymentReceivedAt && !subscription.effectiveCancellationAt);
+    if (subscription.effectiveCancellationAt) return false;
+    const trial = subscription.trialEnabled && !!subscription.trialStartsAt && !!subscription.trialEndsAt && now >= subscription.trialStartsAt && now < subscription.trialEndsAt;
+    if (trial) return true;
+    if (!subscription.firstPaymentReceivedAt) return false;
+    const today = recifeCivilDate(now);
+    return !subscription.charges.some((charge) => {
+      if (charge.cancelledAt) return false;
+      const balance = charge.amount.sub(charge.settlements.reduce((sum, item) => sum.add(item.amount), new Prisma.Decimal(0)));
+      if (!balance.gt(0)) return false;
+      const due = charge.dueDate.toISOString().slice(0, 10);
+      const blockingDate = charge.nature === 'RENEWAL' ? addCivilDays(due, 6) : addCivilDays(due, 1);
+      return today >= blockingDate;
+    });
   }
 
   async logout(sessionId: string): Promise<void> {
@@ -148,8 +162,7 @@ export class AuthService {
           select: { id: true, trialEnabled: true, trialStartsAt: true, trialEndsAt: true },
         });
         if (subscription) {
-          const trialEndsAt = subscription.trialEndsAt ?? new Date(now);
-          if (subscription.trialEnabled && !subscription.trialStartsAt) trialEndsAt.setUTCDate(trialEndsAt.getUTCDate() + 14);
+          const trialEndsAt = subscription.trialEndsAt ?? recifeMidnight(addCivilDays(recifeCivilDate(now), 14));
           const startsInFuture = !!subscription.trialStartsAt && now < subscription.trialStartsAt;
           await tx.subscription.update({ where: { id: subscription.id }, data: {
             status: startsInFuture ? 'SCHEDULED' : 'CURRENT',

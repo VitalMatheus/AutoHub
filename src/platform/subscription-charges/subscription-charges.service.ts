@@ -4,6 +4,7 @@ import type { AuthenticatedPrincipal } from '../../auth/authenticated-principal'
 import { PrismaService } from '../../prisma/prisma.service';
 import { AuditEventsService } from '../audit-events/audit-events.service';
 import { AuditAction, AuditTargetType } from '../audit-events/dto/list-audit-events.dto';
+import { addCivilDays, addCivilMonths, recifeCivilDate, recifeMidnight } from '../billing/civil-dates';
 import { CreateChargeDto } from './dto/create-charge.dto';
 import { ListChargesDto, ChargeConditionDto } from './dto/list-charges.dto';
 import { UpdateChargeDto } from './dto/update-charge.dto';
@@ -24,6 +25,34 @@ function present(row: Row, asOf = new Date()) { const derived = deriveChargeCond
 @Injectable()
 export class SubscriptionChargesService {
   constructor(private readonly prisma: PrismaService, private readonly audit: AuditEventsService) {}
+
+  /** Daily command seam. It is deliberately never called from module startup. */
+  async reconcileFirstPayments(asOf = new Date()) {
+    const subscriptions = await this.prisma.subscription.findMany({
+      where: { status: { not: 'ENDED' }, trialEnabled: true, trialStartsAt: { not: null }, trialEndsAt: { not: null }, firstPaymentReceivedAt: null },
+      select: { id: true, commercialAccountId: true, contractedPrice: true, trialStartsAt: true },
+    });
+    const issueDate = recifeCivilDate(asOf);
+    const created: string[] = [];
+    for (const subscription of subscriptions) {
+      const trialStart = recifeCivilDate(subscription.trialStartsAt!);
+      if (issueDate < addCivilDays(trialStart, 9)) continue;
+      const dueDate = addCivilDays(trialStart, 13);
+      try {
+        await this.prisma.$transaction(async (tx) => {
+          const charge = await tx.subscriptionCharge.create({ data: {
+            commercialAccountId: subscription.commercialAccountId!, subscriptionId: subscription.id,
+            amount: subscription.contractedPrice, dueDate: recifeMidnight(dueDate), nature: 'FIRST_PAYMENT',
+          }, select: { id: true } });
+          await this.audit.record(tx, null, { action: AuditAction.SUBSCRIPTION_CHARGE_CREATED, targetType: AuditTargetType.SUBSCRIPTION_CHARGE, targetId: charge.id, commercialAccountId: subscription.commercialAccountId!, after: { nature: 'FIRST_PAYMENT', dueDate, system: true } });
+          created.push(charge.id);
+        });
+      } catch (error) {
+        if (!(error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002')) throw error;
+      }
+    }
+    return { created: created.length, chargeIds: created };
+  }
 
   async list(dto: ListChargesDto) {
     const where: Prisma.SubscriptionChargeWhereInput = { ...(dto.commercialAccountId?{commercialAccountId:dto.commercialAccountId}:{}), ...(dto.subscriptionId?{subscriptionId:dto.subscriptionId}:{}), ...(dto.organizationId?{organizationId:dto.organizationId}:{}), ...(dto.nature?{nature:dto.nature as SubscriptionChargeNature}:{}), ...(dto.dueFrom||dto.dueTo?{dueDate:{...(dto.dueFrom?{gte:new Date(dto.dueFrom)}:{}),...(dto.dueTo?{lte:new Date(dto.dueTo)}:{})}}:{}) };
@@ -86,6 +115,16 @@ export class SubscriptionChargesService {
       try {
         const settlement = await tx.chargeSettlement.create({ data: { chargeId: id, kind: ChargeSettlementKind.RECEIPT, amount, receivedAt, reason: dto.reason?.trim(), provider: dto.provider, externalId: dto.externalId }, select: { id: true } });
         const row = await tx.subscriptionCharge.findUniqueOrThrow({ where: { id }, select });
+        if (row.nature === SubscriptionChargeNature.FIRST_PAYMENT && deriveChargeCondition(row).condition === ChargeConditionDto.PAID) {
+          const paidDate = recifeCivilDate(receivedAt);
+          const trialEndDate = row.subscription?.id ? (await tx.subscription.findUnique({ where: { id: row.subscription.id }, select: { trialEndsAt: true, trialEnabled: true } })) : null;
+          const paidStartDate = trialEndDate?.trialEnabled && trialEndDate.trialEndsAt && receivedAt < trialEndDate.trialEndsAt
+            ? recifeCivilDate(trialEndDate.trialEndsAt) : paidDate;
+          await tx.subscription.update({ where: { id: row.subscription.id }, data: {
+            status: 'CURRENT', firstPaymentReceivedAt: receivedAt, firstPaidPeriodStartedAt: recifeMidnight(paidStartDate),
+            currentPeriodStart: recifeMidnight(paidStartDate), currentPeriodEnd: recifeMidnight(addCivilMonths(paidStartDate, 1)),
+          } });
+        }
         await this.audit.record(tx, principal, { action: AuditAction.CHARGE_SETTLEMENT_CREATED, targetType: AuditTargetType.CHARGE_SETTLEMENT, targetId: settlement.id, commercialAccountId: row.commercialAccountId, reason: dto.reason?.trim(), after: { amount: dto.amount, receivedAt: dto.receivedAt } });
         return present(row);
       } catch (e) { if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === 'P2002') throw new ConflictException('Settlement external identifier already exists'); throw e; }
