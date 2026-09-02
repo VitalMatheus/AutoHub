@@ -7,7 +7,7 @@ import { ApiError, getAccessToken, httpClient, setAccessToken } from '@/shared/a
 const principal = { id: 'user-1', name: 'Ana Admin', email: 'ana@example.com', role: 'ADMIN' as const, organizationId: 'org-1' };
 const superAdmin = { id: 'user-2', name: 'Sofia Platform', email: 'sofia@example.com', role: 'SUPER_ADMIN' as const, organizationId: null };
 const platformDashboard = { referenceAt: '2026-01-20T12:00:00.000Z', timezone: 'America/Recife', organizations: { total: 0, active: 0, inactive: 0, suspended: 0, commerciallyBlocked: 0 }, subscriptions: { trial: 0, paidCurrent: 0, awaitingFirstPayment: 0, delinquent: 0, effectivelyCancelled: 0, pendingCommercialSetup: 0 }, monthly: { newOrganizations: 0, newCommercialAccounts: 0, effectiveCancellations: 0, operationalDeactivations: 0 }, financial: { mrr: '0.00', receivedRevenue: '0.00', pendingRevenue: { upcoming: '0.00', overdue: '0.00', total: '0.00' } }, series: [] };
-function platformGet(url: string) { if (url.startsWith('/dashboard')) return Promise.resolve({ data: platformDashboard }); if (url.startsWith('/platform/audit-events')) return Promise.resolve({ data: { data: [] } }); return Promise.resolve({ data: superAdmin }); }
+function platformGet(url: string) { if (url.startsWith('/dashboard')) return Promise.resolve({ data: platformDashboard }); if (url.startsWith('/platform/audit-events')) return Promise.resolve({ data: { data: [] } }); if (url.startsWith('/platform/organizations')) return Promise.resolve({ data: { data: [], meta: { page: 1, pageSize: 20, total: 0, totalPages: 0 } } }); return Promise.resolve({ data: superAdmin }); }
 
 describe('Organization Admin frontend shell', () => {
   beforeEach(() => {
@@ -218,7 +218,7 @@ describe('Organization Admin frontend shell', () => {
     expect(await screen.findByRole('heading', { name: 'Painel da plataforma' })).toBeInTheDocument();
     expect(window.location.pathname).toBe('/platform/dashboard');
     await user.click(screen.getByRole('link', { name: 'Oficinas' }));
-    expect(await screen.findByRole('heading', { name: 'Oficinas', level: 2 })).toBeInTheDocument();
+    expect(await screen.findByRole('heading', { name: 'Organizations', level: 2 })).toBeInTheDocument();
     expect(screen.queryByRole('heading', { name: 'Clientes' })).not.toBeInTheDocument();
     expect(screen.queryByRole('heading', { name: 'Ordens de Serviço' })).not.toBeInTheDocument();
   });
