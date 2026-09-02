@@ -60,6 +60,13 @@ export function AppRouter() {
       <Route element={<ProtectedRoute allowedRoles={['SUPER_ADMIN']} />}>
         <Route path="/platform" element={<PlatformLayout />}>
           <Route index element={<PlatformHomePage />} />
+          <Route path="organizations" element={<FutureModulePage title="Organizations" />} />
+          <Route path="users" element={<FutureModulePage title="Users" />} />
+          <Route path="commercial-accounts" element={<FutureModulePage title="Commercial Accounts" />} />
+          <Route path="plans" element={<FutureModulePage title="Plans" />} />
+          <Route path="subscriptions" element={<FutureModulePage title="Subscriptions" />} />
+          <Route path="charges" element={<FutureModulePage title="Subscription Charges" />} />
+          <Route path="audit-events" element={<FutureModulePage title="Audit Events" />} />
         </Route>
       </Route>
       <Route path="*" element={<HomeRedirect />} />
