@@ -79,7 +79,7 @@ export class AuditEventsService {
     try {
       const parsed = JSON.parse(Buffer.from(value, 'base64url').toString('utf8')) as { occurredAt?: string; id?: string };
       const occurredAt = parsed.occurredAt ? new Date(parsed.occurredAt) : new Date('invalid');
-      if (!parsed.id || Number.isNaN(occurredAt.getTime())) throw new Error();
+      if (!parsed.id || !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(parsed.id) || Number.isNaN(occurredAt.getTime())) throw new Error();
       return { occurredAt, id: parsed.id };
     } catch { throw new BadRequestException('Invalid audit events cursor'); }
   }

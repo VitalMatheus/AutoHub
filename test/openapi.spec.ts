@@ -19,7 +19,14 @@ describe('OpenAPI structure', () => {
     expect(document.components?.securitySchemes?.bearer).toBeDefined();
     expect(paths['/api/v1/health']).toBeDefined();
     expect(paths['/api/v1/quotes/{id}/approve']).toBeDefined();
-    expect(paths['/api/v1/platform/audit-events']?.get).toBeDefined();
+    const auditEventsGet = paths['/api/v1/platform/audit-events']?.get;
+    expect(auditEventsGet).toBeDefined();
+    const parameterNames = auditEventsGet?.parameters?.flatMap((parameter) => 'name' in parameter ? [parameter.name] : []) ?? [];
+    expect(parameterNames).toEqual(expect.arrayContaining(['from', 'to', 'actor', 'action', 'targetType', 'target', 'cursor', 'pageSize']));
+    const auditResponse = auditEventsGet?.responses['200'];
+    const auditResponseContent = auditResponse && 'content' in auditResponse ? auditResponse.content : undefined;
+    expect(auditResponseContent?.['application/json']?.schema).toEqual({ $ref: '#/components/schemas/AuditEventsResponseDto' });
+    expect(schemas.AuditEventsResponseDto).toBeDefined();
     expect(Object.keys(paths).some((path) => path.includes('/payments'))).toBe(true);
     expect(schemas.ProblemDetails).toEqual(expect.objectContaining({ type: 'object' }));
     expect(schemas.DecimalString).toEqual(expect.objectContaining({ type: 'string', pattern: expect.any(String) }));
