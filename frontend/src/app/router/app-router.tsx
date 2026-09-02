@@ -59,7 +59,8 @@ export function AppRouter() {
       </Route>
       <Route element={<ProtectedRoute allowedRoles={['SUPER_ADMIN']} />}>
         <Route path="/platform" element={<PlatformLayout />}>
-          <Route index element={<PlatformHomePage />} />
+          <Route index element={<Navigate to="dashboard" replace />} />
+          <Route path="dashboard" element={<PlatformHomePage />} />
           <Route path="organizations" element={<FutureModulePage title="Organizations" />} />
           <Route path="users" element={<FutureModulePage title="Users" />} />
           <Route path="commercial-accounts" element={<FutureModulePage title="Commercial Accounts" />} />

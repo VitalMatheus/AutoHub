@@ -1,4 +1,4 @@
-import type { ReactNode } from 'react';
+import { useId, type ReactNode } from 'react';
 import { AlertCircle, CheckCircle2, Info, LoaderCircle } from 'lucide-react';
 import { getUserFacingError, type ProblemDetails } from '@/shared/api/http';
 
@@ -22,9 +22,11 @@ export function PlatformStatus({ status, tone = 'neutral' }: { status: string; t
 }
 
 export function PlatformConfirmation({ title, description, confirmLabel = 'Confirmar', onConfirm, onCancel }: { title: string; description: string; confirmLabel?: string; onConfirm: () => void; onCancel: () => void }) {
-  return <div role="dialog" aria-modal="true" aria-labelledby="platform-confirm-title" className="rounded-2xl border border-slate-200 bg-white p-6 shadow-xl"><h2 id="platform-confirm-title" className="text-lg font-semibold">{title}</h2><p className="mt-2 text-sm text-slate-600">{description}</p><div className="mt-6 flex justify-end gap-3"><button type="button" onClick={onCancel} className="rounded-lg border border-slate-300 px-4 py-2 text-sm font-medium">Cancelar</button><button type="button" onClick={onConfirm} className="rounded-lg bg-violet-600 px-4 py-2 text-sm font-medium text-white hover:bg-violet-700">{confirmLabel}</button></div></div>;
+  const titleId = useId();
+  return <div role="dialog" aria-modal="true" aria-labelledby={titleId} className="rounded-2xl border border-slate-200 bg-white p-6 shadow-xl"><h2 id={titleId} className="text-lg font-semibold">{title}</h2><p className="mt-2 text-sm text-slate-600">{description}</p><div className="mt-6 flex justify-end gap-3"><button type="button" onClick={onCancel} className="rounded-lg border border-slate-300 px-4 py-2 text-sm font-medium">Cancelar</button><button type="button" onClick={onConfirm} className="rounded-lg bg-violet-600 px-4 py-2 text-sm font-medium text-white hover:bg-violet-700">{confirmLabel}</button></div></div>;
 }
 
 export function PlatformSection({ title, children }: { title: string; children: ReactNode }) {
-  return <section aria-labelledby="platform-section-title" className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm"><h2 id="platform-section-title" className="text-lg font-semibold">{title}</h2><div className="mt-4">{children}</div></section>;
+  const titleId = useId();
+  return <section aria-labelledby={titleId} className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm"><h2 id={titleId} className="text-lg font-semibold">{title}</h2><div className="mt-4">{children}</div></section>;
 }

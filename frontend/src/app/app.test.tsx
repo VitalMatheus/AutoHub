@@ -203,6 +203,21 @@ describe('Organization Admin frontend shell', () => {
     expect(await screen.findByRole('heading', { name: 'Entrar na oficina' })).toBeInTheDocument();
   });
 
+  it('uses the canonical platform dashboard route and keeps platform navigation operational-data free', async () => {
+    const user = userEvent.setup();
+    window.history.pushState({}, '', '/platform');
+    const get = vi.spyOn(httpClient, 'get').mockResolvedValue({ data: superAdmin } as never);
+    vi.spyOn(httpClient, 'post').mockResolvedValue({ data: { accessToken: 'restored-token', expiresIn: 900, tokenType: 'Bearer' } } as never);
+
+    render(<AppProviders />);
+    expect(await screen.findByRole('heading', { name: 'Painel da plataforma' })).toBeInTheDocument();
+    expect(window.location.pathname).toBe('/platform/dashboard');
+    await user.click(screen.getByRole('link', { name: 'Organizations' }));
+    expect(await screen.findByRole('heading', { name: 'Organizations', level: 2 })).toBeInTheDocument();
+    expect(get).toHaveBeenCalledTimes(1);
+    expect(get).not.toHaveBeenCalledWith(expect.stringMatching(/customers|vehicles|quotes|work-orders|payments/));
+  });
+
   it('keeps the layout and module navigation persistent while marking the active route', async () => {
     const user = userEvent.setup();
     vi.spyOn(httpClient, 'post').mockResolvedValue({ data: { accessToken: 'restored-token', expiresIn: 900, tokenType: 'Bearer' } } as never);

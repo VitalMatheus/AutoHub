@@ -1,15 +1,17 @@
+import { formatMoney } from '@/features/shared/money';
+
 export function formatPlatformDate(value: string | Date): string {
-  return new Intl.DateTimeFormat('pt-BR', { dateStyle: 'medium', timeZone: 'America/Recife' }).format(new Date(value));
+  const parts = new Intl.DateTimeFormat('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric', timeZone: 'America/Recife' }).formatToParts(new Date(value));
+  const get = (type: string) => parts.find((part) => part.type === type)?.value ?? '';
+  return `${get('day')}/${get('month')}/${get('year')}`;
 }
 
 export function formatPlatformMoney(value: string): string {
-  const trimmed = value.trim();
-  const normalized = trimmed.includes(',') ? trimmed.replace(/\./g, '').replace(',', '.') : trimmed;
-  return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(Number(normalized));
+  return formatMoney(value);
 }
 
 const labels: Record<string, string> = {
   ACTIVE: 'Ativo', INACTIVE: 'Inativo', DISABLED: 'Desativado', PENDING: 'Pendente',
   PENDING_ACTIVATION: 'Aguardando ativação', DELINQUENT: 'Inadimplente', CANCELLED: 'Cancelado',
 };
-export function formatPlatformStatus(status: string): string { return labels[status] ?? status.replaceAll('_', ' ').toLowerCase(); }
+export function formatPlatformStatus(status: string): string { return labels[status] ?? `Desconhecido (${status})`; }
