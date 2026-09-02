@@ -9,19 +9,26 @@ import { httpClient } from '@/shared/api/http';
 describe('Dashboard', () => {
   beforeEach(() => vi.restoreAllMocks());
 
-  it('shows API counters and enabled quick actions', async () => {
-    vi.spyOn(httpClient, 'get').mockResolvedValue({ data: { customers: 8, openWorkOrders: 2, pendingQuotes: 5 } } as never);
+  it('shows the customer count and marks unsupported dashboard metrics and actions as unavailable', async () => {
+    vi.spyOn(httpClient, 'get').mockResolvedValue({ data: { customers: 8 } } as never);
     const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
 
     render(<QueryClientProvider client={queryClient}><MemoryRouter initialEntries={['/app/dashboard']}><AppHomePage /></MemoryRouter></QueryClientProvider>);
 
     expect(await screen.findByText('8')).toBeInTheDocument();
-    expect(screen.getByText('2')).toBeInTheDocument();
-    expect(screen.getByText('5')).toBeInTheDocument();
+    expect(screen.getByText('Clientes cadastrados')).toBeInTheDocument();
+    expect(screen.getByText('Veículos')).toBeInTheDocument();
+    expect(screen.getByText('Orçamentos')).toBeInTheDocument();
+    expect(screen.getByText('Ordens de serviço')).toBeInTheDocument();
+    expect(screen.getAllByText('—')).toHaveLength(3);
+    expect(screen.getAllByText('Indisponível no dashboard')).toHaveLength(3);
+    expect(screen.getAllByText('Em breve')).toHaveLength(3);
+    expect(screen.queryByRole('link', { name: /Novo veículo/ })).not.toBeInTheDocument();
+    expect(screen.queryByRole('link', { name: /Novo orçamento/ })).not.toBeInTheDocument();
+    expect(screen.queryByRole('link', { name: /Nova ordem de serviço/ })).not.toBeInTheDocument();
+    expect(screen.getAllByRole('button', { name: /Em breve/ })).toHaveLength(3);
+    expect(screen.getAllByRole('button', { name: /Em breve/ }).every((button) => button.hasAttribute('disabled'))).toBe(true);
     expect(screen.getByRole('link', { name: /Novo cliente/ })).toHaveAttribute('href', '/app/customers/new');
-    expect(screen.getByRole('link', { name: /Novo veículo/ })).toHaveAttribute('href', '/app/vehicles/new');
-    expect(screen.getByRole('link', { name: /Novo orçamento/ })).toHaveAttribute('href', '/app/quotes/new');
-    expect(screen.getByRole('link', { name: /Nova ordem de serviço/ })).toHaveAttribute('href', '/app/work-orders/new');
     expect(screen.getByText('As atividades serão exibidas quando houver dados disponíveis.')).toBeInTheDocument();
   });
 });
