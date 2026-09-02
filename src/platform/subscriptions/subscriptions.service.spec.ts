@@ -82,6 +82,16 @@ describe('subscription cancellation lifecycle', () => {
     expect(audit.record).toHaveBeenCalledTimes(2);
   });
 
+  it('derives the next monthly period for a paid migrated Subscription without an end date', async () => {
+    const initial = row({ currentPeriodEnd: null, trialEndsAt: null, firstPaidPeriodStartedAt: new Date('2099-01-31T03:00:00Z') });
+    const updated = row({ ...initial, cancellationRequestedAt: new Date(), effectiveCancellationAt: new Date('2099-02-28T03:00:00Z') });
+    const tx = { subscription: { findUnique: jest.fn().mockResolvedValue(initial), update: jest.fn().mockResolvedValue(updated) } };
+    const service = new SubscriptionsService({ $transaction: (cb: (arg: unknown) => unknown) => cb(tx) } as never, { record: jest.fn() } as never);
+
+    await expect(service.requestCancellation({} as never, 's', 'migrated account')).resolves.toBeDefined();
+    expect(tx.subscription.update).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ effectiveCancellationAt: new Date('2099-02-28T03:00:00Z') }) }));
+  });
+
   it('rejects undo after the effective date', async () => {
     const ended = row({ cancellationRequestedAt: new Date('2026-01-01'), effectiveCancellationAt: new Date('2026-01-02') });
     const tx = { subscription: { findUnique: jest.fn().mockResolvedValue(ended) } };

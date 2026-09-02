@@ -9,7 +9,7 @@ import { ListSubscriptionsDto } from './dto/list-subscriptions.dto';
 import { RegularizeSubscriptionDto } from './dto/regularize-subscription.dto';
 import { SchedulePlanChangeDto } from './dto/schedule-plan-change.dto';
 import { ScheduleRecurringAdjustmentDto } from './dto/schedule-recurring-adjustment.dto';
-import { addCivilDays, recifeCivilDate, recifeMidnight } from '../billing/civil-dates';
+import { addAnchoredCivilMonths, addCivilDays, recifeCivilDate, recifeMidnight } from '../billing/civil-dates';
 import { deriveCommercialAccess, AccessCharge } from '../billing/commercial-access';
 
 const subscriptionSelect = {
@@ -127,7 +127,11 @@ export class SubscriptionsService {
       if (!before) throw new NotFoundException('Subscription not found');
       if (before.status === 'ENDED' || before.effectiveCancellationAt) throw new ConflictException('Subscription is already cancelled');
       if (before.cancellationRequestedAt) return present(before);
-      const effectiveAt = before.currentPeriodEnd ?? before.trialEndsAt;
+      const effectiveAt = before.currentPeriodEnd
+        ?? before.trialEndsAt
+        ?? (before.firstPaidPeriodStartedAt
+          ? recifeMidnight(addAnchoredCivilMonths(recifeCivilDate(before.firstPaidPeriodStartedAt), 1))
+          : null);
       if (!effectiveAt || effectiveAt <= new Date()) throw new ConflictException('Subscription has no future period end for scheduled cancellation');
       const updated = await tx.subscription.update({ where: { id }, data: { cancellationRequestedAt: new Date(), effectiveCancellationAt: effectiveAt }, select: subscriptionSelect });
       await this.auditEvents.record(tx, principal, { action: AuditAction.SUBSCRIPTION_CANCELLATION_REQUESTED, targetType: AuditTargetType.SUBSCRIPTION, targetId: id, commercialAccountId: updated.commercialAccountId ?? undefined, reason: reason.trim(), before: present(before), after: present(updated) });
