@@ -40,6 +40,24 @@ describe('AuthService session rules', () => {
     await expect(service.refresh('expired')).rejects.toBeInstanceOf(UnauthorizedException);
   });
 
+  it('does not rotate a session when its user is no longer active', async () => {
+    const transaction = jest.fn();
+    const prisma = {
+      session: { findFirst: jest.fn().mockResolvedValueOnce({
+        id: 'session-1', userId: 'user-1', revokedAt: null,
+        expiresAt: new Date(Date.now() + 60_000),
+      }).mockResolvedValueOnce({ user: {
+        id: 'user-1', name: 'User', email: 'user@example.com', role: 'ADMIN',
+        organizationId: 'org-1', status: 'DISABLED', organization: { operationalStatus: 'ACTIVE' },
+      } }) },
+      $transaction: transaction,
+    } as never;
+    const service = new AuthService(prisma, jwt, config);
+
+    await expect(service.refresh('refresh-token')).rejects.toBeInstanceOf(UnauthorizedException);
+    expect(transaction).not.toHaveBeenCalled();
+  });
+
   it('revokes all sessions for an administrative operation', async () => {
     const updateMany = jest.fn().mockResolvedValue({ count: 2 });
     const prisma = { session: { updateMany } } as never;

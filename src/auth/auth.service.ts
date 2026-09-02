@@ -57,6 +57,11 @@ export class AuthService {
       throw new UnauthorizedException(AUTHENTICATION_REQUIRED);
     }
 
+    // Validate the account before consuming the current credential. A disabled
+    // user or organization must not lose a still-valid session as a side
+    // effect of an unauthorized refresh attempt.
+    const principal = await this.resolvePrincipal(session.userId, session.id);
+
     const nextRefreshToken = randomBytes(32).toString('base64url');
     const rotated = await this.prisma.$transaction(async (tx) => {
       const updated = await tx.session.updateMany({
@@ -73,7 +78,6 @@ export class AuthService {
     });
     if (!rotated) throw new UnauthorizedException(AUTHENTICATION_REQUIRED);
 
-    const principal = await this.resolvePrincipal(rotated.userId, session.id);
     return {
       accessToken: await this.issueAccessToken(principal.id, session.id),
       refreshToken: nextRefreshToken,

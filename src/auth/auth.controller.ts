@@ -8,8 +8,9 @@ import { LoginDto } from './dto/login.dto';
 import { ActivateDto } from './dto/activate.dto';
 import { JwtAuthGuard } from './guards/jwt-auth.guard';
 import type { AuthenticatedPrincipal } from './authenticated-principal';
-import { ApiBearerAuth, ApiCookieAuth, ApiTags } from '@nestjs/swagger';
+import { ApiBearerAuth, ApiCookieAuth, ApiOperation, ApiResponse, ApiTags } from '@nestjs/swagger';
 import { REFRESH_COOKIE_NAME } from './refresh-cookie';
+import { AuthenticatedPrincipalResponseDto, AuthTokensResponseDto, SuccessResponseDto } from './dto/auth-response.dto';
 
 type AuthenticatedRequest = Request & { user?: AuthenticatedPrincipal; sessionId?: string };
 
@@ -24,6 +25,11 @@ export class AuthController {
 
   @Post('login')
   @Throttle({ default: { limit: 5, ttl: 60_000 } })
+  @ApiOperation({ summary: 'Authenticate and establish a refresh session cookie.' })
+  @ApiResponse({ status: 201, type: AuthTokensResponseDto })
+  @ApiResponse({ status: 400, description: 'Invalid request.', content: { 'application/problem+json': { schema: { $ref: '#/components/schemas/ProblemDetails' } } } })
+  @ApiResponse({ status: 401, description: 'Invalid credentials.', content: { 'application/problem+json': { schema: { $ref: '#/components/schemas/ProblemDetails' } } } })
+  @ApiResponse({ status: 429, description: 'Too many requests.', content: { 'application/problem+json': { schema: { $ref: '#/components/schemas/ProblemDetails' } } } })
   async login(@Body() dto: LoginDto, @Res({ passthrough: true }) response: Response) {
     const { refreshToken, ...tokens } = await this.auth.login(dto.email, dto.password);
     response.cookie(REFRESH_COOKIE_NAME, refreshToken, this.cookieOptions());
@@ -33,6 +39,12 @@ export class AuthController {
   @Post('refresh')
   @Throttle({ default: { limit: 5, ttl: 60_000 } })
   @ApiCookieAuth('refreshCookie')
+  @ApiOperation({ summary: 'Rotate the HttpOnly refresh session cookie.' })
+  @ApiResponse({ status: 201, type: AuthTokensResponseDto })
+  @ApiResponse({ status: 400, description: 'Invalid request.', content: { 'application/problem+json': { schema: { $ref: '#/components/schemas/ProblemDetails' } } } })
+  @ApiResponse({ status: 401, description: 'Authentication required.', content: { 'application/problem+json': { schema: { $ref: '#/components/schemas/ProblemDetails' } } } })
+  @ApiResponse({ status: 403, description: 'Invalid request origin.', content: { 'application/problem+json': { schema: { $ref: '#/components/schemas/ProblemDetails' } } } })
+  @ApiResponse({ status: 429, description: 'Too many requests.', content: { 'application/problem+json': { schema: { $ref: '#/components/schemas/ProblemDetails' } } } })
   async refresh(@Req() request: AuthenticatedRequest, @Res({ passthrough: true }) response: Response) {
     this.assertAllowedCookieOrigin(request);
     const refreshToken = this.readRefreshCookie(request);
@@ -43,11 +55,18 @@ export class AuthController {
 
   @Post('activate')
   @Throttle({ default: { limit: 5, ttl: 60_000 } })
+  @ApiOperation({ summary: 'Activate an invited account.' })
+  @ApiResponse({ status: 201, type: SuccessResponseDto })
+  @ApiResponse({ status: 400, description: 'Invalid request.', content: { 'application/problem+json': { schema: { $ref: '#/components/schemas/ProblemDetails' } } } })
+  @ApiResponse({ status: 401, description: 'Invalid or expired activation token.', content: { 'application/problem+json': { schema: { $ref: '#/components/schemas/ProblemDetails' } } } })
+  @ApiResponse({ status: 429, description: 'Too many requests.', content: { 'application/problem+json': { schema: { $ref: '#/components/schemas/ProblemDetails' } } } })
   activate(@Body() dto: ActivateDto) { return this.auth.activate(dto.token, dto.password); }
 
   @UseGuards(JwtAuthGuard)
   @ApiBearerAuth()
   @Post('logout')
+  @ApiOperation({ summary: 'Revoke the current session and clear its refresh cookie.' })
+  @ApiResponse({ status: 201, type: SuccessResponseDto })
   async logout(@Req() request: AuthenticatedRequest, @Res({ passthrough: true }) response: Response) {
     if (this.hasRefreshCookie(request)) this.assertAllowedCookieOrigin(request);
     await this.auth.logout(request.sessionId!);
@@ -58,6 +77,8 @@ export class AuthController {
   @UseGuards(JwtAuthGuard)
   @ApiBearerAuth()
   @Get('me')
+  @ApiOperation({ summary: 'Return the authenticated principal.' })
+  @ApiResponse({ status: 200, type: AuthenticatedPrincipalResponseDto })
   me(@Req() request: AuthenticatedRequest) { return request.user; }
 
   private cookieOptions(): CookieOptions {
