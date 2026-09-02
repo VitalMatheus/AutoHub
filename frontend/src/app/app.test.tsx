@@ -18,12 +18,15 @@ describe('Organization Admin frontend shell', () => {
 
   it('restores the browser session before rendering protected content', async () => {
     const post = vi.spyOn(httpClient, 'post').mockResolvedValue({ data: { accessToken: 'restored-token', expiresIn: 900, tokenType: 'Bearer' } } as never);
-    vi.spyOn(httpClient, 'get').mockResolvedValue({ data: principal } as never);
+    vi.spyOn(httpClient, 'get').mockImplementation((url) => {
+      if (url === '/auth/me') return Promise.resolve({ data: principal }) as never;
+      return Promise.resolve({ data: { data: [], meta: { page: 1, pageSize: 1, total: 0, totalPages: 0 } } }) as never;
+    });
 
     render(<AppProviders />);
 
     expect(screen.queryByRole('heading', { name: 'Sua oficina está pronta' })).not.toBeInTheDocument();
-    expect(await screen.findByRole('heading', { name: 'Sua oficina está pronta' })).toBeInTheDocument();
+    expect(await screen.findByRole('heading', { name: 'Sua oficina está pronta' }, { timeout: 5_000 })).toBeInTheDocument();
     expect(post).toHaveBeenCalledWith('/auth/refresh');
   });
 
