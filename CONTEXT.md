@@ -16,6 +16,82 @@ _Avoid_: Owner, responsável, usuário comum
 Uma oficina mecânica que opera como unidade independente dentro da plataforma e é proprietária de seus dados.
 _Avoid_: Tenant, conta da oficina
 
+**Commercial Account**:
+Cliente contratante do AutoHub que reúne uma ou mais Organizations sob uma única relação comercial.
+_Avoid_: Organization, Tenant, oficina
+
+**Plan**:
+Oferta comercial do AutoHub que define preço, periodicidade, limites de uso e funcionalidades incluídas; alterações futuras não modificam as condições já contratadas.
+_Avoid_: pacote, assinatura
+
+**Plan Version**:
+Conjunto imutável e publicado de condições comerciais de um Plan disponível para novas contratações em determinado período.
+_Avoid_: edição do plano, Subscription
+
+**Subscription**:
+Relação comercial entre uma Commercial Account e um Plan, preservando as condições contratadas e seu período de vigência.
+_Avoid_: plano, oficina, cobrança
+
+**Contracted Price**:
+Valor recorrente preservado pela Subscription a partir da Plan Version e de eventual ajuste comercial recorrente.
+_Avoid_: preço atual do plano, desconto pontual
+
+**Monthly Closing**:
+Retrato das condições comerciais e operacionais no fim de um mês civil em America/Recife, usado nas séries históricas da plataforma.
+_Avoid_: média mensal, projeção
+
+**Subscription Charge**:
+Obrigação financeira de uma Subscription referente a um período contratado, com valor, vencimento e saldo devido.
+_Avoid_: Payment, mensalidade paga, recebimento
+
+**Charge Settlement**:
+Registro imutável de um valor recebido ou estornado para liquidar total ou parcialmente uma Subscription Charge.
+_Avoid_: Payment, cobrança, edição de recebimento
+
+**Delinquent Subscription**:
+Subscription que possui ao menos uma Subscription Charge vencida, não cancelada e ainda não integralmente liquidada.
+_Avoid_: assinatura suspensa, oficina inativa
+
+**Payment Grace Period**:
+Tolerância contratada após o vencimento de uma renovação durante a qual a Subscription está inadimplente, mas suas Organizations ainda podem operar.
+_Avoid_: Trial Period, prorrogação do vencimento
+
+**Commercial Access Restriction**:
+Condição derivada da Subscription e de suas Subscription Charges que permite o acesso, alerta sobre a tolerância ou bloqueia comercialmente todas as Organizations cobertas.
+_Avoid_: Organization operational status, suspensão administrativa
+
+**Effective Access**:
+Permissão resultante da combinação entre o Organization operational status e a Commercial Access Restriction, sem alterar nenhum dos dois estados de origem.
+_Avoid_: status da assinatura, papel do usuário
+
+**Effective Cancellation**:
+Encerramento da vigência de uma Subscription na data em que o cancelamento produz efeito, independentemente da data em que foi solicitado.
+_Avoid_: pedido de cancelamento, exclusão da oficina
+
+**Trial Period**:
+Período inicial opcional de 14 dias em que uma Subscription pode ser utilizada antes do primeiro período pago e sem contribuir para a receita recorrente.
+_Avoid_: plano gratuito, cortesia
+
+**Awaiting First Payment**:
+Condição após o Trial Period, ou desde uma contratação sem teste, em que a Subscription ainda não iniciou seu primeiro período pago e o acesso aguarda a liquidação integral da primeira Subscription Charge.
+_Avoid_: Trial Period, Payment Grace Period, assinatura cancelada
+
+**Pending Commercial Setup**:
+Condição temporária de uma Commercial Account migrada cujo início e condições de cobrança ainda precisam ser confirmados pelo Super Admin.
+_Avoid_: Trial Period, inadimplência, assinatura cancelada
+
+**Organization operational status**:
+Condição independente da relação comercial que determina se uma Organization está ativa, inativa ou temporariamente suspensa para uso da plataforma.
+_Avoid_: situação da assinatura, inadimplência
+
+**Primary Contact**:
+Organization Admin explicitamente indicado como contato comercial principal de uma Commercial Account, sem permissões adicionais.
+_Avoid_: proprietário, novo papel de usuário
+
+**Audit Event**:
+Registro imutável de uma ação administrativa relevante, identificando ator, momento, ação e entidade afetada sem armazenar segredos ou payloads irrestritos.
+_Avoid_: log técnico, histórico editável
+
 **Customer**:
 Pessoa ou empresa atendida por uma Organization e responsável por um ou mais Vehicles.
 _Avoid_: Client, proprietário
