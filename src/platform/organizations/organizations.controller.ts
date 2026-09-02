@@ -2,7 +2,7 @@ import { Body, Controller, Get, Param, ParseIntPipe, Patch, Post, Query, Req, Us
 import { ApiBearerAuth, ApiOperation, ApiResponse, ApiTags } from '@nestjs/swagger';
 import { JwtAuthGuard } from '../../auth/guards/jwt-auth.guard';
 import { SuperAdminGuard } from '../../common/guards/super-admin.guard';
-import { CreateOrganizationDto } from './dto/create-organization.dto';
+import { CreateOrganizationDto, CreateOrganizationResponseDto } from './dto/create-organization.dto';
 import { UpdateOrganizationDto } from './dto/update-organization.dto';
 import { OrganizationTransitionDto } from './dto/organization-transition.dto';
 import { OrganizationsService } from './organizations.service';
@@ -18,7 +18,8 @@ type AuthenticatedRequest = Request & { user?: AuthenticatedPrincipal };
 export class OrganizationsController {
   constructor(private readonly organizations: OrganizationsService) {}
 
-  @Post() create(@Req() request: AuthenticatedRequest, @Body() dto: CreateOrganizationDto) { return this.organizations.create(request.user!, dto); }
+  @Post() @ApiResponse({ status: 201, type: CreateOrganizationResponseDto })
+  create(@Req() request: AuthenticatedRequest, @Body() dto: CreateOrganizationDto) { return this.organizations.create(request.user!, dto); }
   @Get() list(@Query('page', new ParseIntPipe({ optional: true })) page?: number, @Query('pageSize', new ParseIntPipe({ optional: true })) pageSize?: number) { return this.organizations.list(page, pageSize); }
   @Get(':id') findOne(@Param('id') id: string) { return this.organizations.findOne(id); }
   @Patch(':id') update(@Req() request: AuthenticatedRequest, @Param('id') id: string, @Body() dto: UpdateOrganizationDto) { return this.organizations.update(request.user!, id, dto); }

@@ -1,7 +1,7 @@
 import { deriveSubscriptionConditions } from './subscriptions.service';
 
 const base = {
-  status: 'SCHEDULED' as const, migratedAt: null, regularizedAt: null, trialStartsAt: null, trialEndsAt: null,
+  status: 'SCHEDULED' as const, migratedAt: null, regularizedAt: null, trialEnabled: true, trialStartsAt: null, trialEndsAt: null,
   firstPaymentReceivedAt: null, cancellationRequestedAt: null, effectiveCancellationAt: null,
 };
 

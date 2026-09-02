@@ -1,4 +1,4 @@
-import { Injectable, UnauthorizedException } from '@nestjs/common';
+import { ForbiddenException, Injectable, UnauthorizedException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { JwtService } from '@nestjs/jwt';
 import { PrismaService } from '../prisma/prisma.service';
@@ -104,6 +104,18 @@ export class AuthService {
     };
   }
 
+  async hasCommercialAccess(organizationId: string): Promise<boolean> {
+    const subscription = await this.prisma.subscription.findFirst({
+      where: { commercialAccount: { organizations: { some: { id: organizationId } } }, status: { not: 'ENDED' } },
+      orderBy: { createdAt: 'desc' },
+      select: { trialEnabled: true, trialStartsAt: true, trialEndsAt: true, firstPaymentReceivedAt: true, effectiveCancellationAt: true },
+    });
+    if (!subscription) return true;
+    const now = new Date();
+    const trial = subscription.trialEnabled && !!subscription.trialStartsAt && !!subscription.trialEndsAt && now >= subscription.trialStartsAt && now <= subscription.trialEndsAt && !subscription.effectiveCancellationAt;
+    return trial || (!!subscription.firstPaymentReceivedAt && !subscription.effectiveCancellationAt);
+  }
+
   async logout(sessionId: string): Promise<void> {
     await this.prisma.session.updateMany({ where: { id: sessionId, revokedAt: null }, data: { revokedAt: new Date() } });
   }
@@ -128,13 +140,22 @@ export class AuthService {
       if (claimed.count !== 1) throw new UnauthorizedException('Activation token is invalid or expired');
       const activated = await tx.user.updateMany({ where: { id: action.userId, status: 'PENDING_ACTIVATION', organization: { operationalStatus: 'ACTIVE' } }, data: { passwordHash, status: 'ACTIVE' } });
       if (activated.count !== 1) throw new UnauthorizedException('Account cannot be activated');
-      const user = await tx.user.findUnique({ where: { id: action.userId }, select: { id: true, organizationId: true } });
-      if (user?.organizationId) {
-        const firstActiveAdmin = await tx.user.findFirst({ where: { organizationId: user.organizationId, role: 'ADMIN', status: 'ACTIVE' }, orderBy: [{ createdAt: 'asc' }, { id: 'asc' }], select: { id: true } });
-        await tx.commercialAccount.updateMany({
-          where: { organizations: { some: { id: user.organizationId } }, primaryContactUserId: null },
-          data: { primaryContactOrganizationId: user.organizationId, primaryContactUserId: firstActiveAdmin?.id },
+      const user = await tx.user.findUnique({ where: { id: action.userId }, select: { id: true, organizationId: true, organization: { select: { commercialAccountId: true } } } });
+      if (user?.organization?.commercialAccountId) {
+        const subscription = await tx.subscription.findFirst({
+          where: { commercialAccountId: user.organization.commercialAccountId, status: { not: 'ENDED' } },
+          orderBy: { createdAt: 'desc' },
+          select: { id: true, trialEnabled: true, trialStartsAt: true, trialEndsAt: true },
         });
+        if (subscription) {
+          const trialEndsAt = subscription.trialEndsAt ?? new Date(now);
+          if (subscription.trialEnabled && !subscription.trialStartsAt) trialEndsAt.setUTCDate(trialEndsAt.getUTCDate() + 14);
+          const startsInFuture = !!subscription.trialStartsAt && now < subscription.trialStartsAt;
+          await tx.subscription.update({ where: { id: subscription.id }, data: {
+            status: startsInFuture ? 'SCHEDULED' : 'CURRENT',
+            ...(subscription.trialEnabled && !subscription.trialStartsAt ? { trialStartsAt: now, trialEndsAt, commercialStartAt: now } : {}),
+          } });
+        }
       }
     });
     return { success: true };

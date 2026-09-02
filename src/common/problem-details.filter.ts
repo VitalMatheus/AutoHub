@@ -58,6 +58,7 @@ const SAFE_CODES = new Set([
   'WORK_ORDER_CANCELLED',
   'PAYMENT_EXCEEDS_BALANCE',
   'PAYMENT_ALREADY_CANCELLED',
+  'COMMERCIAL_ACCESS_BLOCKED',
   'INSUFFICIENT_STOCK',
   'ORGANIZATION_INVALID_TRANSITION',
 ]);
@@ -70,6 +71,7 @@ const SAFE_CODE_DETAILS: Record<string, string> = {
   WORK_ORDER_CANCELLED: 'Ordens de serviço canceladas não podem receber pagamentos.',
   PAYMENT_EXCEEDS_BALANCE: 'O pagamento excede o saldo da ordem de serviço.',
   PAYMENT_ALREADY_CANCELLED: 'O pagamento já está cancelado.',
+  COMMERCIAL_ACCESS_BLOCKED: 'O acesso comercial está bloqueado até a liquidação da primeira cobrança.',
   INSUFFICIENT_STOCK: 'Não há estoque suficiente para concluir a ordem de serviço.',
   ORGANIZATION_INVALID_TRANSITION: 'A transição operacional solicitada para a oficina não é permitida.',
 };

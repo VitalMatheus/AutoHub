@@ -1,5 +1,6 @@
-import { INestApplication } from '@nestjs/common';
+import { CanActivate, INestApplication } from '@nestjs/common';
 import { Test } from '@nestjs/testing';
+import { ThrottlerGuard } from '@nestjs/throttler';
 import request from 'supertest';
 import * as argon2 from 'argon2';
 import { AppModule } from '../../src/app.module';
@@ -13,7 +14,9 @@ describe('Platform Organizations and activation (e2e)', () => {
   const superPassword = 'correct horse battery staple';
 
   beforeAll(async () => {
-    const moduleRef = await Test.createTestingModule({ imports: [AppModule] }).compile();
+    const moduleRef = await Test.createTestingModule({ imports: [AppModule] })
+      .overrideGuard(ThrottlerGuard).useValue({ canActivate: () => true } satisfies CanActivate)
+      .compile();
     app = moduleRef.createNestApplication(); configureApplication(app); await app.init(); prisma = app.get(PrismaService);
     await prisma.user.create({ data: { name: 'Platform Operator', email: superEmail, role: 'SUPER_ADMIN', status: 'ACTIVE', passwordHash: await argon2.hash(superPassword, { type: argon2.argon2id }) } });
   });
@@ -28,13 +31,34 @@ describe('Platform Organizations and activation (e2e)', () => {
     expect(response.body.organization.name).toBe('Oficina Central');
     const admin = await prisma.user.findUnique({ where: { email } });
     expect(admin).toEqual(expect.objectContaining({ status: 'PENDING_ACTIVATION', role: 'ADMIN' }));
+    const account = await prisma.commercialAccount.findFirst({ where: { organizations: { some: { id: response.body.organization.id } } }, include: { subscriptions: true } });
+    expect(account?.primaryContactUserId).toBe(admin!.id);
+    expect(account?.subscriptions[0]).toEqual(expect.objectContaining({ trialEnabled: true, trialStartsAt: null, trialEndsAt: null }));
     const token = await prisma.actionToken.findFirst({ where: { userId: admin!.id } });
     expect(token).toEqual(expect.objectContaining({ usedAt: null }));
     expect(token!.tokenHash).not.toBe(response.body.activationToken);
 
     await request(app.getHttpServer()).post('/api/v1/auth/activate').send({ token: response.body.activationToken, password: 'new secure password 123' }).expect(201);
+    const activatedSubscription = await prisma.subscription.findFirst({ where: { commercialAccountId: account!.id } });
+    expect(activatedSubscription).toEqual(expect.objectContaining({ status: 'CURRENT', trialEnabled: true, trialStartsAt: expect.any(Date), trialEndsAt: expect.any(Date) }));
+    expect(activatedSubscription!.trialEndsAt!.getTime() - activatedSubscription!.trialStartsAt!.getTime()).toBe(14 * 24 * 60 * 60 * 1000);
     await request(app.getHttpServer()).post('/api/v1/auth/activate').send({ token: response.body.activationToken, password: 'another secure password' }).expect(401);
     expect((await prisma.user.findUnique({ where: { email } }))!.status).toBe('ACTIVE');
+    const auditEvents = await prisma.auditEvent.findMany({ where: { commercialAccountId: account!.id } });
+    expect(JSON.stringify(auditEvents)).not.toContain(response.body.activationToken);
+  });
+
+  it('allows disabling Trial but blocks operational access after activation', async () => {
+    const login = await request(app.getHttpServer()).post('/api/v1/auth/login').send({ email: superEmail, password: superPassword }).expect(201);
+    const email = `no-trial-admin-${Date.now()}@example.com`;
+    const response = await request(app.getHttpServer()).post('/api/v1/platform/organizations')
+      .set('Authorization', `Bearer ${login.body.accessToken}`)
+      .send({ name: 'No Trial Workshop', trialEnabled: false, admin: { name: 'No Trial Admin', email } }).expect(201);
+    await request(app.getHttpServer()).post('/api/v1/auth/activate').send({ token: response.body.activationToken, password: 'new secure password 123' }).expect(201);
+    const adminLogin = await request(app.getHttpServer()).post('/api/v1/auth/login').send({ email, password: 'new secure password 123' }).expect(201);
+    await request(app.getHttpServer()).get('/api/v1/auth/me').set('Authorization', `Bearer ${adminLogin.body.accessToken}`).expect(200);
+    await request(app.getHttpServer()).get('/api/v1/customers').set('Authorization', `Bearer ${adminLogin.body.accessToken}`).expect(403)
+      .expect(({ body }) => expect(body.code).toBe('COMMERCIAL_ACCESS_BLOCKED'));
   });
 
   it('returns 403 to an Organization Admin on platform endpoints', async () => {

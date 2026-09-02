@@ -12,17 +12,17 @@ const subscriptionSelect = {
   id: true, commercialAccountId: true, planVersionId: true, status: true, contractedPrice: true, contractedCurrency: true,
   contractedInterval: true, contractedOrganizationLimit: true, contractedUserLimit: true, contractedWorkOrderLimit: true,
   contractedGracePeriodDays: true, migratedAt: true, regularizedAt: true, regularizationReason: true, commercialStartAt: true,
-  firstPaymentReceivedAt: true, firstPaidPeriodStartedAt: true, trialStartsAt: true, trialEndsAt: true, currentPeriodStart: true,
+  firstPaymentReceivedAt: true, firstPaidPeriodStartedAt: true, trialEnabled: true, trialStartsAt: true, trialEndsAt: true, currentPeriodStart: true,
   currentPeriodEnd: true, cancellationRequestedAt: true, effectiveCancellationAt: true, createdAt: true,
   planVersion: { select: { id: true, version: true, plan: { select: { id: true, name: true } } } },
   commercialAccount: { select: { id: true, name: true } },
 } as const;
 
 export function deriveSubscriptionConditions(subscription: {
-  status: SubscriptionStatus; migratedAt: Date | null; regularizedAt: Date | null; trialStartsAt: Date | null; trialEndsAt: Date | null;
+  status: SubscriptionStatus; migratedAt: Date | null; regularizedAt: Date | null; trialEnabled?: boolean; trialStartsAt: Date | null; trialEndsAt: Date | null;
   firstPaymentReceivedAt: Date | null; cancellationRequestedAt: Date | null; effectiveCancellationAt: Date | null;
 }, asOf = new Date()) {
-  const trial = !!subscription.trialStartsAt && !!subscription.trialEndsAt && asOf >= subscription.trialStartsAt && asOf <= subscription.trialEndsAt && !subscription.effectiveCancellationAt;
+  const trial = subscription.trialEnabled !== false && !!subscription.trialStartsAt && !!subscription.trialEndsAt && asOf >= subscription.trialStartsAt && asOf <= subscription.trialEndsAt && !subscription.effectiveCancellationAt;
   const pendingCommercialSetup = !!subscription.migratedAt && !subscription.regularizedAt;
   const awaitingFirstPayment = !pendingCommercialSetup && !subscription.firstPaymentReceivedAt && !trial && subscription.status !== 'ENDED' && !subscription.effectiveCancellationAt;
   return {

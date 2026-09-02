@@ -137,6 +137,7 @@ model Subscription {
   regularizedAt              DateTime?          @db.Timestamptz(3)
   regularizationReason       String?
   commercialStartAt          DateTime?          @db.Timestamptz(3)
+  trialEnabled               Boolean             @default(true)
   trialStartsAt              DateTime?          @db.Timestamptz(3)
   trialEndsAt                DateTime?          @db.Timestamptz(3)
   firstPaidPeriodStartedAt   DateTime?          @db.Timestamptz(3)

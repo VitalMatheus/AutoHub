@@ -1,6 +1,8 @@
 import {
   CanActivate,
   ExecutionContext,
+  ForbiddenException,
+  HttpException,
   Injectable,
   UnauthorizedException,
 } from '@nestjs/common';
@@ -27,11 +29,16 @@ export class JwtAuthGuard implements CanActivate {
       const payload = await this.jwt.verifyAsync<AccessTokenPayload>(token);
       if (!payload.sub || !payload.sid) throw new UnauthorizedException('Authentication required');
       const principal = await this.auth.resolvePrincipal(payload.sub, payload.sid);
+      const commercialAccessExempt = new Set(['/api/v1/auth/me', '/api/v1/auth/logout', '/api/v1/account/access-status']);
+      if (principal.role === 'ADMIN' && principal.organizationId && !commercialAccessExempt.has(request.path)) {
+        const accessAllowed = await this.auth.hasCommercialAccess(principal.organizationId);
+        if (!accessAllowed) throw new ForbiddenException({ code: 'COMMERCIAL_ACCESS_BLOCKED', detail: 'Commercial access is blocked until the first Subscription Charge is settled.' });
+      }
       request.user = principal;
       request.sessionId = payload.sid;
       return true;
     } catch (error) {
-      if (error instanceof UnauthorizedException) throw error;
+      if (error instanceof UnauthorizedException || error instanceof HttpException) throw error;
       throw new UnauthorizedException('Authentication required');
     }
   }
