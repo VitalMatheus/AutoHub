@@ -38,6 +38,6 @@ describe('Dashboard', () => {
     vi.spyOn(httpClient, 'get').mockImplementation((url) => url === '/dashboard' ? Promise.resolve({ data: dashboard }) as never : Promise.resolve({ data: { data: [] } }) as never);
     const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
     render(<QueryClientProvider client={queryClient}><MemoryRouter><PlatformHomePage /></MemoryRouter></QueryClientProvider>);
-    expect(await screen.findAllByText('Mês de referência: 01/2026')).toHaveLength(2);
+    expect(await screen.findAllByText('Mês de referência: 01/2026')).toHaveLength(3);
   });
 });
