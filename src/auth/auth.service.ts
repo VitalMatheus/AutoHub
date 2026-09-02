@@ -126,15 +126,16 @@ export class AuthService {
 
   async hasCommercialAccess(organizationId: string): Promise<boolean> {
     const subscription = await this.prisma.subscription.findFirst({
-      where: { commercialAccount: { organizations: { some: { id: organizationId } } }, status: { not: 'ENDED' } },
+      where: { commercialAccount: { organizations: { some: { id: organizationId } } } },
       orderBy: { createdAt: 'desc' },
-      select: { trialEnabled: true, trialStartsAt: true, trialEndsAt: true, firstPaymentReceivedAt: true, effectiveCancellationAt: true, migratedAt: true, regularizedAt: true,
+      select: { status: true, trialEnabled: true, trialStartsAt: true, trialEndsAt: true, firstPaymentReceivedAt: true, effectiveCancellationAt: true, migratedAt: true, regularizedAt: true,
         charges: { select: { nature: true, dueDate: true, amount: true, cancelledAt: true, settlements: { select: { amount: true } } } } },
     });
     if (!subscription) return true;
-    if (subscription.migratedAt && !subscription.regularizedAt) return true;
+    if (subscription.status === 'ENDED') return false;
     const now = new Date();
-    if (subscription.effectiveCancellationAt) return false;
+    if (subscription.effectiveCancellationAt && now >= subscription.effectiveCancellationAt) return false;
+    if (subscription.migratedAt && !subscription.regularizedAt) return true;
     const trial = subscription.trialEnabled && !!subscription.trialStartsAt && !!subscription.trialEndsAt && now >= subscription.trialStartsAt && now < subscription.trialEndsAt;
     if (trial) return true;
     if (!subscription.firstPaymentReceivedAt) return false;
@@ -143,19 +144,23 @@ export class AuthService {
 
   async accessStatus(organizationId: string) {
     const subscription = await this.prisma.subscription.findFirst({
-      where: { commercialAccount: { organizations: { some: { id: organizationId } } }, status: { not: 'ENDED' } },
+      where: { commercialAccount: { organizations: { some: { id: organizationId } } } },
       orderBy: { createdAt: 'desc' },
-      select: { trialEnabled: true, trialStartsAt: true, trialEndsAt: true, firstPaymentReceivedAt: true,
+      select: { status: true, trialEnabled: true, trialStartsAt: true, trialEndsAt: true, firstPaymentReceivedAt: true,
         migratedAt: true, regularizedAt: true, effectiveCancellationAt: true,
         charges: { select: { nature: true, dueDate: true, amount: true, cancelledAt: true, settlements: { select: { amount: true } } } } },
     });
-    if (!subscription || (subscription.migratedAt && !subscription.regularizedAt)) {
+    if (!subscription) {
       return { commercialAccess: 'ACCESS_ALLOWED', nextDueDate: null, blockDate: null, remainingDays: null, instruction: 'Your account is available.' };
     }
+    if (subscription.status === 'ENDED') return { commercialAccess: 'PAYMENT_BLOCKED', nextDueDate: null, blockDate: null, remainingDays: 0, instruction: 'Your account has no active Subscription.' };
     const now = new Date();
+    const cancellationEffective = !!subscription.effectiveCancellationAt && now >= subscription.effectiveCancellationAt;
+    if (cancellationEffective) return { commercialAccess: 'PAYMENT_BLOCKED', nextDueDate: null, blockDate: subscription.effectiveCancellationAt!.toISOString().slice(0, 10), remainingDays: 0, instruction: 'Your Subscription has been cancelled.' };
+    if (subscription.migratedAt && !subscription.regularizedAt) return { commercialAccess: 'ACCESS_ALLOWED', nextDueDate: null, blockDate: null, remainingDays: null, instruction: 'Your account is available.' };
     const trial = subscription.trialEnabled && !!subscription.trialStartsAt && !!subscription.trialEndsAt && now >= subscription.trialStartsAt && now < subscription.trialEndsAt;
     const derivedAccess = deriveCommercialAccess(subscription.charges as AccessCharge[], now);
-    const access = trial ? 'ACCESS_ALLOWED' : !subscription.firstPaymentReceivedAt || subscription.effectiveCancellationAt ? 'PAYMENT_BLOCKED' : derivedAccess.commercialAccess;
+    const access = trial && !cancellationEffective ? 'ACCESS_ALLOWED' : !subscription.firstPaymentReceivedAt || cancellationEffective ? 'PAYMENT_BLOCKED' : derivedAccess.commercialAccess;
     const openCharges = subscription.charges.filter((charge) => charge.cancelledAt === null && chargeBalance(charge).gt(0));
     const due = openCharges.sort((a, b) => a.dueDate.getTime() - b.dueDate.getTime())[0];
     const block = due ? addCivilDays(due.dueDate.toISOString().slice(0, 10), due.nature === 'RENEWAL' ? 6 : 1) : null;

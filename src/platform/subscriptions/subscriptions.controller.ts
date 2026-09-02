@@ -5,6 +5,7 @@ import { SuperAdminGuard } from '../../common/guards/super-admin.guard';
 import type { AuthenticatedPrincipal } from '../../auth/authenticated-principal';
 import type { Request } from 'express';
 import { CreateSubscriptionDto } from './dto/create-subscription.dto';
+import { CancellationDto } from './dto/cancellation.dto';
 import { ListSubscriptionsDto } from './dto/list-subscriptions.dto';
 import { RegularizeSubscriptionDto } from './dto/regularize-subscription.dto';
 import { SchedulePlanChangeDto } from './dto/schedule-plan-change.dto';
@@ -28,4 +29,10 @@ export class SubscriptionsController {
   schedulePlanChange(@Req() req: AuthenticatedRequest, @Param('id') id: string, @Body() dto: SchedulePlanChangeDto) { return this.subscriptions.schedulePlanChange(req.user!, id, dto); }
   @Post(':id/recurring-price-adjustment') @ApiOperation({ summary: 'Schedule a future recurring price adjustment' }) @ApiResponse({ status: 201, description: 'Recurring price adjustment scheduled and audited.' }) @ApiNotFoundResponse() @ApiForbiddenResponse({ description: 'Super Admin access required.' })
   scheduleRecurringAdjustment(@Req() req: AuthenticatedRequest, @Param('id') id: string, @Body() dto: ScheduleRecurringAdjustmentDto) { return this.subscriptions.scheduleRecurringAdjustment(req.user!, id, dto); }
+  @Post(':id/cancel') @ApiOperation({ summary: 'Request cancellation at the end of the current period' }) @ApiResponse({ status: 201, description: 'Cancellation scheduled and audited.' }) @ApiUnauthorizedResponse() @ApiForbiddenResponse({ description: 'Super Admin access required.' }) @ApiNotFoundResponse()
+  requestCancellation(@Req() req: AuthenticatedRequest, @Param('id') id: string, @Body() dto: CancellationDto) { return this.subscriptions.requestCancellation(req.user!, id, dto.reason); }
+  @Post(':id/undo-cancellation') @ApiOperation({ summary: 'Undo a cancellation before it becomes effective' }) @ApiResponse({ status: 201, description: 'Cancellation undone and audited.' }) @ApiUnauthorizedResponse() @ApiForbiddenResponse({ description: 'Super Admin access required.' }) @ApiNotFoundResponse()
+  undoCancellation(@Req() req: AuthenticatedRequest, @Param('id') id: string, @Body() dto: CancellationDto) { return this.subscriptions.undoCancellation(req.user!, id, dto.reason); }
+  @Post(':id/cancel-immediately') @ApiOperation({ summary: 'Cancel a Subscription immediately' }) @ApiResponse({ status: 201, description: 'Subscription ended and audited.' }) @ApiUnauthorizedResponse() @ApiForbiddenResponse({ description: 'Super Admin access required.' }) @ApiNotFoundResponse()
+  cancelImmediately(@Req() req: AuthenticatedRequest, @Param('id') id: string, @Body() dto: CancellationDto) { return this.subscriptions.cancelImmediately(req.user!, id, dto.reason); }
 }

@@ -29,7 +29,8 @@ export class SubscriptionChargesService {
   /** Daily command seam. It is deliberately never called from module startup. */
   async reconcileFirstPayments(asOf = new Date()) {
     const subscriptions = await this.prisma.subscription.findMany({
-      where: { status: { not: 'ENDED' }, trialEnabled: true, trialStartsAt: { not: null }, trialEndsAt: { not: null }, firstPaymentReceivedAt: null },
+      where: { status: { not: 'ENDED' }, trialEnabled: true, trialStartsAt: { not: null }, trialEndsAt: { not: null }, firstPaymentReceivedAt: null,
+        OR: [{ effectiveCancellationAt: null }, { effectiveCancellationAt: { gt: asOf } }] },
       select: { id: true, commercialAccountId: true, contractedPrice: true, trialStartsAt: true },
     });
     const issueDate = recifeCivilDate(asOf);
@@ -73,6 +74,15 @@ export class SubscriptionChargesService {
     for (const subscription of subscriptions) {
       const anchor = recifeCivilDate(subscription.firstPaidPeriodStartedAt!);
       const cancellationDate = subscription.effectiveCancellationAt ? recifeCivilDate(subscription.effectiveCancellationAt) : null;
+      if (cancellationDate && cancellationDate <= today) {
+        await this.prisma.$transaction(async (tx) => {
+          const before = await tx.subscription.findUnique({ where: { id: subscription.id }, select: { status: true, effectiveCancellationAt: true, commercialAccountId: true } });
+          if (!before || before.status === 'ENDED') return;
+          const ended = await tx.subscription.update({ where: { id: subscription.id }, data: { status: 'ENDED' }, select: { status: true } });
+          await this.audit.record(tx, null, { action: AuditAction.SUBSCRIPTION_CANCELLED, targetType: AuditTargetType.SUBSCRIPTION, targetId: subscription.id, commercialAccountId: before.commercialAccountId!, reason: 'Effective Cancellation', before, after: ended });
+        });
+        continue;
+      }
       let offset = 0;
       while (true) {
         const periodStart = addAnchoredCivilMonths(anchor, offset);

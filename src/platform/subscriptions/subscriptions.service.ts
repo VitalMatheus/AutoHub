@@ -30,20 +30,21 @@ export function deriveSubscriptionConditions(subscription: {
   firstPaymentReceivedAt: Date | null; cancellationRequestedAt: Date | null; effectiveCancellationAt: Date | null;
   charges?: AccessCharge[];
 }, asOf = new Date()) {
-  const trial = subscription.trialEnabled !== false && !!subscription.trialStartsAt && !!subscription.trialEndsAt && asOf >= subscription.trialStartsAt && asOf < subscription.trialEndsAt && !subscription.effectiveCancellationAt;
-  const pendingCommercialSetup = !!subscription.migratedAt && !subscription.regularizedAt;
-  const awaitingFirstPayment = !pendingCommercialSetup && !subscription.firstPaymentReceivedAt && !trial && subscription.status !== 'ENDED' && !subscription.effectiveCancellationAt;
+  const cancellationEffective = !!subscription.effectiveCancellationAt && asOf >= subscription.effectiveCancellationAt;
+  const trial = subscription.trialEnabled !== false && !!subscription.trialStartsAt && !!subscription.trialEndsAt && asOf >= subscription.trialStartsAt && asOf < subscription.trialEndsAt && !cancellationEffective;
+  const pendingCommercialSetup = !!subscription.migratedAt && !subscription.regularizedAt && !cancellationEffective;
+  const awaitingFirstPayment = !pendingCommercialSetup && !subscription.firstPaymentReceivedAt && !trial && subscription.status !== 'ENDED' && !cancellationEffective;
   const payment = deriveCommercialAccess(subscription.charges ?? [], asOf);
-  const commercialAccess = pendingCommercialSetup || trial
+  const commercialAccess = cancellationEffective || subscription.status === 'ENDED' ? 'PAYMENT_BLOCKED' : pendingCommercialSetup || trial
     ? 'ACCESS_ALLOWED'
-    : !subscription.firstPaymentReceivedAt || subscription.effectiveCancellationAt
+    : !subscription.firstPaymentReceivedAt
       ? 'PAYMENT_BLOCKED'
       : payment.commercialAccess;
   return {
     pendingCommercialSetup, trial, awaitingFirstPayment, delinquent: payment.delinquent,
     paymentGracePeriod: payment.paymentGracePeriod,
-    scheduledCancellation: !!subscription.cancellationRequestedAt && !subscription.effectiveCancellationAt,
-    effectiveCancellation: !!subscription.effectiveCancellationAt || subscription.status === 'ENDED',
+    scheduledCancellation: !!subscription.cancellationRequestedAt && !cancellationEffective && subscription.status !== 'ENDED',
+    effectiveCancellation: cancellationEffective || subscription.status === 'ENDED',
     commercialAccess,
   } as const;
 }
@@ -83,7 +84,11 @@ export class SubscriptionsService {
         if (!account) throw new NotFoundException('Commercial Account not found');
         if (!version) throw new NotFoundException('Plan Version not found');
         if (version.status !== 'PUBLISHED') throw new ConflictException('Only published Plan Versions can be contracted');
-        const trialEnabled = dto.trialEnabled !== false;
+        await this.endDueCancellation(tx, account.id, principal);
+        const previous = await tx.subscription.findFirst({ where: { commercialAccountId: account.id }, orderBy: { createdAt: 'desc' }, select: { id: true, status: true } });
+        const hasEndedSubscription = previous?.status === 'ENDED';
+        const trialEnabled = dto.trialEnabled ?? !previous;
+        if (hasEndedSubscription && trialEnabled && !dto.trialExceptionReason?.trim()) throw new BadRequestException('A new Trial requires an explicit exception reason');
         const startsAt = dto.trialStartsAt ? new Date(dto.trialStartsAt) : null;
         const startDate = startsAt ? recifeCivilDate(startsAt) : null;
         const trialEndsAt = trialEnabled && startDate ? recifeMidnight(addCivilDays(startDate, 14)) : null;
@@ -98,13 +103,59 @@ export class SubscriptionsService {
           const charge = await tx.subscriptionCharge.create({ data: { commercialAccountId: account.id, subscriptionId: subscription.id, amount: version.price, dueDate: recifeMidnight(startDate ?? recifeCivilDate(new Date())), nature: 'FIRST_PAYMENT' }, select: { id: true, dueDate: true } });
           await this.auditEvents.record(tx, principal, { action: AuditAction.SUBSCRIPTION_CHARGE_CREATED, targetType: AuditTargetType.SUBSCRIPTION_CHARGE, targetId: charge.id, commercialAccountId: account.id, after: { nature: 'FIRST_PAYMENT', dueDate: charge.dueDate } });
         }
-        await this.auditEvents.record(tx, principal, { action: AuditAction.SUBSCRIPTION_CREATED, targetType: AuditTargetType.SUBSCRIPTION, targetId: subscription.id, commercialAccountId: account.id, after: present(subscription) });
+        await this.auditEvents.record(tx, principal, { action: AuditAction.SUBSCRIPTION_CREATED, targetType: AuditTargetType.SUBSCRIPTION, targetId: subscription.id, commercialAccountId: account.id, reason: dto.trialExceptionReason?.trim(), after: present(subscription) });
+        if (hasEndedSubscription && trialEnabled) await this.auditEvents.record(tx, principal, { action: AuditAction.SUBSCRIPTION_TRIAL_EXCEPTION_GRANTED, targetType: AuditTargetType.SUBSCRIPTION, targetId: subscription.id, commercialAccountId: account.id, reason: dto.trialExceptionReason!.trim(), after: { trialEnabled: true } });
         return present(subscription);
       });
     } catch (error) {
       if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002') throw new ConflictException('Commercial Account already has an open Subscription');
       throw error;
     }
+  }
+
+  private async endDueCancellation(tx: Prisma.TransactionClient, commercialAccountId: string, principal: AuthenticatedPrincipal | null, now = new Date()) {
+    const due = await tx.subscription.findMany({ where: { commercialAccountId, status: { not: 'ENDED' }, effectiveCancellationAt: { lte: now } }, select: subscriptionSelect });
+    for (const before of due) {
+      const updated = await tx.subscription.update({ where: { id: before.id }, data: { status: 'ENDED' }, select: subscriptionSelect });
+      await this.auditEvents.record(tx, principal, { action: AuditAction.SUBSCRIPTION_CANCELLED, targetType: AuditTargetType.SUBSCRIPTION, targetId: before.id, commercialAccountId, before: present(before), after: present(updated), reason: 'Effective Cancellation' });
+    }
+  }
+
+  async requestCancellation(principal: AuthenticatedPrincipal, id: string, reason: string) {
+    return this.prisma.$transaction(async (tx) => {
+      const before = await tx.subscription.findUnique({ where: { id }, select: subscriptionSelect });
+      if (!before) throw new NotFoundException('Subscription not found');
+      if (before.status === 'ENDED' || before.effectiveCancellationAt) throw new ConflictException('Subscription is already cancelled');
+      if (before.cancellationRequestedAt) return present(before);
+      const effectiveAt = before.currentPeriodEnd ?? before.trialEndsAt;
+      if (!effectiveAt || effectiveAt <= new Date()) throw new ConflictException('Subscription has no future period end for scheduled cancellation');
+      const updated = await tx.subscription.update({ where: { id }, data: { cancellationRequestedAt: new Date(), effectiveCancellationAt: effectiveAt }, select: subscriptionSelect });
+      await this.auditEvents.record(tx, principal, { action: AuditAction.SUBSCRIPTION_CANCELLATION_REQUESTED, targetType: AuditTargetType.SUBSCRIPTION, targetId: id, commercialAccountId: updated.commercialAccountId ?? undefined, reason: reason.trim(), before: present(before), after: present(updated) });
+      return present(updated);
+    });
+  }
+
+  async undoCancellation(principal: AuthenticatedPrincipal, id: string, reason: string) {
+    return this.prisma.$transaction(async (tx) => {
+      const before = await tx.subscription.findUnique({ where: { id }, select: subscriptionSelect });
+      if (!before) throw new NotFoundException('Subscription not found');
+      if (!before.cancellationRequestedAt || !before.effectiveCancellationAt || before.effectiveCancellationAt <= new Date() || before.status === 'ENDED') throw new ConflictException('Cancellation cannot be undone');
+      const updated = await tx.subscription.update({ where: { id }, data: { cancellationRequestedAt: null, effectiveCancellationAt: null }, select: subscriptionSelect });
+      await this.auditEvents.record(tx, principal, { action: AuditAction.SUBSCRIPTION_CANCELLATION_UNDONE, targetType: AuditTargetType.SUBSCRIPTION, targetId: id, commercialAccountId: updated.commercialAccountId ?? undefined, reason: reason.trim(), before: present(before), after: present(updated) });
+      return present(updated);
+    });
+  }
+
+  async cancelImmediately(principal: AuthenticatedPrincipal, id: string, reason: string) {
+    return this.prisma.$transaction(async (tx) => {
+      const before = await tx.subscription.findUnique({ where: { id }, select: subscriptionSelect });
+      if (!before) throw new NotFoundException('Subscription not found');
+      if (before.status === 'ENDED') return present(before);
+      const now = new Date();
+      const updated = await tx.subscription.update({ where: { id }, data: { status: 'ENDED', cancellationRequestedAt: before.cancellationRequestedAt ?? now, effectiveCancellationAt: now }, select: subscriptionSelect });
+      await this.auditEvents.record(tx, principal, { action: AuditAction.SUBSCRIPTION_CANCELLED, targetType: AuditTargetType.SUBSCRIPTION, targetId: id, commercialAccountId: updated.commercialAccountId ?? undefined, reason: reason.trim(), before: present(before), after: present(updated) });
+      return present(updated);
+    });
   }
 
   async regularize(principal: AuthenticatedPrincipal, id: string, dto: RegularizeSubscriptionDto) {
