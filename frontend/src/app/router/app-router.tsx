@@ -17,6 +17,7 @@ import { ReportsPage } from '@/features/reports/pages/reports-page';
 import { SettingsPage } from '@/features/settings/pages/settings-pages';
 import { CommercialAccountDetailPage, CommercialAccountsListPage } from '@/features/platform/pages/commercial-account-pages';
 import { OrganizationsListPage } from '@/features/platform/pages/organization-pages';
+import { SubscriptionDetailPage, SubscriptionsListPage } from '@/features/platform/pages/subscription-pages';
 
 function HomeRedirect() {
   const { principal, isAuthenticated, isRestoring } = useAuth();
@@ -66,7 +67,8 @@ export function AppRouter() {
           <Route path="organizations" element={<OrganizationsListPage />} />
           <Route path="commercial-accounts" element={<CommercialAccountsListPage />} />
           <Route path="commercial-accounts/:id" element={<CommercialAccountDetailPage />} />
-          <Route path="subscriptions" element={<FutureModulePage title="Assinaturas" />} />
+          <Route path="subscriptions" element={<SubscriptionsListPage />} />
+          <Route path="subscriptions/:id" element={<SubscriptionDetailPage />} />
           <Route path="charges" element={<FutureModulePage title="Cobranças" />} />
           <Route path="plans" element={<FutureModulePage title="Planos" />} />
           <Route path="audit-events" element={<FutureModulePage title="Auditoria" />} />
