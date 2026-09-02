@@ -52,6 +52,11 @@ describe('OpenAPI structure', () => {
     expect(organizationsGet?.parameters?.flatMap((parameter) => 'name' in parameter ? [parameter.name] : [])).toEqual(expect.arrayContaining(['search', 'operationalStatus', 'lifecycle', 'commercialAccess', 'sort', 'page', 'pageSize']));
     expect(paths['/api/v1/platform/organizations/{id}']?.get?.responses['200']).toEqual(expect.objectContaining({ content: { 'application/json': { schema: { $ref: '#/components/schemas/OrganizationResponseDto' } } } }));
     expect(paths['/api/v1/platform/plans']?.get).toBeDefined();
+    const dashboardGet = paths['/api/v1/dashboard']?.get;
+    expect(dashboardGet).toBeDefined();
+    expect(dashboardGet?.parameters?.flatMap((parameter) => 'name' in parameter ? [parameter.name] : [])).toEqual(expect.arrayContaining(['asOf', 'from', 'to']));
+    expect(dashboardGet?.responses['200']).toEqual(expect.objectContaining({ content: { 'application/json': { schema: { $ref: '#/components/schemas/DashboardResponseDto' } } } }));
+    expect(schemas.DashboardResponseDto).toBeDefined();
     expect(paths['/api/v1/platform/commercial-accounts']?.get).toBeDefined();
     expect(paths['/api/v1/platform/commercial-accounts/{id}']?.get).toBeDefined();
     expect(paths['/api/v1/platform/plans/{id}/versions/{versionId}/publish']?.post).toBeDefined();

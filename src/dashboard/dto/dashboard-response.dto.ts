@@ -36,6 +36,17 @@ class FinancialMetricsDto {
   @ApiProperty({ type: PendingRevenueDto }) pendingRevenue!: PendingRevenueDto;
 }
 
+class HistoricalMonthDto {
+  @ApiProperty({ example: '2026-01' }) month!: string;
+  @ApiProperty({ description: 'MRR at the civil month closing, or asOf for the current month.', example: '149.90' }) mrr!: string;
+  @ApiProperty({ example: 3 }) organizations!: number;
+  @ApiProperty({ description: 'Cash-basis receipts minus effective reversals.', example: '149.90' }) receivedRevenue!: string;
+  @ApiProperty() newOrganizations!: number;
+  @ApiProperty() newCommercialAccounts!: number;
+  @ApiProperty() effectiveCancellations!: number;
+  @ApiProperty() operationalDeactivations!: number;
+}
+
 export class DashboardResponseDto {
   @ApiProperty({ format: 'date-time' }) referenceAt!: string;
   @ApiProperty({ example: 'America/Recife' }) timezone!: string;
@@ -43,4 +54,5 @@ export class DashboardResponseDto {
   @ApiProperty({ type: SubscriptionMetricsDto }) subscriptions!: SubscriptionMetricsDto;
   @ApiProperty({ type: MonthlyMetricsDto }) monthly!: MonthlyMetricsDto;
   @ApiProperty({ type: FinancialMetricsDto }) financial!: FinancialMetricsDto;
+  @ApiProperty({ type: [HistoricalMonthDto] }) series!: HistoricalMonthDto[];
 }

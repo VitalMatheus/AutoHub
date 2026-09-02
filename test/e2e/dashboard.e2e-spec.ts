@@ -47,6 +47,13 @@ describe('Commercial Dashboard (e2e)', () => {
     const response = await request(app.getHttpServer()).get('/api/v1/dashboard').query({ asOf: '2026-01-20T12:00:00.000Z' }).set('Authorization', `Bearer ${superToken}`).expect(200);
     expect(response.body).toEqual(expect.objectContaining({ referenceAt: '2026-01-20T12:00:00.000Z', timezone: 'America/Recife', organizations: expect.any(Object), subscriptions: expect.any(Object), financial: expect.any(Object) }));
     expect(response.body.financial.mrr).toMatch(/^\d+\.\d{2}$/);
+    expect(response.body.series).toHaveLength(12);
+    expect(response.body.series[11]).toEqual(expect.objectContaining({ month: '2026-01', mrr: expect.stringMatching(/^\d+\.\d{2}$/), organizations: expect.any(Number), receivedRevenue: expect.stringMatching(/^\d+\.\d{2}$/) }));
+  });
+
+  it('accepts a bounded custom monthly interval', async () => {
+    const response = await request(app.getHttpServer()).get('/api/v1/dashboard').query({ asOf: '2026-01-20T12:00:00.000Z', from: '2025-11', to: '2026-01' }).set('Authorization', `Bearer ${superToken}`).expect(200);
+    expect(response.body.series.map((point: { month: string }) => point.month)).toEqual(['2025-11', '2025-12', '2026-01']);
   });
 
   it('rejects unauthenticated and Organization Admin requests', async () => {
