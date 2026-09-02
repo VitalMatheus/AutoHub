@@ -23,7 +23,10 @@ describe('Platform subscriptions', () => {
   it('renders detail current conditions and scheduled cancellation/change dates', async () => {
     vi.spyOn(httpClient, 'get').mockResolvedValue({ data: { ...subscription, conditions: { ...subscription.conditions, scheduledCancellation: true }, cancellationRequestedAt: '2026-09-01T03:00:00Z', effectiveCancellationAt: '2026-10-01T03:00:00Z' } } as never);
     render(<MemoryRouter initialEntries={['/platform/subscriptions/sub-1']}><QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}><Routes><Route path="/platform/subscriptions/:id" element={<SubscriptionDetailPage />} /></Routes></QueryClientProvider></MemoryRouter>);
-    expect(await screen.findByText('Condições atuais')).toBeInTheDocument();
+    const current = (await screen.findByText('Condições atuais')).closest('section');
+    expect(current).toBeTruthy();
+    expect(current).not.toHaveTextContent('Cancelamento agendado');
+    expect(screen.getByText('Alterações agendadas')).toBeInTheDocument();
     expect(screen.getByText('Cancelamento solicitado')).toBeInTheDocument();
     expect(screen.getByText('01/09/2026')).toBeInTheDocument();
     expect(screen.getAllByText('01/10/2026')).toHaveLength(2);
