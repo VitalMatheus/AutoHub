@@ -6,6 +6,8 @@ import { ApiError, getAccessToken, httpClient, setAccessToken } from '@/shared/a
 
 const principal = { id: 'user-1', name: 'Ana Admin', email: 'ana@example.com', role: 'ADMIN' as const, organizationId: 'org-1' };
 const superAdmin = { id: 'user-2', name: 'Sofia Platform', email: 'sofia@example.com', role: 'SUPER_ADMIN' as const, organizationId: null };
+const platformDashboard = { referenceAt: '2026-01-20T12:00:00.000Z', timezone: 'America/Recife', organizations: { total: 0, active: 0, inactive: 0, suspended: 0, commerciallyBlocked: 0 }, subscriptions: { trial: 0, paidCurrent: 0, awaitingFirstPayment: 0, delinquent: 0, effectivelyCancelled: 0, pendingCommercialSetup: 0 }, monthly: { newOrganizations: 0, newCommercialAccounts: 0, effectiveCancellations: 0, operationalDeactivations: 0 }, financial: { mrr: '0.00', receivedRevenue: '0.00', pendingRevenue: { upcoming: '0.00', overdue: '0.00', total: '0.00' } }, series: [] };
+function platformGet(url: string) { if (url.startsWith('/dashboard')) return Promise.resolve({ data: platformDashboard }); if (url.startsWith('/platform/audit-events')) return Promise.resolve({ data: { data: [] } }); return Promise.resolve({ data: superAdmin }); }
 
 describe('Organization Admin frontend shell', () => {
   beforeEach(() => {
@@ -162,7 +164,7 @@ describe('Organization Admin frontend shell', () => {
     vi.spyOn(httpClient, 'post').mockResolvedValue({ data: { accessToken: 'restored-token', expiresIn: 900, tokenType: 'Bearer' } } as never);
     vi.spyOn(httpClient, 'get').mockImplementation((url) => {
       if (/customers|vehicles|quotes|work-orders|payments/.test(url)) return Promise.reject(new Error('Operational API must not be requested')) as never;
-      return Promise.resolve({ data: superAdmin }) as never;
+      return platformGet(url) as never;
     });
 
     render(<AppProviders />);
@@ -186,7 +188,7 @@ describe('Organization Admin frontend shell', () => {
   it('redirects a Super Admin away from the organization area without rendering its content', async () => {
     window.history.pushState({}, '', '/app');
     vi.spyOn(httpClient, 'post').mockResolvedValue({ data: { accessToken: 'restored-token', expiresIn: 900, tokenType: 'Bearer' } } as never);
-    vi.spyOn(httpClient, 'get').mockResolvedValue({ data: superAdmin } as never);
+    vi.spyOn(httpClient, 'get').mockImplementation((url) => platformGet(url) as never);
 
     render(<AppProviders />);
 
@@ -197,7 +199,7 @@ describe('Organization Admin frontend shell', () => {
   it('lets a Super Admin sign out from the platform shell', async () => {
     const user = userEvent.setup();
     vi.spyOn(httpClient, 'post').mockResolvedValue({ data: { accessToken: 'restored-token', expiresIn: 900, tokenType: 'Bearer' } } as never);
-    vi.spyOn(httpClient, 'get').mockResolvedValue({ data: superAdmin } as never);
+    vi.spyOn(httpClient, 'get').mockImplementation((url) => platformGet(url) as never);
 
     render(<AppProviders />);
     await screen.findByRole('heading', { name: 'Painel da plataforma' });
@@ -209,7 +211,7 @@ describe('Organization Admin frontend shell', () => {
   it('uses the canonical platform dashboard route and keeps platform navigation operational-data free', async () => {
     const user = userEvent.setup();
     window.history.pushState({}, '', '/platform');
-    vi.spyOn(httpClient, 'get').mockResolvedValue({ data: superAdmin } as never);
+    vi.spyOn(httpClient, 'get').mockImplementation((url) => platformGet(url) as never);
     vi.spyOn(httpClient, 'post').mockResolvedValue({ data: { accessToken: 'restored-token', expiresIn: 900, tokenType: 'Bearer' } } as never);
 
     render(<AppProviders />);

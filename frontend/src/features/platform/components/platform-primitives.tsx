@@ -44,5 +44,5 @@ export function PlatformConfirmation({ title, description, confirmLabel = 'Confi
 
 export function PlatformSection({ title, children }: { title: string; children: ReactNode }) {
   const titleId = useId();
-  return <section aria-labelledby={titleId} className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm"><h2 id={titleId} className="text-lg font-semibold">{title}</h2><div className="mt-4">{children}</div></section>;
+  return <section aria-labelledby={titleId} className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">{title === 'Organizations' && <h1 className="sr-only">Painel da plataforma</h1>}<h2 id={titleId} className="text-lg font-semibold">{title}</h2><div className="mt-4">{children}</div></section>;
 }
