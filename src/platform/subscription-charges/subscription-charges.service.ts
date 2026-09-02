@@ -4,7 +4,7 @@ import type { AuthenticatedPrincipal } from '../../auth/authenticated-principal'
 import { PrismaService } from '../../prisma/prisma.service';
 import { AuditEventsService } from '../audit-events/audit-events.service';
 import { AuditAction, AuditTargetType } from '../audit-events/dto/list-audit-events.dto';
-import { addCivilDays, addCivilMonths, recifeCivilDate, recifeMidnight } from '../billing/civil-dates';
+import { addAnchoredCivilMonths, addCivilDays, addCivilMonths, recifeCivilDate, recifeMidnight } from '../billing/civil-dates';
 import { CreateChargeDto } from './dto/create-charge.dto';
 import { ListChargesDto, ChargeConditionDto } from './dto/list-charges.dto';
 import { UpdateChargeDto } from './dto/update-charge.dto';
@@ -52,6 +52,61 @@ export class SubscriptionChargesService {
       }
     }
     return { created: created.length, chargeIds: created };
+  }
+
+  /** Internal daily command seam. Safe to invoke repeatedly and concurrently. */
+  async reconcile(asOf = new Date()) {
+    const first = await this.reconcileFirstPayments(asOf);
+    const today = recifeCivilDate(asOf);
+    const subscriptions = await this.prisma.subscription.findMany({
+      where: {
+        status: 'CURRENT', firstPaymentReceivedAt: { not: null }, firstPaidPeriodStartedAt: { not: null },
+        commercialAccountId: { not: null },
+      },
+      select: {
+        id: true, commercialAccountId: true, contractedPrice: true, firstPaidPeriodStartedAt: true,
+        effectiveCancellationAt: true,
+      },
+    });
+    const chargeIds: string[] = [];
+
+    for (const subscription of subscriptions) {
+      const anchor = recifeCivilDate(subscription.firstPaidPeriodStartedAt!);
+      const cancellationDate = subscription.effectiveCancellationAt ? recifeCivilDate(subscription.effectiveCancellationAt) : null;
+      let offset = 0;
+      while (true) {
+        const periodStart = addAnchoredCivilMonths(anchor, offset);
+        const periodEnd = addAnchoredCivilMonths(anchor, offset + 1);
+        if (periodStart > today || (cancellationDate && periodStart >= cancellationDate)) break;
+        // The first paid period is covered by FIRST_PAYMENT and must not be
+        // represented a second time as a renewal.
+        if (offset > 0) {
+          try {
+            await this.prisma.$transaction(async (tx) => {
+              const charge = await tx.subscriptionCharge.create({
+                data: {
+                  commercialAccountId: subscription.commercialAccountId!, subscriptionId: subscription.id,
+                  amount: subscription.contractedPrice, dueDate: recifeMidnight(periodStart), nature: 'RENEWAL',
+                  billingPeriodStart: recifeMidnight(periodStart), billingPeriodEnd: recifeMidnight(periodEnd),
+                }, select: { id: true },
+              });
+              await this.audit.record(tx, null, {
+                action: AuditAction.SUBSCRIPTION_CHARGE_CREATED, targetType: AuditTargetType.SUBSCRIPTION_CHARGE,
+                targetId: charge.id, commercialAccountId: subscription.commercialAccountId!,
+                after: { nature: 'RENEWAL', billingPeriodStart: periodStart, billingPeriodEnd: periodEnd, system: true },
+              });
+              chargeIds.push(charge.id);
+            });
+          } catch (error) {
+            // The unique period constraint is the concurrency gate. A loser
+            // of the race has already achieved the desired state.
+            if (!(error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002')) throw error;
+          }
+        }
+        offset += 1;
+      }
+    }
+    return { created: first.created + chargeIds.length, chargeIds: [...first.chargeIds, ...chargeIds] };
   }
 
   async list(dto: ListChargesDto) {

@@ -8,6 +8,7 @@ import { CreateSubscriptionDto } from './dto/create-subscription.dto';
 import { ListSubscriptionsDto } from './dto/list-subscriptions.dto';
 import { RegularizeSubscriptionDto } from './dto/regularize-subscription.dto';
 import { addCivilDays, recifeCivilDate, recifeMidnight } from '../billing/civil-dates';
+import { deriveCommercialAccess, AccessCharge } from '../billing/commercial-access';
 
 const subscriptionSelect = {
   id: true, commercialAccountId: true, planVersionId: true, status: true, contractedPrice: true, contractedCurrency: true,
@@ -17,25 +18,34 @@ const subscriptionSelect = {
   currentPeriodEnd: true, cancellationRequestedAt: true, effectiveCancellationAt: true, createdAt: true,
   planVersion: { select: { id: true, version: true, plan: { select: { id: true, name: true } } } },
   commercialAccount: { select: { id: true, name: true } },
+  charges: { select: { nature: true, dueDate: true, amount: true, cancelledAt: true, settlements: { select: { amount: true } } } },
 } as const;
 
 export function deriveSubscriptionConditions(subscription: {
   status: SubscriptionStatus; migratedAt: Date | null; regularizedAt: Date | null; trialEnabled?: boolean; trialStartsAt: Date | null; trialEndsAt: Date | null;
   firstPaymentReceivedAt: Date | null; cancellationRequestedAt: Date | null; effectiveCancellationAt: Date | null;
+  charges?: AccessCharge[];
 }, asOf = new Date()) {
   const trial = subscription.trialEnabled !== false && !!subscription.trialStartsAt && !!subscription.trialEndsAt && asOf >= subscription.trialStartsAt && asOf < subscription.trialEndsAt && !subscription.effectiveCancellationAt;
   const pendingCommercialSetup = !!subscription.migratedAt && !subscription.regularizedAt;
   const awaitingFirstPayment = !pendingCommercialSetup && !subscription.firstPaymentReceivedAt && !trial && subscription.status !== 'ENDED' && !subscription.effectiveCancellationAt;
+  const payment = deriveCommercialAccess(subscription.charges ?? [], asOf);
+  const commercialAccess = pendingCommercialSetup || trial
+    ? 'ACCESS_ALLOWED'
+    : !subscription.firstPaymentReceivedAt || subscription.effectiveCancellationAt
+      ? 'PAYMENT_BLOCKED'
+      : payment.commercialAccess;
   return {
-    pendingCommercialSetup, trial, awaitingFirstPayment, delinquent: false,
+    pendingCommercialSetup, trial, awaitingFirstPayment, delinquent: payment.delinquent,
+    paymentGracePeriod: payment.paymentGracePeriod,
     scheduledCancellation: !!subscription.cancellationRequestedAt && !subscription.effectiveCancellationAt,
     effectiveCancellation: !!subscription.effectiveCancellationAt || subscription.status === 'ENDED',
-    commercialAccess: pendingCommercialSetup || trial || (!!subscription.firstPaymentReceivedAt && !subscription.effectiveCancellationAt) ? 'ACCESS_ALLOWED' : 'PAYMENT_BLOCKED',
+    commercialAccess,
   } as const;
 }
 
 function present(subscription: Prisma.SubscriptionGetPayload<{ select: typeof subscriptionSelect }>, asOf = new Date()) {
-  const { contractedPrice, ...rest } = subscription;
+  const { contractedPrice, charges: _charges, ...rest } = subscription;
   return { ...rest, contractedPrice: contractedPrice.toFixed(2), conditions: deriveSubscriptionConditions(subscription, asOf) };
 }
 

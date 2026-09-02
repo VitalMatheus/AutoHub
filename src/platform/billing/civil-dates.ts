@@ -24,4 +24,14 @@ export function addCivilMonths(date: string, months: number): string {
   return value.toISOString().slice(0, 10);
 }
 
+/** Return a monthly period boundary while retaining the original anchor day. */
+export function addAnchoredCivilMonths(anchorDate: string, months: number): string {
+  const anchor = new Date(`${anchorDate}T12:00:00Z`);
+  const anchorDay = anchor.getUTCDate();
+  const target = new Date(Date.UTC(anchor.getUTCFullYear(), anchor.getUTCMonth() + months, 1, 12));
+  const lastDay = new Date(Date.UTC(target.getUTCFullYear(), target.getUTCMonth() + 1, 0)).getUTCDate();
+  target.setUTCDate(Math.min(anchorDay, lastDay));
+  return target.toISOString().slice(0, 10);
+}
+
 export const RECIFE_TIME_ZONE = TIME_ZONE;

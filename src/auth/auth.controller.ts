@@ -11,8 +11,17 @@ import type { AuthenticatedPrincipal } from './authenticated-principal';
 import { ApiBearerAuth, ApiCookieAuth, ApiOperation, ApiResponse, ApiTags } from '@nestjs/swagger';
 import { REFRESH_COOKIE_NAME } from './refresh-cookie';
 import { AuthenticatedPrincipalResponseDto, AuthTokensResponseDto, SuccessResponseDto } from './dto/auth-response.dto';
+import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 
 type AuthenticatedRequest = Request & { user?: AuthenticatedPrincipal; sessionId?: string };
+
+class AccountAccessStatusDto {
+  @ApiProperty({ enum: ['ACCESS_ALLOWED', 'PAYMENT_GRACE_PERIOD', 'PAYMENT_BLOCKED'] }) commercialAccess!: string;
+  @ApiPropertyOptional({ nullable: true }) nextDueDate!: string | null;
+  @ApiPropertyOptional({ nullable: true }) blockDate!: string | null;
+  @ApiPropertyOptional({ nullable: true }) remainingDays!: number | null;
+  @ApiProperty() instruction!: string;
+}
 
 @Controller('auth')
 @ApiTags('Authentication')
@@ -122,5 +131,22 @@ export class AuthController {
     const origin = request.headers.origin;
     const allowedOrigins = this.config.getOrThrow<string>('CORS_ORIGINS').split(',').map((value) => value.trim());
     if (!origin || !allowedOrigins.includes(origin)) throw new ForbiddenException('Invalid request origin');
+  }
+}
+
+@Controller('account')
+@ApiTags('Account')
+export class AccountController {
+  constructor(private readonly auth: AuthService) {}
+
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth()
+  @Get('access-status')
+  @ApiOperation({ summary: 'Return the safe commercial access status for the current Organization.' })
+  @ApiResponse({ status: 200, type: AccountAccessStatusDto })
+  @ApiResponse({ status: 401, description: 'Authentication required.' })
+  accessStatus(@Req() request: AuthenticatedRequest) {
+    if (!request.user?.organizationId) return { commercialAccess: 'ACCESS_ALLOWED', nextDueDate: null, blockDate: null, remainingDays: null, instruction: 'Your account is available.' };
+    return this.auth.accessStatus(request.user.organizationId);
   }
 }

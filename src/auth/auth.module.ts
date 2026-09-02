@@ -2,7 +2,7 @@ import { Module } from '@nestjs/common';
 import { JwtModule } from '@nestjs/jwt';
 import { ConfigService } from '@nestjs/config';
 import type { JwtModuleOptions } from '@nestjs/jwt';
-import { AuthController } from './auth.controller';
+import { AccountController, AuthController } from './auth.controller';
 import { AuthService } from './auth.service';
 import { JwtAuthGuard } from './guards/jwt-auth.guard';
 
@@ -11,7 +11,7 @@ import { JwtAuthGuard } from './guards/jwt-auth.guard';
     secret: config.getOrThrow<string>('JWT_ACCESS_SECRET'),
     signOptions: { expiresIn: '15m' },
   }), inject: [ConfigService] })],
-  controllers: [AuthController],
+  controllers: [AuthController, AccountController],
   providers: [AuthService, JwtAuthGuard],
   exports: [AuthService, JwtAuthGuard, JwtModule],
 })

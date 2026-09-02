@@ -1,7 +1,8 @@
 import { Prisma } from '@prisma/client';
 import { ConflictException } from '@nestjs/common';
 import { deriveChargeCondition, SubscriptionChargesService } from './subscription-charges.service';
-import { addCivilDays, recifeCivilDate, recifeMidnight } from '../billing/civil-dates';
+import { addAnchoredCivilMonths, addCivilDays, recifeCivilDate, recifeMidnight } from '../billing/civil-dates';
+import { deriveCommercialAccess } from '../billing/commercial-access';
 
 describe('deriveChargeCondition', () => {
   const charge = { amount: new Prisma.Decimal('100.00'), dueDate: new Date('2026-09-02T00:00:00Z'), cancelledAt: null, settlements: [] };
@@ -24,6 +25,29 @@ describe('civil billing dates', () => {
     expect(recifeCivilDate(new Date('2026-01-15T03:00:00.000Z'))).toBe('2026-01-15');
     expect(addCivilDays('2026-01-01', 13)).toBe('2026-01-14');
     expect(recifeMidnight('2026-01-15').toISOString()).toBe('2026-01-15T03:00:00.000Z');
+  });
+
+  it('retains day 31 after a short February and resumes it when available', () => {
+    expect(addAnchoredCivilMonths('2026-01-31', 1)).toBe('2026-02-28');
+    expect(addAnchoredCivilMonths('2026-01-31', 2)).toBe('2026-03-31');
+    expect(addAnchoredCivilMonths('2026-01-31', 3)).toBe('2026-04-30');
+  });
+});
+
+describe('commercial access grace boundaries', () => {
+  const renewal = { nature: 'RENEWAL', amount: new Prisma.Decimal('79.00'), dueDate: new Date('2026-09-15T00:00:00Z'), cancelledAt: null, settlements: [] };
+
+  it.each([
+    ['due date', '2026-09-15T23:59:59Z', 'ACCESS_ALLOWED'],
+    ['first overdue day', '2026-09-16T03:00:00Z', 'PAYMENT_GRACE_PERIOD'],
+    ['last grace day', '2026-09-20T03:00:00Z', 'PAYMENT_GRACE_PERIOD'],
+    ['sixth day', '2026-09-21T03:00:00Z', 'PAYMENT_BLOCKED'],
+  ])('%s derives the expected access', (_label, instant, expected) => {
+    expect(deriveCommercialAccess([renewal], new Date(instant)).commercialAccess).toBe(expected);
+  });
+
+  it('does not unblock for a partial settlement', () => {
+    expect(deriveCommercialAccess([{ ...renewal, settlements: [{ amount: new Prisma.Decimal('78.99') }] }], new Date('2026-09-21T03:00:00Z')).commercialAccess).toBe('PAYMENT_BLOCKED');
   });
 });
 
@@ -56,10 +80,39 @@ describe('SubscriptionChargesService settlement rules', () => {
       subscription: { findMany: jest.fn().mockResolvedValue([{ id: 'sub', commercialAccountId: 'account', contractedPrice: new Prisma.Decimal('79.00'), trialStartsAt: new Date('2026-01-01T12:00:00Z') }]) },
       $transaction: jest.fn((callback: (value: unknown) => unknown) => callback(tx)),
     } as never;
-    const audit = { record: jest.fn() } as never;
-    const subject = new SubscriptionChargesService(prisma, audit);
+    const audit = { record: jest.fn() };
+    const subject = new SubscriptionChargesService(prisma, audit as never);
 
     await expect(subject.reconcileFirstPayments(new Date('2026-01-10T03:00:00.000Z'))).resolves.toMatchObject({ created: 1 });
     expect(create).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ nature: 'FIRST_PAYMENT', dueDate: new Date('2026-01-14T03:00:00.000Z') }) }));
+  });
+
+  it('creates missing anchored renewal periods and records SYSTEM audit events', async () => {
+    const creates: any[] = [];
+    const tx = { subscriptionCharge: { create: jest.fn(async ({ data }) => { creates.push(data); return { id: `charge-${creates.length}` }; }) } };
+    const prisma = {
+      subscription: {
+        findMany: jest.fn()
+          .mockResolvedValueOnce([])
+          .mockResolvedValueOnce([{ id: 'sub', commercialAccountId: 'account', contractedPrice: new Prisma.Decimal('79.00'), firstPaidPeriodStartedAt: new Date('2026-01-31T03:00:00Z'), effectiveCancellationAt: null }]),
+      },
+      $transaction: jest.fn((callback: (value: unknown) => unknown) => callback(tx)),
+    } as never;
+    const audit = { record: jest.fn() };
+    const subject = new SubscriptionChargesService(prisma, audit as never);
+
+    await expect(subject.reconcile(new Date('2026-04-15T03:00:00Z'))).resolves.toMatchObject({ created: 2 });
+    expect(creates.map((charge) => [charge.billingPeriodStart.toISOString().slice(0, 10), charge.billingPeriodEnd.toISOString().slice(0, 10)])).toEqual([
+      ['2026-02-28', '2026-03-31'], ['2026-03-31', '2026-04-30'],
+    ]);
+    expect(audit.record).toHaveBeenCalledWith(tx, null, expect.objectContaining({ after: expect.objectContaining({ system: true }) }));
+  });
+
+  it('treats a concurrent unique conflict as an idempotent success', async () => {
+    const conflict = new Prisma.PrismaClientKnownRequestError('unique', { code: 'P2002', clientVersion: 'test' });
+    const tx = { subscriptionCharge: { create: jest.fn().mockRejectedValue(conflict) } };
+    const prisma = { subscription: { findMany: jest.fn().mockResolvedValueOnce([]).mockResolvedValueOnce([{ id: 'sub', commercialAccountId: 'account', contractedPrice: new Prisma.Decimal('79.00'), firstPaidPeriodStartedAt: new Date('2026-01-01T03:00:00Z'), effectiveCancellationAt: null }]) }, $transaction: jest.fn((callback: (value: unknown) => unknown) => callback(tx)) } as never;
+    const subject = new SubscriptionChargesService(prisma, { record: jest.fn() } as never);
+    await expect(subject.reconcile(new Date('2026-02-02T03:00:00Z'))).resolves.toMatchObject({ created: 0, chargeIds: [] });
   });
 });

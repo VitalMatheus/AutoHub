@@ -4,10 +4,10 @@ import { JwtService } from '@nestjs/jwt';
 import { PrismaService } from '../prisma/prisma.service';
 import * as argon2 from 'argon2';
 import { createHash, randomBytes } from 'node:crypto';
-import { Prisma } from '@prisma/client';
 import type { AccessTokenPayload, AuthenticatedPrincipal } from './authenticated-principal';
 import { PRINCIPAL_SELECT } from './authenticated-principal';
 import { addCivilDays, recifeCivilDate, recifeMidnight } from '../platform/billing/civil-dates';
+import { deriveCommercialAccess, AccessCharge, chargeBalance } from '../platform/billing/commercial-access';
 
 export const INVALID_CREDENTIALS = 'Invalid email or password';
 const AUTHENTICATION_REQUIRED = 'Authentication required';
@@ -119,15 +119,30 @@ export class AuthService {
     const trial = subscription.trialEnabled && !!subscription.trialStartsAt && !!subscription.trialEndsAt && now >= subscription.trialStartsAt && now < subscription.trialEndsAt;
     if (trial) return true;
     if (!subscription.firstPaymentReceivedAt) return false;
-    const today = recifeCivilDate(now);
-    return !subscription.charges.some((charge) => {
-      if (charge.cancelledAt) return false;
-      const balance = charge.amount.sub(charge.settlements.reduce((sum, item) => sum.add(item.amount), new Prisma.Decimal(0)));
-      if (!balance.gt(0)) return false;
-      const due = charge.dueDate.toISOString().slice(0, 10);
-      const blockingDate = charge.nature === 'RENEWAL' ? addCivilDays(due, 6) : addCivilDays(due, 1);
-      return today >= blockingDate;
+    return deriveCommercialAccess(subscription.charges as AccessCharge[], now).commercialAccess !== 'PAYMENT_BLOCKED';
+  }
+
+  async accessStatus(organizationId: string) {
+    const subscription = await this.prisma.subscription.findFirst({
+      where: { commercialAccount: { organizations: { some: { id: organizationId } } }, status: { not: 'ENDED' } },
+      orderBy: { createdAt: 'desc' },
+      select: { trialEnabled: true, trialStartsAt: true, trialEndsAt: true, firstPaymentReceivedAt: true,
+        migratedAt: true, regularizedAt: true, effectiveCancellationAt: true,
+        charges: { select: { nature: true, dueDate: true, amount: true, cancelledAt: true, settlements: { select: { amount: true } } } } },
     });
+    if (!subscription || (subscription.migratedAt && !subscription.regularizedAt)) {
+      return { commercialAccess: 'ACCESS_ALLOWED', nextDueDate: null, blockDate: null, remainingDays: null, instruction: 'Your account is available.' };
+    }
+    const now = new Date();
+    const trial = subscription.trialEnabled && !!subscription.trialStartsAt && !!subscription.trialEndsAt && now >= subscription.trialStartsAt && now < subscription.trialEndsAt;
+    const derivedAccess = deriveCommercialAccess(subscription.charges as AccessCharge[], now);
+    const access = trial ? 'ACCESS_ALLOWED' : !subscription.firstPaymentReceivedAt || subscription.effectiveCancellationAt ? 'PAYMENT_BLOCKED' : derivedAccess.commercialAccess;
+    const openCharges = subscription.charges.filter((charge) => charge.cancelledAt === null && chargeBalance(charge).gt(0));
+    const due = openCharges.sort((a, b) => a.dueDate.getTime() - b.dueDate.getTime())[0];
+    const block = due ? addCivilDays(due.dueDate.toISOString().slice(0, 10), due.nature === 'RENEWAL' ? 6 : 1) : null;
+    const today = recifeCivilDate(now);
+    const remainingDays = block && block > today ? Math.round((Date.parse(`${block}T12:00:00Z`) - Date.parse(`${today}T12:00:00Z`)) / 86400000) : 0;
+    return { commercialAccess: access, nextDueDate: due ? due.dueDate.toISOString().slice(0, 10) : null, blockDate: block, remainingDays, instruction: access === 'PAYMENT_BLOCKED' ? 'Settle the outstanding Subscription Charge to restore access.' : 'Your account is available.' };
   }
 
   async logout(sessionId: string): Promise<void> {
