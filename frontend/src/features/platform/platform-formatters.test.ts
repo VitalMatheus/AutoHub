@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { formatPlatformDate, formatPlatformMoney, formatPlatformStatus } from './platform-formatters';
+import { formatPlatformDate, formatPlatformMoney, formatPlatformStatus, formatPlatformTimestamp } from './platform-formatters';
 
 describe('platform display conventions', () => {
   it('formats money without floating point arithmetic in the UI contract', () => {
@@ -9,6 +9,10 @@ describe('platform display conventions', () => {
 
   it('formats dates in the platform timezone', () => {
     expect(formatPlatformDate('2026-01-01T02:00:00.000Z')).toBe('31/12/2025');
+  });
+
+  it('formats timestamps in Recife time', () => {
+    expect(formatPlatformTimestamp('2026-01-01T02:05:00.000Z')).toBe('31/12/2025 23:05');
   });
 
   it('translates backend statuses for user-facing labels', () => {
