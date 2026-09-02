@@ -122,16 +122,36 @@ model PlanVersion {
 // Minimal contract reference for protecting versions already used by a later
 // commercial module. It intentionally has no lifecycle or API in this scope.
 model Subscription {
-  id                  String             @id @default(uuid()) @db.Uuid
-  commercialAccountId String?            @db.Uuid
-  planVersionId       String             @db.Uuid
-  status              SubscriptionStatus @default(SCHEDULED)
-  createdAt           DateTime           @default(now()) @db.Timestamptz(3)
+  id                         String             @id @default(uuid()) @db.Uuid
+  commercialAccountId        String?            @db.Uuid
+  planVersionId              String             @db.Uuid
+  status                     SubscriptionStatus @default(SCHEDULED)
+  contractedPrice            Decimal            @default(0) @db.Decimal(12, 2)
+  contractedCurrency         String             @default("BRL") @db.Char(3)
+  contractedInterval         BillingInterval   @default(MONTHLY)
+  contractedOrganizationLimit Int                @default(1)
+  contractedUserLimit        Int                @default(1)
+  contractedWorkOrderLimit   Int?
+  contractedGracePeriodDays  Int                @default(5)
+  migratedAt                 DateTime?          @db.Timestamptz(3)
+  regularizedAt              DateTime?          @db.Timestamptz(3)
+  regularizationReason       String?
+  commercialStartAt          DateTime?          @db.Timestamptz(3)
+  trialStartsAt              DateTime?          @db.Timestamptz(3)
+  trialEndsAt                DateTime?          @db.Timestamptz(3)
+  firstPaidPeriodStartedAt   DateTime?          @db.Timestamptz(3)
+  firstPaymentReceivedAt     DateTime?          @db.Timestamptz(3)
+  currentPeriodStart         DateTime?          @db.Timestamptz(3)
+  currentPeriodEnd           DateTime?          @db.Timestamptz(3)
+  cancellationRequestedAt    DateTime?          @db.Timestamptz(3)
+  effectiveCancellationAt    DateTime?          @db.Timestamptz(3)
+  createdAt                  DateTime           @default(now()) @db.Timestamptz(3)
 
   commercialAccount CommercialAccount? @relation(fields: [commercialAccountId], references: [id], onDelete: Restrict)
   planVersion       PlanVersion        @relation(fields: [planVersionId], references: [id], onDelete: Restrict)
 
   @@index([planVersionId, status])
+  @@index([commercialAccountId, status])
 }
 
 model CommercialAccount {

@@ -20,6 +20,7 @@ export enum AuditAction {
   USER_INVITATION_ISSUED = 'user.invitation_issued',
   PLAN_CREATED = 'plan.created', PLAN_UPDATED = 'plan.updated', PLAN_ARCHIVED = 'plan.archived',
   PLAN_VERSION_CREATED = 'plan_version.created', PLAN_VERSION_UPDATED = 'plan_version.updated', PLAN_VERSION_PUBLISHED = 'plan_version.published',
+  SUBSCRIPTION_CREATED = 'subscription.created', SUBSCRIPTION_MIGRATED_REGULARIZED = 'subscription.migrated_regularized',
 }
 
 export class ListAuditEventsDto {

@@ -28,7 +28,7 @@ export class OrganizationsService {
     const expiresDays = this.config.get<number>('ACTIVATION_TOKEN_TTL_DAYS') ?? 3;
     try {
       const result = await this.prisma.$transaction(async (tx) => {
-        const basicVersion = await tx.planVersion.findFirst({ where: { plan: { name: 'AutoHub Básico' }, status: 'PUBLISHED' }, orderBy: { version: 'desc' }, select: { id: true } });
+        const basicVersion = await tx.planVersion.findFirst({ where: { plan: { name: 'AutoHub Básico' }, status: 'PUBLISHED' }, orderBy: { version: 'desc' }, select: { id: true, price: true, currency: true, interval: true, organizationLimit: true, userLimit: true, workOrderLimit: true, gracePeriodDays: true } });
         if (!basicVersion) throw new BadRequestException('Basic Plan is not available');
         const commercialAccount = await tx.commercialAccount.create({ data: { name: dto.name.trim(), billingEmail: dto.email ? this.normalizeEmail(dto.email) : undefined, billingDocument: dto.document ? this.normalizeDocument(dto.document) : undefined } });
         const organization = await tx.organization.create({ data: {
@@ -40,7 +40,7 @@ export class OrganizationsService {
           organizationId: organization.id, name: adminName.trim(), email: this.normalizeEmail(adminEmail), role: 'ADMIN', status: 'PENDING_ACTIVATION',
         }, select: { id: true, name: true, email: true, role: true, status: true, organizationId: true } });
         await tx.actionToken.create({ data: { userId: admin.id, purpose: 'ACTIVATE_ACCOUNT', tokenHash: this.hashToken(activationToken), expiresAt: new Date(Date.now() + expiresDays * 86400000) } });
-        await tx.subscription.create({ data: { commercialAccountId: commercialAccount.id, planVersionId: basicVersion.id, status: 'SCHEDULED' } });
+        await tx.subscription.create({ data: { commercialAccountId: commercialAccount.id, planVersionId: basicVersion.id, status: 'SCHEDULED', contractedPrice: basicVersion.price, contractedCurrency: basicVersion.currency, contractedInterval: basicVersion.interval, contractedOrganizationLimit: basicVersion.organizationLimit, contractedUserLimit: basicVersion.userLimit, contractedWorkOrderLimit: basicVersion.workOrderLimit, contractedGracePeriodDays: basicVersion.gracePeriodDays } });
         await this.auditEvents.record(tx, principal, { action: AuditAction.COMMERCIAL_ACCOUNT_CREATED, targetType: AuditTargetType.COMMERCIAL_ACCOUNT, targetId: commercialAccount.id, commercialAccountId: commercialAccount.id, after: { name: commercialAccount.name, organizationId: organization.id, primaryContactId: null } });
         await this.auditEvents.record(tx, principal, { action: AuditAction.ORGANIZATION_CREATED, targetType: AuditTargetType.ORGANIZATION, targetId: organization.id, organizationId: organization.id, after: { name: organization.name, operationalStatus: organization.operationalStatus, initialAdminId: admin.id, initialAdminName: admin.name, initialAdminEmail: admin.email } });
         await this.auditEvents.record(tx, principal, { action: AuditAction.USER_INVITATION_ISSUED, targetType: AuditTargetType.USER, targetId: admin.id, organizationId: organization.id, after: { name: admin.name, email: admin.email, role: admin.role, status: admin.status } });

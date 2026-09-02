@@ -8,7 +8,7 @@ const accountSelect = {
   primaryContactOrganizationId: true, primaryContactUserId: true, createdAt: true, updatedAt: true,
   primaryContact: { select: { id: true, name: true, email: true, role: true, status: true, organizationId: true } },
   organizations: { select: { id: true, name: true, operationalStatus: true, createdAt: true }, orderBy: { createdAt: 'asc' as const } },
-  subscriptions: { orderBy: { createdAt: 'desc' as const }, take: 1, select: { id: true, status: true, createdAt: true, planVersion: { select: { id: true, version: true, price: true, currency: true, interval: true, plan: { select: { id: true, name: true } } } } } },
+  subscriptions: { orderBy: { createdAt: 'desc' as const }, take: 1, select: { id: true, status: true, createdAt: true, migratedAt: true, regularizedAt: true, contractedPrice: true, contractedCurrency: true, contractedInterval: true, contractedOrganizationLimit: true, contractedUserLimit: true, contractedWorkOrderLimit: true, contractedGracePeriodDays: true, planVersion: { select: { id: true, version: true, plan: { select: { id: true, name: true } } } } } },
 } as const;
 
 function present(account: Prisma.CommercialAccountGetPayload<{ select: typeof accountSelect }>) {
@@ -20,7 +20,7 @@ function present(account: Prisma.CommercialAccountGetPayload<{ select: typeof ac
     ...account,
     primaryContact: validContact,
     missingPrimaryContact: validContact === null,
-    subscriptions: subscription ? [{ ...subscription, planVersion: { ...subscription.planVersion, price: subscription.planVersion.price.toFixed(2) } }] : [],
+    subscriptions: subscription ? [{ ...subscription, contractedPrice: subscription.contractedPrice.toFixed(2) }] : [],
   };
 }
 

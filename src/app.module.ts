@@ -19,6 +19,7 @@ import { DashboardModule } from './dashboard/dashboard.module';
 import { AuditEventsModule } from './platform/audit-events/audit-events.module';
 import { PlansModule } from './platform/plans/plans.module';
 import { CommercialAccountsModule } from './platform/commercial-accounts/commercial-accounts.module';
+import { SubscriptionsModule } from './platform/subscriptions/subscriptions.module';
 
 @Module({
   imports: [
@@ -44,6 +45,7 @@ import { CommercialAccountsModule } from './platform/commercial-accounts/commerc
     AuditEventsModule,
     PlansModule,
     CommercialAccountsModule,
+    SubscriptionsModule,
   ],
   providers: [SecurityLogger],
   exports: [SecurityLogger],
