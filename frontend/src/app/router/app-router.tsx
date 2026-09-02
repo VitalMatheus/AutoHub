@@ -16,6 +16,7 @@ import { EditServicePage, NewServicePage, ServiceDetailPage, ServicesListPage } 
 import { ReportsPage } from '@/features/reports/pages/reports-page';
 import { SettingsPage } from '@/features/settings/pages/settings-pages';
 import { CommercialAccountDetailPage, CommercialAccountsListPage } from '@/features/platform/pages/commercial-account-pages';
+import { OrganizationsListPage } from '@/features/platform/pages/organization-pages';
 
 function HomeRedirect() {
   const { principal, isAuthenticated, isRestoring } = useAuth();
@@ -62,7 +63,7 @@ export function AppRouter() {
         <Route path="/platform" element={<PlatformLayout />}>
           <Route index element={<Navigate to="dashboard" replace />} />
           <Route path="dashboard" element={<PlatformHomePage />} />
-          <Route path="organizations" element={<FutureModulePage title="Oficinas" />} />
+          <Route path="organizations" element={<OrganizationsListPage />} />
           <Route path="commercial-accounts" element={<CommercialAccountsListPage />} />
           <Route path="commercial-accounts/:id" element={<CommercialAccountDetailPage />} />
           <Route path="subscriptions" element={<FutureModulePage title="Assinaturas" />} />
