@@ -6,3 +6,16 @@ export type SubscriptionParams = { commercialAccountId?: string; status?: string
 export type SubscriptionList = { data: Subscription[]; meta: { page: number; pageSize: number; total: number; totalPages: number } };
 export const listSubscriptions = (params: SubscriptionParams) => httpClient.get<SubscriptionList>('/platform/subscriptions', { params }).then((response) => response.data);
 export const getSubscription = (id: string) => httpClient.get<Subscription>(`/platform/subscriptions/${id}`).then((response) => response.data);
+
+export type RegularizeSubscriptionInput = { commercialStartAt: string; firstPaymentReceivedAt?: string; reason: string };
+export type SchedulePlanChangeInput = { planVersionId: string; effectiveAt: string; reason: string };
+export type ScheduleRecurringAdjustmentInput = { amount: string; effectiveAt: string; reason: string };
+export type CancellationInput = { reason: string };
+
+const postSubscriptionAction = <T>(id: string, action: string, input: T) => httpClient.post<Subscription>(`/platform/subscriptions/${id}/${action}`, input).then((response) => response.data);
+export const regularizeSubscription = (id: string, input: RegularizeSubscriptionInput) => postSubscriptionAction(id, 'regularize', input);
+export const schedulePlanChange = (id: string, input: SchedulePlanChangeInput) => postSubscriptionAction(id, 'plan-change', input);
+export const scheduleRecurringAdjustment = (id: string, input: ScheduleRecurringAdjustmentInput) => postSubscriptionAction(id, 'recurring-price-adjustment', input);
+export const requestSubscriptionCancellation = (id: string, input: CancellationInput) => postSubscriptionAction(id, 'cancel', input);
+export const undoSubscriptionCancellation = (id: string, input: CancellationInput) => postSubscriptionAction(id, 'undo-cancellation', input);
+export const cancelSubscriptionImmediately = (id: string, input: CancellationInput) => postSubscriptionAction(id, 'cancel-immediately', input);
