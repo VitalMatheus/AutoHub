@@ -6,7 +6,6 @@ import { ProtectedRoute } from '@/features/auth/components/protected-route';
 import { LoginPage } from '@/features/auth/pages/login-page';
 import { PlatformHomePage } from '../pages/platform-home-page';
 import { useAuth, getHomePath } from '@/features/auth/auth-context';
-import { FutureModulePage } from '../pages/future-module-page';
 import { NewQuotePage, QuoteDetailPage, QuotesListPage } from '@/features/quotes/pages/quote-pages';
 import { NewWorkOrderPage, WorkOrderDetailPage, WorkOrdersListPage } from '@/features/work-orders/pages/work-order-pages';
 import { CustomerDetailPage, CustomersListPage, EditCustomerPage, NewCustomerPage } from '@/features/customers/pages/customer-pages';
@@ -22,6 +21,7 @@ import { NewSubscriptionChargePage, SubscriptionChargeDetailPage, SubscriptionCh
 import { PlanDetailPage, PlansListPage } from '@/features/platform/pages/plan-pages';
 import { AuditEventsPage } from '@/features/platform/pages/audit-event-pages';
 import { ProvisionCommercialAccountPage } from '@/features/platform/pages/provision-commercial-account-pages';
+import { FinanceIndexPage, FinancePage } from '@/features/finance/pages/finance-page';
 
 function HomeRedirect() {
   const { principal, isAuthenticated, isRestoring } = useAuth();
@@ -59,7 +59,8 @@ export function AppRouter() {
           <Route path="services/new" element={<NewServicePage />} />
           <Route path="services/:id/edit" element={<EditServicePage />} />
           <Route path="services/:id" element={<ServiceDetailPage />} />
-          <Route path="finance" element={<FutureModulePage title="Financeiro" />} />
+          <Route path="finance" element={<FinanceIndexPage />} />
+          <Route path="finance/work-orders/:workOrderId" element={<FinancePage />} />
           <Route path="reports" element={<ReportsPage />} />
           <Route path="settings" element={<SettingsPage />} />
         </Route>

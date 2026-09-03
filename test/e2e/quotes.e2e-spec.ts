@@ -50,6 +50,35 @@ describe('Quotes (e2e)', () => {
       .resolves.toMatchObject({ nextQuoteNumber: amount + 2 });
   });
 
+  it('lists only tenant Quotes and filters every supported status', async () => {
+    const statuses = ['DRAFT', 'PENDING', 'APPROVED', 'REJECTED', 'CANCELLED'] as const;
+    const tenantQuotes = await Promise.all(statuses.map((status, index) => prisma.quote.create({
+      data: { organizationId, customerId, vehicleId, number: 2000 + index, status },
+    })));
+    const otherCustomer = await prisma.customer.create({ data: { organizationId: otherOrganizationId, name: 'List other', phone: '444' } });
+    const otherVehicle = await prisma.vehicle.create({ data: { organizationId: otherOrganizationId, customerId: otherCustomer.id, plate: `L${suffix}`, brand: 'Honda', model: 'Fit' } });
+    const otherQuote = await prisma.quote.create({ data: { organizationId: otherOrganizationId, customerId: otherCustomer.id, vehicleId: otherVehicle.id, number: 2000, status: 'APPROVED' } });
+
+    const all = await request(app.getHttpServer())
+      .get('/api/v1/quotes?page=1&pageSize=100')
+      .set('Authorization', `Bearer ${token}`)
+      .expect(200);
+    expect(all.body.data.map(({ id }: { id: string }) => id)).toEqual(expect.arrayContaining(tenantQuotes.map(({ id }) => id)));
+    expect(all.body.data.map(({ id }: { id: string }) => id)).not.toContain(otherQuote.id);
+
+    for (const [index, status] of statuses.entries()) {
+      const filtered = await request(app.getHttpServer())
+        .get(`/api/v1/quotes?page=1&pageSize=100&status=${status}`)
+        .set('Authorization', `Bearer ${token}`)
+        .expect(200);
+      expect(filtered.body.data).toEqual(expect.arrayContaining([
+        expect.objectContaining({ id: tenantQuotes[index].id, status }),
+      ]));
+      expect(filtered.body.data.every((quote: { status: string }) => quote.status === status)).toBe(true);
+      expect(filtered.body.data.map(({ id }: { id: string }) => id)).not.toContain(otherQuote.id);
+    }
+  });
+
   it('rejects cross-tenant relationships and edits after leaving draft', async () => {
     const otherCustomer = await prisma.customer.create({ data: { organizationId: otherOrganizationId, name: 'Other', phone: '222' } }); const otherVehicle = await prisma.vehicle.create({ data: { organizationId: otherOrganizationId, customerId: otherCustomer.id, plate: `O${suffix}`, brand: 'VW', model: 'Golf' } });
     await request(app.getHttpServer()).post('/api/v1/quotes').set('Authorization', `Bearer ${token}`).send({ customerId: otherCustomer.id, vehicleId: otherVehicle.id }).expect(404);

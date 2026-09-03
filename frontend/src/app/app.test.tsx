@@ -249,8 +249,28 @@ describe('Organization Admin frontend shell', () => {
     expect(screen.getByRole('link', { name: 'Dashboard' })).not.toHaveAttribute('aria-current');
     expect(screen.getByRole('link', { name: 'Clientes' })).toHaveAttribute('aria-current', 'page');
     await user.click(screen.getByRole('link', { name: 'Financeiro' }));
-    expect(await screen.findByRole('heading', { name: 'Financeiro', level: 2 })).toBeInTheDocument();
-    expect(screen.getByText('Em breve')).toBeInTheDocument();
+    expect(await screen.findByRole('heading', { name: 'Ordens de serviço', level: 2 })).toBeInTheDocument();
+    expect(screen.getAllByRole('heading', { name: 'Financeiro', level: 1 })).toHaveLength(2);
+    expect(httpClient.get).toHaveBeenCalledWith('/work-orders/financial', { params: { page: 1, pageSize: 100 } });
+    expect(screen.queryByText('Em breve')).not.toBeInTheDocument();
+  });
+
+  it('routes a Work Order finance URL to its receipt page', async () => {
+    window.history.pushState({}, '', '/app/finance/work-orders/wo-1');
+    vi.spyOn(httpClient, 'post').mockResolvedValue({ data: { accessToken: 'restored-token', expiresIn: 900, tokenType: 'Bearer' } } as never);
+    vi.spyOn(httpClient, 'get').mockImplementation((url) => {
+      if (url === '/auth/me') return Promise.resolve({ data: principal }) as never;
+      if (url === '/work-orders/wo-1') return Promise.resolve({ data: { id: 'wo-1', number: 42, status: 'IN_PROGRESS', total: '100.00', items: [] } }) as never;
+      if (url === '/work-orders/wo-1/payments') return Promise.resolve({ data: { data: [], financial: { total: '100.00', paid: '0.00', balance: '100.00', status: 'UNPAID' } } }) as never;
+      return Promise.resolve({ data: { data: [], meta: { page: 1, pageSize: 20, total: 0, totalPages: 0 } } }) as never;
+    });
+
+    render(<AppProviders />);
+
+    expect(await screen.findByRole('heading', { name: 'Financeiro da OS #42' })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'Registrar pagamento' })).toBeInTheDocument();
+    expect(httpClient.get).toHaveBeenCalledWith('/work-orders/wo-1');
+    expect(httpClient.get).toHaveBeenCalledWith('/work-orders/wo-1/payments');
   });
 
   it('opens and closes the mobile drawer with its close button, backdrop, and Escape', async () => {

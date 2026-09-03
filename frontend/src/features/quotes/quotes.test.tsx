@@ -41,6 +41,32 @@ describe('Quotes list', () => {
     expect(screen.getByText('R$ 150,00')).toBeInTheDocument();
   });
 
+  it.each(['DRAFT', 'PENDING', 'APPROVED', 'REJECTED', 'CANCELLED'])(
+    'requests and renders only %s Quotes when that status is selected',
+    async (status) => {
+      const user = userEvent.setup();
+      const get = vi.spyOn(httpClient, 'get').mockImplementation((url, config) => {
+        if (url === '/quotes') {
+          const requestedStatus = (config?.params as { status?: string }).status;
+          const data = !requestedStatus || requestedStatus === status ? [{ ...quote, status }] : [];
+          return Promise.resolve({ data: { data, meta: { page: 1, pageSize: 20, total: data.length, totalPages: data.length } } }) as never;
+        }
+        if (url === '/customers') return Promise.resolve({ data: { data: [customer] } }) as never;
+        return Promise.resolve({ data: { data: [vehicle] } }) as never;
+      });
+
+      renderPage();
+      await screen.findByText('#42');
+      await user.selectOptions(screen.getByRole('combobox', { name: 'Filtrar por status' }), status);
+
+      await waitFor(() => expect(get).toHaveBeenCalledWith('/quotes', {
+        params: { page: 1, pageSize: 20, status },
+      }));
+      expect(await screen.findByText('#42')).toBeInTheDocument();
+      expect(screen.getByRole('combobox', { name: 'Filtrar por status' })).toHaveValue(status);
+    },
+  );
+
   it('preserves search and status in the URL and resets to the first page', async () => {
     const user = userEvent.setup();
     vi.spyOn(httpClient, 'get').mockResolvedValue({ data: { data: [], meta: { page: 3, pageSize: 20, total: 0, totalPages: 0 } } } as never);
