@@ -67,6 +67,23 @@ enum PaymentStatus {
   CANCELLED
 }
 
+enum ExpenseCategory {
+  PARTS_AND_SUPPLIES
+  PERSONNEL
+  RENT
+  UTILITIES
+  TAXES
+  FINANCIAL_FEES
+  MAINTENANCE
+  MARKETING
+  OTHER
+}
+
+enum ExpenseStatus {
+  OPEN
+  CANCELLED
+}
+
 enum AuditActorType {
   USER
   SYSTEM
@@ -301,6 +318,8 @@ model Organization {
   workOrders             WorkOrder[]
   workOrderItems         WorkOrderItem[]
   payments               Payment[]
+  expenses               Expense[]
+  expensePayments        ExpensePayment[]
   stockMovements         StockMovement[]
   commercialAccount      CommercialAccount?   @relation(fields: [commercialAccountId], references: [id], onDelete: Restrict)
   primaryContactAccounts CommercialAccount[]  @relation("CommercialAccountPrimaryContactOrganization")
@@ -579,6 +598,42 @@ model Payment {
   workOrder    WorkOrder    @relation(fields: [organizationId, workOrderId], references: [organizationId, id], onDelete: Restrict)
 
   @@index([organizationId, workOrderId, status])
+  @@index([organizationId, paidAt])
+}
+
+model Expense {
+  id             String          @id @default(uuid()) @db.Uuid
+  organizationId String          @db.Uuid
+  category       ExpenseCategory
+  description    String
+  amount         Decimal         @db.Decimal(12, 2)
+  dueDate        DateTime        @db.Date
+  status         ExpenseStatus   @default(OPEN)
+  createdAt      DateTime        @default(now()) @db.Timestamptz(3)
+  updatedAt      DateTime        @updatedAt @db.Timestamptz(3)
+
+  organization Organization     @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  payments     ExpensePayment[]
+
+  @@unique([organizationId, id])
+  @@index([organizationId, status, dueDate])
+  @@index([organizationId, category])
+}
+
+model ExpensePayment {
+  id             String        @id @default(uuid()) @db.Uuid
+  organizationId String        @db.Uuid
+  expenseId      String        @db.Uuid
+  amount         Decimal       @db.Decimal(12, 2)
+  method         PaymentMethod
+  status         PaymentStatus @default(CONFIRMED)
+  paidAt         DateTime?     @db.Timestamptz(3)
+  createdAt      DateTime      @default(now()) @db.Timestamptz(3)
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  expense      Expense      @relation(fields: [organizationId, expenseId], references: [organizationId, id], onDelete: Restrict)
+
+  @@index([organizationId, expenseId, status])
   @@index([organizationId, paidAt])
 }
 

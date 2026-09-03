@@ -81,7 +81,7 @@ describe('Finance Work Order list', () => {
   beforeEach(() => vi.restoreAllMocks());
 
   it('loads operational and financial fields through the dedicated endpoint', async () => {
-    vi.spyOn(httpClient, 'get').mockResolvedValue({ data: { data: [{ ...workOrder, customer: { name: 'Maria Silva' }, vehicle: { brand: 'Toyota', model: 'Corolla', plate: 'ABC1D23' }, financial: { total: '100.00', paid: '35.10', balance: '64.90', status: 'PARTIAL' } }], meta: { page: 1, pageSize: 100, total: 1, totalPages: 1 } } } as never);
+    vi.spyOn(httpClient, 'get').mockImplementation((url) => Promise.resolve({ data: url === '/expenses' ? { data: [], meta: { page: 1, pageSize: 100, total: 0, totalPages: 0 } } : { data: [{ ...workOrder, customer: { name: 'Maria Silva' }, vehicle: { brand: 'Toyota', model: 'Corolla', plate: 'ABC1D23' }, financial: { total: '100.00', paid: '35.10', balance: '64.90', status: 'PARTIAL' } }], meta: { page: 1, pageSize: 100, total: 1, totalPages: 1 } } }) as never);
     render(<QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}><MemoryRouter><FinanceIndexPage /></MemoryRouter></QueryClientProvider>);
 
     expect(await screen.findByText('#42')).toBeInTheDocument();
@@ -93,5 +93,22 @@ describe('Finance Work Order list', () => {
     expect(screen.getByText('R$ 64,90')).toBeInTheDocument();
     expect(screen.getByText('Parcial')).toBeInTheDocument();
     expect(httpClient.get).toHaveBeenCalledWith('/work-orders/financial', { params: { page: 1, pageSize: 100 } });
+  });
+
+  it('creates an Expense from the Finance page without tenant data', async () => {
+    const user = userEvent.setup();
+    const get = vi.spyOn(httpClient, 'get').mockImplementation((url) => Promise.resolve({ data: url === '/expenses' ? { data: [], meta: { page: 1, pageSize: 100, total: 0, totalPages: 0 } } : { data: [], meta: { page: 1, pageSize: 100, total: 0, totalPages: 0 } } }) as never);
+    const post = vi.spyOn(httpClient, 'post').mockResolvedValue({ data: { id: 'expense-1' } } as never);
+    render(<QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}><MemoryRouter><FinanceIndexPage /></MemoryRouter></QueryClientProvider>);
+
+    await screen.findByRole('heading', { name: 'Nova despesa' });
+    await user.selectOptions(screen.getByLabelText('Categoria da despesa'), 'RENT');
+    await user.type(screen.getByLabelText('Descrição da despesa'), 'Aluguel');
+    await user.type(screen.getByLabelText('Valor da despesa'), '1200,00');
+    await user.click(screen.getByRole('button', { name: 'Cadastrar despesa' }));
+
+    await waitFor(() => expect(post).toHaveBeenCalledWith('/expenses', { category: 'RENT', description: 'Aluguel', amount: '1200.00', dueDate: expect.any(String) }));
+    expect(JSON.stringify(post.mock.calls)).not.toContain('organizationId');
+    expect(get).toHaveBeenCalledWith('/expenses', { params: { page: 1, pageSize: 100 } });
   });
 });

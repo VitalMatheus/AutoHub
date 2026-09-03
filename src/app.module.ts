@@ -21,6 +21,7 @@ import { PlansModule } from './platform/plans/plans.module';
 import { CommercialAccountsModule } from './platform/commercial-accounts/commercial-accounts.module';
 import { SubscriptionsModule } from './platform/subscriptions/subscriptions.module';
 import { SubscriptionChargesModule } from './platform/subscription-charges/subscription-charges.module';
+import { ExpensesModule } from './expenses/expenses.module';
 
 @Module({
   imports: [
@@ -48,6 +49,7 @@ import { SubscriptionChargesModule } from './platform/subscription-charges/subsc
     CommercialAccountsModule,
     SubscriptionsModule,
     SubscriptionChargesModule,
+    ExpensesModule,
   ],
   providers: [SecurityLogger],
   exports: [SecurityLogger],

@@ -21,7 +21,7 @@ import { NewSubscriptionChargePage, SubscriptionChargeDetailPage, SubscriptionCh
 import { PlanDetailPage, PlansListPage } from '@/features/platform/pages/plan-pages';
 import { AuditEventsPage } from '@/features/platform/pages/audit-event-pages';
 import { ProvisionCommercialAccountPage } from '@/features/platform/pages/provision-commercial-account-pages';
-import { FinanceIndexPage, FinancePage } from '@/features/finance/pages/finance-page';
+import { FinanceExpensePage, FinanceIndexPage, FinancePage } from '@/features/finance/pages/finance-page';
 
 function HomeRedirect() {
   const { principal, isAuthenticated, isRestoring } = useAuth();
@@ -61,6 +61,7 @@ export function AppRouter() {
           <Route path="services/:id" element={<ServiceDetailPage />} />
           <Route path="finance" element={<FinanceIndexPage />} />
           <Route path="finance/work-orders/:workOrderId" element={<FinancePage />} />
+          <Route path="finance/expenses/:expenseId" element={<FinanceExpensePage />} />
           <Route path="reports" element={<ReportsPage />} />
           <Route path="settings" element={<SettingsPage />} />
         </Route>
