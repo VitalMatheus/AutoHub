@@ -11,8 +11,9 @@ describe('deriveChargeCondition', () => {
     expect(deriveChargeCondition(charge, new Date('2026-09-03T00:00:00Z')).condition).toBe('OVERDUE');
   });
   it('derives partial and paid using decimal-safe arithmetic', () => {
-    expect(deriveChargeCondition({ ...charge, settlements: [{ amount: new Prisma.Decimal('33.33') }] })).toMatchObject({ condition: 'PARTIALLY_PAID', paidAmount: '33.33', outstandingAmount: '66.67' });
-    expect(deriveChargeCondition({ ...charge, settlements: [{ amount: new Prisma.Decimal('33.33') }, { amount: new Prisma.Decimal('66.67') }] }).condition).toBe('PAID');
+    const asOf = new Date('2026-09-02T23:59:59Z');
+    expect(deriveChargeCondition({ ...charge, settlements: [{ amount: new Prisma.Decimal('33.33') }] }, asOf)).toMatchObject({ condition: 'PARTIALLY_PAID', paidAmount: '33.33', outstandingAmount: '66.67' });
+    expect(deriveChargeCondition({ ...charge, settlements: [{ amount: new Prisma.Decimal('33.33') }, { amount: new Prisma.Decimal('66.67') }] }, asOf).condition).toBe('PAID');
   });
   it('derives cancelled independently of settlements', () => {
     expect(deriveChargeCondition({ ...charge, cancelledAt: new Date(), settlements: [] }).condition).toBe('CANCELLED');
