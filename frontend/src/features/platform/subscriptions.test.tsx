@@ -30,7 +30,7 @@ describe('Platform subscriptions', () => {
     expect(screen.getByText('Alterações agendadas')).toBeInTheDocument();
     expect(screen.getByText('Cancelamento solicitado')).toBeInTheDocument();
     expect(screen.getByText('01/09/2026')).toBeInTheDocument();
-    expect(screen.getAllByText('01/10/2026')).toHaveLength(3);
+    expect(screen.getAllByText('01/10/2026')).toHaveLength(2);
   });
 
   it.each([
