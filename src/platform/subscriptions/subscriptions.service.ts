@@ -16,6 +16,7 @@ const subscriptionSelect = {
   id: true, commercialAccountId: true, planVersionId: true, status: true, contractedPrice: true, contractedCurrency: true,
   contractedInterval: true, contractedOrganizationLimit: true, contractedUserLimit: true, contractedWorkOrderLimit: true,
   contractedGracePeriodDays: true, migratedAt: true, regularizedAt: true, regularizationReason: true, commercialStartAt: true,
+  firstDueDate: true, billingDay: true,
   firstPaymentReceivedAt: true, firstPaidPeriodStartedAt: true, trialEnabled: true, trialStartsAt: true, trialEndsAt: true, currentPeriodStart: true,
   currentPeriodEnd: true, cancellationRequestedAt: true, effectiveCancellationAt: true, createdAt: true,
   scheduledPlanVersionId: true, scheduledPlanEffectiveAt: true, scheduledPlanReason: true,
@@ -27,12 +28,13 @@ const subscriptionSelect = {
 
 export function deriveSubscriptionConditions(subscription: {
   status: SubscriptionStatus; migratedAt: Date | null; regularizedAt: Date | null; trialEnabled?: boolean; trialStartsAt: Date | null; trialEndsAt: Date | null;
+  firstDueDate?: Date | null; billingDay?: number | null;
   firstPaymentReceivedAt: Date | null; cancellationRequestedAt: Date | null; effectiveCancellationAt: Date | null;
   charges?: AccessCharge[];
 }, asOf = new Date()) {
   const cancellationEffective = !!subscription.effectiveCancellationAt && asOf >= subscription.effectiveCancellationAt;
   const trial = subscription.trialEnabled !== false && !!subscription.trialStartsAt && !!subscription.trialEndsAt && asOf >= subscription.trialStartsAt && asOf < subscription.trialEndsAt && !cancellationEffective;
-  const pendingCommercialSetup = !!subscription.migratedAt && !subscription.regularizedAt && !cancellationEffective;
+  const pendingCommercialSetup = (subscription.firstDueDate === null || subscription.billingDay === null) && !cancellationEffective;
   const awaitingFirstPayment = !pendingCommercialSetup && !subscription.firstPaymentReceivedAt && !trial && subscription.status !== 'ENDED' && !cancellationEffective;
   const payment = deriveCommercialAccess(subscription.charges ?? [], asOf);
   const commercialAccess = cancellationEffective || subscription.status === 'ENDED' ? 'PAYMENT_BLOCKED' : pendingCommercialSetup || trial

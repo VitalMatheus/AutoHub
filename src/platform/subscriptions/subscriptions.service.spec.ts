@@ -3,6 +3,7 @@ import { Prisma } from '@prisma/client';
 
 const base = {
   status: 'SCHEDULED' as const, migratedAt: null, regularizedAt: null, trialEnabled: true, trialStartsAt: null, trialEndsAt: null,
+  firstDueDate: null, billingDay: null,
   firstPaymentReceivedAt: null, cancellationRequestedAt: null, effectiveCancellationAt: null,
 };
 
@@ -20,7 +21,7 @@ describe('deriveSubscriptionConditions', () => {
   });
 
   it('derives Awaiting First Payment and scheduled cancellation independently', () => {
-    expect(deriveSubscriptionConditions({ ...base, regularizedAt: new Date(), cancellationRequestedAt: new Date() })).toMatchObject({
+    expect(deriveSubscriptionConditions({ ...base, regularizedAt: new Date(), firstDueDate: new Date('2026-02-15'), billingDay: 15, cancellationRequestedAt: new Date() })).toMatchObject({
       awaitingFirstPayment: true, scheduledCancellation: true, effectiveCancellation: false,
     });
   });
@@ -28,6 +29,7 @@ describe('deriveSubscriptionConditions', () => {
   it('derives renewal delinquency and grace without changing pending setup semantics', () => {
     const subscription = {
       ...base,
+      firstDueDate: new Date('2026-01-15T03:00:00Z'), billingDay: 15,
       firstPaymentReceivedAt: new Date('2026-08-15T03:00:00Z'),
       charges: [{ nature: 'RENEWAL', amount: new Prisma.Decimal('79.00'), dueDate: new Date('2026-09-15T00:00:00Z'), cancelledAt: null, settlements: [] }],
     };
@@ -36,7 +38,7 @@ describe('deriveSubscriptionConditions', () => {
   });
 
   it('does not treat a future cancellation as effective before its date', () => {
-    const subscription = { ...base, firstPaymentReceivedAt: new Date('2026-01-01'), effectiveCancellationAt: new Date('2026-02-01T00:00:00Z') };
+    const subscription = { ...base, firstDueDate: new Date('2026-01-15'), billingDay: 15, firstPaymentReceivedAt: new Date('2026-01-01'), effectiveCancellationAt: new Date('2026-02-01T00:00:00Z') };
     expect(deriveSubscriptionConditions(subscription, new Date('2026-01-31T23:59:59Z'))).toMatchObject({ effectiveCancellation: false, commercialAccess: 'ACCESS_ALLOWED' });
     expect(deriveSubscriptionConditions(subscription, new Date('2026-02-01T00:00:00Z'))).toMatchObject({ effectiveCancellation: true, commercialAccess: 'PAYMENT_BLOCKED' });
   });

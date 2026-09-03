@@ -88,6 +88,16 @@ describe('SubscriptionChargesService settlement rules', () => {
     expect(create).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ nature: 'FIRST_PAYMENT', dueDate: new Date('2026-01-14T03:00:00.000Z') }) }));
   });
 
+  it('excludes Pending Commercial Setup from first and renewal reconciliation', async () => {
+    const findMany = jest.fn().mockResolvedValue([]);
+    const subject = new SubscriptionChargesService({ subscription: { findMany } } as never, { record: jest.fn() } as never);
+
+    await subject.reconcile(new Date('2026-09-03T03:00:00.000Z'));
+
+    expect(findMany).toHaveBeenNthCalledWith(1, expect.objectContaining({ where: expect.objectContaining({ firstDueDate: { not: null }, billingDay: { not: null } }) }));
+    expect(findMany).toHaveBeenNthCalledWith(2, expect.objectContaining({ where: expect.objectContaining({ firstDueDate: { not: null }, billingDay: { not: null } }) }));
+  });
+
   it('creates missing anchored renewal periods and records SYSTEM audit events', async () => {
     const creates: any[] = [];
     const tx = { subscriptionCharge: { create: jest.fn(async ({ data }) => { creates.push(data); return { id: `charge-${creates.length}` }; }) } };

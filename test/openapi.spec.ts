@@ -46,6 +46,13 @@ describe('OpenAPI structure', () => {
     expect(paths['/api/v1/platform/organizations/{id}/deactivate']?.post).toBeDefined();
     expect(paths['/api/v1/platform/organizations/{id}/suspend']?.post).toBeDefined();
     expect(paths['/api/v1/platform/organizations/{id}/reactivate']?.post).toBeDefined();
+    const regularizeCommercialSetup = paths['/api/v1/platform/organizations/{id}/regularize-commercial-setup']?.post;
+    expect(regularizeCommercialSetup?.requestBody).toEqual(expect.objectContaining({
+      content: { 'application/json': { schema: { $ref: '#/components/schemas/RegularizeCommercialSetupDto' } } },
+    }));
+    expect(regularizeCommercialSetup?.responses).toEqual(expect.objectContaining({
+      '201': expect.any(Object), '400': expect.any(Object), '401': expect.any(Object), '403': expect.any(Object), '404': expect.any(Object), '409': expect.any(Object),
+    }));
     const organizationsGet = paths['/api/v1/platform/organizations']?.get;
     expect(organizationsGet?.responses['200']).toEqual(expect.objectContaining({ content: { 'application/json': { schema: { $ref: '#/components/schemas/OrganizationsResponseDto' } } } }));
     expect(organizationsGet?.responses).toEqual(expect.objectContaining({ '401': expect.any(Object), '403': expect.any(Object) }));

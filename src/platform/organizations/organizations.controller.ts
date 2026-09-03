@@ -10,6 +10,7 @@ import { OrganizationTransitionDto } from './dto/organization-transition.dto';
 import { OrganizationsService } from './organizations.service';
 import type { Request } from 'express';
 import type { AuthenticatedPrincipal } from '../../auth/authenticated-principal';
+import { RegularizeCommercialSetupDto } from './dto/regularize-commercial-setup.dto';
 
 type AuthenticatedRequest = Request & { user?: AuthenticatedPrincipal };
 
@@ -26,6 +27,17 @@ export class OrganizationsController {
   list(@Query() dto: ListOrganizationsDto) { return this.organizations.list(dto); }
   @Get(':id') @ApiOperation({ summary: 'Inspect an enriched Organization' }) @ApiResponse({ status: 200, type: OrganizationResponseDto }) @ApiUnauthorizedResponse({ description: 'Authentication required.' }) @ApiForbiddenResponse({ description: 'Super Admin access required.' }) @ApiNotFoundResponse({ description: 'Organization not found.' })
   findOne(@Param('id') id: string) { return this.organizations.findOne(id); }
+  @Post(':id/regularize-commercial-setup')
+  @ApiOperation({ summary: 'Regularize an Organization pending commercial setup' })
+  @ApiResponse({ status: 201, type: OrganizationResponseDto })
+  @ApiResponse({ status: 400, description: 'Invalid commercial configuration.' })
+  @ApiUnauthorizedResponse({ description: 'Authentication required.' })
+  @ApiForbiddenResponse({ description: 'Super Admin access required.' })
+  @ApiNotFoundResponse({ description: 'Organization or current Subscription not found.' })
+  @ApiResponse({ status: 409, description: 'Commercial setup is already configured with different values.' })
+  regularizeCommercialSetup(@Req() request: AuthenticatedRequest, @Param('id') id: string, @Body() dto: RegularizeCommercialSetupDto) {
+    return this.organizations.regularizeCommercialSetup(request.user!, id, dto);
+  }
   @Patch(':id') update(@Req() request: AuthenticatedRequest, @Param('id') id: string, @Body() dto: UpdateOrganizationDto) { return this.organizations.update(request.user!, id, dto); }
   @Post(':id/activate') @ApiOperation({ summary: 'Activate an Organization' }) @ApiResponse({ status: 409, description: 'Invalid operational transition.' })
   activate(@Req() request: AuthenticatedRequest, @Param('id') id: string) { return this.organizations.transition(request.user!, id, 'activate'); }

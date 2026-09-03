@@ -30,6 +30,7 @@ export class SubscriptionChargesService {
   async reconcileFirstPayments(asOf = new Date()) {
     const subscriptions = await this.prisma.subscription.findMany({
       where: { status: { not: 'ENDED' }, trialEnabled: true, trialStartsAt: { not: null }, trialEndsAt: { not: null }, firstPaymentReceivedAt: null,
+        firstDueDate: { not: null }, billingDay: { not: null },
         OR: [{ effectiveCancellationAt: null }, { effectiveCancellationAt: { gt: asOf } }] },
       select: { id: true, commercialAccountId: true, contractedPrice: true, trialStartsAt: true },
     });
@@ -62,6 +63,7 @@ export class SubscriptionChargesService {
     const subscriptions = await this.prisma.subscription.findMany({
       where: {
         status: 'CURRENT', firstPaymentReceivedAt: { not: null }, firstPaidPeriodStartedAt: { not: null },
+        firstDueDate: { not: null }, billingDay: { not: null },
         commercialAccountId: { not: null },
       },
       select: {

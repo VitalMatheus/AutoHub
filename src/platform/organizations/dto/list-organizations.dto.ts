@@ -1,8 +1,11 @@
-import { Type } from 'class-transformer';
+import { Transform, Type } from 'class-transformer';
 import { ApiPropertyOptional } from '@nestjs/swagger';
 import { OrganizationOperationalStatus } from '@prisma/client';
 import { IsEnum, IsInt, IsOptional, IsString, Max, Min } from 'class-validator';
 import { FinancialStandingStatus } from '../../billing/financial-standing';
+
+const normalizeArrayQuery = ({ value }: { value: unknown }): unknown[] =>
+  (Array.isArray(value) ? value : [value]).flatMap((entry) => typeof entry === 'string' ? entry.split(',') : [entry]);
 
 export enum OrganizationLifecycleFilter {
   TRIAL = 'TRIAL',
@@ -38,15 +41,15 @@ export class ListOrganizationsDto {
   operationalStatus?: OrganizationOperationalStatus;
 
   @ApiPropertyOptional({ enum: OrganizationLifecycleFilter, isArray: true })
-  @IsOptional() @IsEnum(OrganizationLifecycleFilter, { each: true })
+  @IsOptional() @Transform(normalizeArrayQuery) @IsEnum(OrganizationLifecycleFilter, { each: true })
   lifecycle?: OrganizationLifecycleFilter[];
 
   @ApiPropertyOptional({ enum: OrganizationCommercialAccessFilter, isArray: true })
-  @IsOptional() @IsEnum(OrganizationCommercialAccessFilter, { each: true })
+  @IsOptional() @Transform(normalizeArrayQuery) @IsEnum(OrganizationCommercialAccessFilter, { each: true })
   commercialAccess?: OrganizationCommercialAccessFilter[];
 
   @ApiPropertyOptional({ enum: FinancialStandingStatus, isArray: true })
-  @IsOptional() @IsEnum(FinancialStandingStatus, { each: true })
+  @IsOptional() @Transform(normalizeArrayQuery) @IsEnum(FinancialStandingStatus, { each: true })
   financialStanding?: FinancialStandingStatus[];
 
   @ApiPropertyOptional({ enum: OrganizationSort, default: '-createdAt' })

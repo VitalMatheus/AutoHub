@@ -11,10 +11,11 @@ import { AuditAction, AuditTargetType } from '../audit-events/dto/list-audit-eve
 import { OrganizationTransitionDto } from './dto/organization-transition.dto';
 import { recifeCivilDate, recifeMidnight } from '../billing/civil-dates';
 import { addCivilDays } from '../billing/civil-dates';
-import { chargeBalance, deriveCommercialAccess } from '../billing/commercial-access';
+import { chargeBalance } from '../billing/commercial-access';
 import { deriveSubscriptionConditions } from '../subscriptions/subscriptions.service';
 import { ListOrganizationsDto, OrganizationCommercialAccessFilter, OrganizationLifecycleFilter, OrganizationSort } from './dto/list-organizations.dto';
 import { deriveFinancialStanding } from '../billing/financial-standing';
+import { RegularizeCommercialSetupDto } from './dto/regularize-commercial-setup.dto';
 
 const organizationSelect = {
   id: true, name: true, document: true, phone: true, email: true, addressLine1: true, addressLine2: true,
@@ -27,6 +28,7 @@ const organizationSelect = {
       id: true, status: true, contractedPrice: true, contractedCurrency: true, contractedInterval: true,
       contractedOrganizationLimit: true, contractedUserLimit: true, contractedWorkOrderLimit: true,
       migratedAt: true, regularizedAt: true, commercialStartAt: true, trialEnabled: true, trialStartsAt: true,
+      firstDueDate: true, billingDay: true,
       trialEndsAt: true, firstPaymentReceivedAt: true, firstPaidPeriodStartedAt: true, currentPeriodStart: true,
       currentPeriodEnd: true, cancellationRequestedAt: true, effectiveCancellationAt: true,
       planVersion: { select: { id: true, version: true, plan: { select: { id: true, name: true } } } },
@@ -147,22 +149,68 @@ export class OrganizationsService {
     return { ...this.present(organization), users: organization.users };
   }
 
+  async regularizeCommercialSetup(principal: AuthenticatedPrincipal, id: string, dto: RegularizeCommercialSetupDto) {
+    const firstDueDate = new Date(`${dto.firstDueDate}T00:00:00.000Z`);
+    if (!Number.isFinite(firstDueDate.getTime()) || firstDueDate.toISOString().slice(0, 10) !== dto.firstDueDate) {
+      throw new BadRequestException('firstDueDate must be a valid civil date');
+    }
+    const contractedPrice = new Prisma.Decimal(dto.contractedPrice);
+    if (!contractedPrice.gt(0)) throw new BadRequestException('contractedPrice must be greater than zero');
+
+    await this.prisma.$transaction(async (tx) => {
+      const organization = await tx.organization.findUnique({ where: { id }, select: {
+        id: true, commercialAccountId: true,
+        commercialAccount: { select: { subscriptions: { where: { status: { not: 'ENDED' } }, orderBy: { createdAt: 'desc' }, take: 1, select: {
+          id: true, migratedAt: true, regularizedAt: true, contractedPrice: true, firstDueDate: true, billingDay: true,
+        } } } },
+      } });
+      if (!organization) throw new NotFoundException('Organization not found');
+      const subscription = organization.commercialAccount?.subscriptions[0];
+      if (!subscription) throw new NotFoundException('Current Subscription not found');
+
+      const alreadyMatches = subscription.firstDueDate?.getTime() === firstDueDate.getTime()
+        && subscription.billingDay === dto.billingDay
+        && subscription.contractedPrice.equals(contractedPrice);
+      if (subscription.firstDueDate && subscription.billingDay !== null) {
+        if (alreadyMatches) return;
+        throw new ConflictException('Commercial setup is already configured with different values');
+      }
+
+      const regularizedAt = new Date();
+      await tx.subscription.update({ where: { id: subscription.id }, data: {
+        contractedPrice, firstDueDate, billingDay: dto.billingDay, regularizedAt,
+        regularizationReason: 'Pending Commercial Setup regularized by Super Admin',
+        trialEnabled: false,
+      } });
+      await this.auditEvents.record(tx, principal, {
+        action: AuditAction.SUBSCRIPTION_MIGRATED_REGULARIZED, targetType: AuditTargetType.SUBSCRIPTION,
+        targetId: subscription.id, commercialAccountId: organization.commercialAccountId ?? undefined,
+        before: { contractedPrice: subscription.contractedPrice.toFixed(2), firstDueDate: subscription.firstDueDate, billingDay: subscription.billingDay },
+        after: { contractedPrice: contractedPrice.toFixed(2), firstDueDate, billingDay: dto.billingDay, regularizedAt },
+      });
+    });
+    return this.findOne(id);
+  }
+
   private present(row: Prisma.OrganizationGetPayload<{ select: typeof organizationSelect }>, asOf = new Date()) {
     const account = row.commercialAccount;
     const subscription = account?.subscriptions[0];
     const contact = account?.primaryContact && account.primaryContact.role === 'ADMIN' && account.primaryContact.status === 'ACTIVE'
       ? account.primaryContact : null;
     const charges = subscription?.charges ?? [];
-    const access = subscription ? deriveCommercialAccess(charges, asOf) : { commercialAccess: 'PAYMENT_BLOCKED' as const, delinquent: false, paymentGracePeriod: false };
     const conditions = subscription ? deriveSubscriptionConditions(subscription, asOf) : {
       pendingCommercialSetup: false, trial: false, awaitingFirstPayment: false, delinquent: false,
       paymentGracePeriod: false, scheduledCancellation: false, effectiveCancellation: false, commercialAccess: 'PAYMENT_BLOCKED' as const,
     };
-    const openCharges = charges.filter((charge) => chargeBalance(charge).gt(0));
+    // Legacy charges remain persisted, but Pending Commercial Setup must not
+    // manufacture debt, delinquency, or a commercial block before the Super
+    // Admin confirms the schedule.
+    const commerciallyActiveCharges = conditions.pendingCommercialSetup ? [] : charges;
+    const openCharges = commerciallyActiveCharges.filter((charge) => chargeBalance(charge).gt(0));
     const nextCharge = [...openCharges].sort((a, b) => a.dueDate.getTime() - b.dueDate.getTime())[0];
     const financialStanding = deriveFinancialStanding(nextCharge?.dueDate ?? null, asOf);
     const blockDate = nextCharge ? recifeMidnight(addCivilDays(recifeCivilDate(nextCharge.dueDate), nextCharge.nature === 'RENEWAL' ? 6 : 1)) : null;
-    const paidAmount = charges.reduce((sum, charge) => sum.add(charge.amount.sub(chargeBalance(charge))), new Prisma.Decimal(0));
+    const paidAmount = commerciallyActiveCharges.reduce((sum, charge) => sum.add(charge.amount.sub(chargeBalance(charge))), new Prisma.Decimal(0));
     const outstandingAmount = openCharges.reduce((sum, charge) => sum.add(chargeBalance(charge)), new Prisma.Decimal(0));
     const lifecycle: OrganizationLifecycleFilter[] = [];
     if (conditions.trial) lifecycle.push(OrganizationLifecycleFilter.TRIAL);
@@ -192,9 +240,10 @@ export class OrganizationsService {
       lifecycle,
       conditions,
       trial: { enabled: subscription?.trialEnabled ?? false, startsAt: subscription?.trialStartsAt ?? null, endsAt: subscription?.trialEndsAt ?? null },
-      payment: { condition: access.delinquent ? 'OVERDUE' : outstandingAmount.isZero() ? 'PAID' : 'OPEN', paidAmount: paidAmount.toFixed(2), outstandingAmount: outstandingAmount.toFixed(2) },
-      commercialAccess: access.commercialAccess,
-      effectiveAccess: { allowed: row.operationalStatus === 'ACTIVE' && access.commercialAccess !== 'PAYMENT_BLOCKED', operationalStatus: row.operationalStatus, commercialAccess: access.commercialAccess },
+      commercialSetup: { firstDueDate: subscription?.firstDueDate ?? null, billingDay: subscription?.billingDay ?? null },
+      payment: { condition: conditions.delinquent && !conditions.pendingCommercialSetup ? 'OVERDUE' : outstandingAmount.isZero() ? 'PAID' : 'OPEN', paidAmount: paidAmount.toFixed(2), outstandingAmount: outstandingAmount.toFixed(2) },
+      commercialAccess: conditions.commercialAccess,
+      effectiveAccess: { allowed: row.operationalStatus === 'ACTIVE' && conditions.commercialAccess !== 'PAYMENT_BLOCKED', operationalStatus: row.operationalStatus, commercialAccess: conditions.commercialAccess },
       nextBillingDate: subscription?.currentPeriodEnd ?? nextCharge?.dueDate ?? null,
       blockDate,
       administrativePending,

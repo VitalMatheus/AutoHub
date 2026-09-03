@@ -11,10 +11,10 @@ describe('OrganizationsService commercial onboarding', () => {
     const tx = {
       planVersion: { findFirst: jest.fn().mockResolvedValue({ id: 'version-basic', status: 'PUBLISHED', price: '79.00', currency: 'BRL', interval: 'MONTHLY', organizationLimit: 1, userLimit: 3, workOrderLimit: null, gracePeriodDays: 5, plan: { archivedAt: null } }), findUnique: jest.fn() },
       commercialAccount: { create: jest.fn().mockResolvedValue({ id: 'account-1', name: 'Oficina', billingEmail: null, billingDocument: null }), update: jest.fn().mockResolvedValue({}) },
-      organization: { create: jest.fn().mockResolvedValue({ id: 'org-1', name: 'Oficina', document: null, phone: null, email: null, addressLine1: null, addressLine2: null, city: null, state: null, postalCode: null, operationalStatus: 'ACTIVE', createdAt: new Date(), updatedAt: new Date(), commercialAccount: { id: 'account-1', name: 'Oficina', primaryContactUserId: null } }), findMany: jest.fn() },
+      organization: { create: jest.fn().mockResolvedValue({ id: 'org-1', name: 'Oficina', document: null, phone: null, email: null, addressLine1: null, addressLine2: null, city: null, state: null, postalCode: null, operationalStatus: 'ACTIVE', createdAt: new Date(), updatedAt: new Date(), commercialAccount: { id: 'account-1', name: 'Oficina', primaryContactUserId: null } }), findMany: jest.fn(), findUnique: jest.fn() },
       user: { create: jest.fn().mockResolvedValue({ id: 'admin-1', name: 'Admin', email: 'admin@example.com', role: 'ADMIN', status: 'PENDING_ACTIVATION', organizationId: 'org-1' }) },
       actionToken: { create: jest.fn().mockResolvedValue({}) },
-      subscription: { create: jest.fn().mockResolvedValue({ id: 'subscription-1', planVersionId: 'version-basic', status: 'SCHEDULED', trialEnabled: true, trialStartsAt: null, trialEndsAt: null, contractedPrice: '79.00' }) },
+      subscription: { create: jest.fn().mockResolvedValue({ id: 'subscription-1', planVersionId: 'version-basic', status: 'SCHEDULED', trialEnabled: true, trialStartsAt: null, trialEndsAt: null, contractedPrice: '79.00' }), update: jest.fn() },
     };
     const prisma = { $transaction: jest.fn(async (callback: (value: typeof tx) => unknown) => callback(tx)), organization: tx.organization, ...overrides };
     const auditEvents = { record: jest.fn().mockResolvedValue(undefined) };
@@ -113,5 +113,81 @@ describe('OrganizationsService commercial onboarding', () => {
       operationalStatus: 'SUSPENDED',
       financialStanding: { status: 'CURRENT', dueToday: true, dueDate: new Date('2026-09-02T03:00:00.000Z') },
     }));
+  });
+
+  it('regularizes Pending Commercial Setup without creating retroactive charges and is idempotent', async () => {
+    const { service, tx, prisma } = setup();
+    const subscription = {
+      id: 'sub-1', status: 'SCHEDULED', migratedAt: new Date('2026-01-01'), regularizedAt: null,
+      contractedPrice: new Prisma.Decimal('79.00'), contractedCurrency: 'BRL', contractedInterval: 'MONTHLY',
+      contractedOrganizationLimit: 1, contractedUserLimit: 3, contractedWorkOrderLimit: null,
+      firstDueDate: null, billingDay: null, commercialStartAt: null, trialEnabled: false, trialStartsAt: null, trialEndsAt: null,
+      firstPaymentReceivedAt: null, firstPaidPeriodStartedAt: null, currentPeriodStart: null, currentPeriodEnd: null,
+      cancellationRequestedAt: null, effectiveCancellationAt: null, planVersion: null, charges: [],
+    };
+    const pending = {
+      id: 'org-1', commercialAccountId: 'account-1', name: 'Oficina', document: null, phone: null, email: null,
+      addressLine1: null, addressLine2: null, city: null, state: null, postalCode: null, operationalStatus: 'ACTIVE',
+      createdAt: new Date('2026-01-01'), updatedAt: new Date('2026-01-01'), users: [],
+      commercialAccount: { id: 'account-1', name: 'Oficina', billingEmail: null, billingDocument: null, primaryContactUserId: null, primaryContactOrganizationId: null, primaryContact: null, organizations: [{ id: 'org-1', operationalStatus: 'ACTIVE', users: [] }], subscriptions: [subscription] },
+    };
+    const configured = {
+      ...pending,
+      commercialAccount: { ...pending.commercialAccount, subscriptions: [{ ...subscription, regularizedAt: new Date('2026-09-03'), contractedPrice: new Prisma.Decimal('89.90'), firstDueDate: new Date('2026-10-10T00:00:00.000Z'), billingDay: 15 }] },
+    };
+    tx.organization.findUnique = jest.fn().mockResolvedValueOnce(pending).mockResolvedValue(configured);
+    tx.subscription.update = jest.fn().mockResolvedValue({ id: 'sub-1' });
+    prisma.organization.findUnique = tx.organization.findUnique;
+
+    const dto = { contractedPrice: '89.90', firstDueDate: '2026-10-10', billingDay: 15 };
+    await service.regularizeCommercialSetup(principal, 'org-1', dto);
+    await service.regularizeCommercialSetup(principal, 'org-1', dto);
+
+    expect(tx.subscription.update).toHaveBeenCalledTimes(1);
+    expect(tx.subscription.update).toHaveBeenCalledWith(expect.objectContaining({
+      where: { id: 'sub-1' },
+      data: expect.objectContaining({ contractedPrice: new Prisma.Decimal('89.90'), firstDueDate: new Date('2026-10-10T00:00:00.000Z'), billingDay: 15 }),
+    }));
+    expect(tx).not.toHaveProperty('subscriptionCharge.create');
+    const updateData = tx.subscription.update.mock.calls[0][0].data;
+    expect(updateData).toEqual(expect.objectContaining({ trialEnabled: false }));
+    expect(updateData).not.toHaveProperty('trialStartsAt');
+    expect(updateData).not.toHaveProperty('trialEndsAt');
+  });
+
+  it.each([
+    [{ contractedPrice: '0.00', firstDueDate: '2026-10-10', billingDay: 10 }, 'contractedPrice must be greater than zero'],
+    [{ contractedPrice: '79.00', firstDueDate: '2026-02-30', billingDay: 10 }, 'firstDueDate must be a valid civil date'],
+  ])('rejects invalid commercial setup before persistence', async (dto, message) => {
+    const { service, tx } = setup();
+
+    await expect(service.regularizeCommercialSetup(principal, 'org-1', dto)).rejects.toThrow(message);
+    expect(tx.organization.findUnique).not.toHaveBeenCalled();
+    expect(tx.subscription.update).not.toHaveBeenCalled();
+  });
+
+  it('rejects regularization when the Organization has no current Subscription', async () => {
+    const { service, tx } = setup();
+    tx.organization.findUnique.mockResolvedValue({ id: 'org-1', commercialAccountId: 'account-1', commercialAccount: { subscriptions: [] } });
+
+    await expect(service.regularizeCommercialSetup(principal, 'org-1', {
+      contractedPrice: '79.00', firstDueDate: '2026-10-10', billingDay: 10,
+    })).rejects.toThrow('Current Subscription not found');
+    expect(tx.subscription.update).not.toHaveBeenCalled();
+  });
+
+  it('rejects replacing an already configured commercial schedule', async () => {
+    const { service, tx } = setup();
+    tx.organization.findUnique.mockResolvedValue({
+      id: 'org-1', commercialAccountId: 'account-1', commercialAccount: { subscriptions: [{
+        id: 'sub-1', migratedAt: new Date('2026-01-01'), regularizedAt: new Date('2026-02-01'),
+        contractedPrice: new Prisma.Decimal('79.00'), firstDueDate: new Date('2026-10-10'), billingDay: 10,
+      }] },
+    });
+
+    await expect(service.regularizeCommercialSetup(principal, 'org-1', {
+      contractedPrice: '89.90', firstDueDate: '2026-10-15', billingDay: 15,
+    })).rejects.toThrow('Commercial setup is already configured with different values');
+    expect(tx.subscription.update).not.toHaveBeenCalled();
   });
 });

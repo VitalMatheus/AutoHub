@@ -22,6 +22,7 @@ export class OrganizationResponseDto {
   @ApiProperty({ type: Object }) conditions!: object;
   @ApiProperty({ enum: OrganizationCommercialAccessFilter }) commercialAccess!: OrganizationCommercialAccessFilter;
   @ApiProperty({ type: Object }) trial!: object;
+  @ApiProperty({ type: Object }) commercialSetup!: object;
   @ApiProperty({ type: Object }) payment!: object;
   @ApiProperty({ type: Object }) effectiveAccess!: object;
   @ApiPropertyOptional({ format: 'date-time', nullable: true }) nextBillingDate!: string | null;

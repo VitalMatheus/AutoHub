@@ -88,6 +88,10 @@ describe('Platform Organizations and activation (e2e)', () => {
     const created = await request(app.getHttpServer()).post('/api/v1/platform/organizations')
       .set('Authorization', `Bearer ${login.body.accessToken}`)
       .send({ name: `Standing-${suffix}`, trialEnabled: false, admin: { name: 'Standing Admin', email: `standing-${suffix}@example.com` } }).expect(201);
+    const today = recifeCivilDate(new Date());
+    await request(app.getHttpServer()).post(`/api/v1/platform/organizations/${created.body.organization.id}/regularize-commercial-setup`)
+      .set('Authorization', `Bearer ${login.body.accessToken}`)
+      .send({ contractedPrice: '79.00', firstDueDate: today, billingDay: Math.min(Number(today.slice(-2)), 28) }).expect(201);
 
     const response = await request(app.getHttpServer()).get('/api/v1/platform/organizations')
       .query({ search: `Standing-${suffix}`, operationalStatus: 'ACTIVE', financialStanding: 'CURRENT' })
@@ -98,6 +102,48 @@ describe('Platform Organizations and activation (e2e)', () => {
       operationalStatus: 'ACTIVE',
       financialStanding: expect.objectContaining({ status: 'CURRENT', dueToday: true, dueDate: expect.any(String) }),
     })]);
+  });
+
+  it('lists and idempotently regularizes Pending Commercial Setup without retroactive debt', async () => {
+    const login = await request(app.getHttpServer()).post('/api/v1/auth/login').send({ email: superEmail, password: superPassword }).expect(201);
+    const suffix = Date.now();
+    const created = await request(app.getHttpServer()).post('/api/v1/platform/organizations')
+      .set('Authorization', `Bearer ${login.body.accessToken}`)
+      .send({ name: `Pending Setup-${suffix}`, admin: { name: 'Pending Admin', email: `pending-${suffix}@example.com` } }).expect(201);
+    const organizationId = created.body.organization.id as string;
+    const organization = await prisma.organization.findUniqueOrThrow({ where: { id: organizationId }, select: { commercialAccountId: true } });
+    const subscription = await prisma.subscription.findFirstOrThrow({ where: { commercialAccountId: organization.commercialAccountId } });
+    await prisma.subscription.update({ where: { id: subscription.id }, data: { migratedAt: new Date('2026-01-01'), regularizedAt: null, firstDueDate: null, billingDay: null } });
+    await prisma.subscriptionCharge.create({ data: {
+      commercialAccountId: organization.commercialAccountId!, subscriptionId: subscription.id,
+      amount: '79.00', dueDate: new Date('2026-08-29'), nature: 'RENEWAL',
+    } });
+
+    const pending = await request(app.getHttpServer()).get('/api/v1/platform/organizations')
+      .query({ search: `Pending Setup-${suffix}`, lifecycle: 'PENDING_COMMERCIAL_SETUP' })
+      .set('Authorization', `Bearer ${login.body.accessToken}`).expect(200);
+    expect(pending.body.data).toEqual([expect.objectContaining({
+      id: organizationId,
+      lifecycle: expect.arrayContaining(['PENDING_COMMERCIAL_SETUP']),
+      financialStanding: expect.objectContaining({ status: 'CURRENT', dueDate: null }),
+      commercialAccess: 'ACCESS_ALLOWED',
+      effectiveAccess: expect.objectContaining({ allowed: true }),
+      payment: expect.objectContaining({ condition: 'PAID', outstandingAmount: '0.00' }),
+    })]);
+
+    const beforeCharges = await prisma.subscriptionCharge.count({ where: { subscriptionId: subscription.id } });
+    const payload = { contractedPrice: '89.90', firstDueDate: '2026-10-10', billingDay: 10 };
+    const endpoint = `/api/v1/platform/organizations/${organizationId}/regularize-commercial-setup`;
+    const first = await request(app.getHttpServer()).post(endpoint).set('Authorization', `Bearer ${login.body.accessToken}`).send(payload).expect(201);
+    const repeated = await request(app.getHttpServer()).post(endpoint).set('Authorization', `Bearer ${login.body.accessToken}`).send(payload).expect(201);
+    expect(first.body).toEqual(expect.objectContaining({ id: organizationId, lifecycle: expect.not.arrayContaining(['PENDING_COMMERCIAL_SETUP']), commercialSetup: expect.objectContaining({ billingDay: 10 }) }));
+    expect(repeated.body.commercialSetup).toEqual(first.body.commercialSetup);
+    expect(await prisma.subscriptionCharge.count({ where: { subscriptionId: subscription.id } })).toBe(beforeCharges);
+    expect(await prisma.user.count({ where: { organizationId } })).toBe(1);
+    expect(await prisma.auditEvent.count({ where: { targetId: subscription.id, action: 'subscription.migrated_regularized' } })).toBe(1);
+
+    await expect(prisma.subscription.update({ where: { id: subscription.id }, data: { billingDay: 29 } })).rejects.toThrow();
+    await expect(prisma.subscription.update({ where: { id: subscription.id }, data: { firstDueDate: null } })).rejects.toThrow();
   });
 
   it('requires authentication for enriched Organization list and detail', async () => {

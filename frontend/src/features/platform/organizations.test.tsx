@@ -4,10 +4,11 @@ import { render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router-dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { httpClient } from '@/shared/api/http';
+import { ApiError, httpClient } from '@/shared/api/http';
 import { OrganizationsListPage } from './pages/organization-pages';
 
 const organization = { id: 'org-1', name: 'Motor Recife', operationalStatus: 'ACTIVE', financialStanding: { status: 'CURRENT', dueToday: true, dueDate: '2026-02-15' }, commercialAccount: { id: 'account-1', name: 'Grupo Motor' }, primaryContact: { name: 'Ana Lima', email: 'ana@motor.test' }, plan: { name: 'AutoHub Básico', contractedPrice: '79.00', contractedCurrency: 'BRL', contractedInterval: 'MONTHLY' }, nextBillingDate: '2026-02-15T00:00:00Z', payment: { condition: 'PAID', paidAmount: '79.00', outstandingAmount: '0.00' }, commercialAccess: 'ACCESS_ALLOWED', effectiveAccess: { allowed: true, operationalStatus: 'ACTIVE', commercialAccess: 'ACCESS_ALLOWED' }, lifecycle: ['PAID_CURRENT'], administrativePending: ['USER_LIMIT_EXCEEDED'] };
+const pendingOrganization = { ...organization, id: 'org-pending', name: 'Oficina Legada', plan: null, nextBillingDate: null, payment: { condition: 'OPEN', paidAmount: '0.00', outstandingAmount: '0.00' }, lifecycle: ['PENDING_COMMERCIAL_SETUP'], administrativePending: [] };
 const wrapper = ({ children }: { children: React.ReactNode }) => <QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}>{children}</QueryClientProvider>;
 
 describe('Platform Organizations', () => {
@@ -52,5 +53,49 @@ describe('Platform Organizations', () => {
 
     await user.selectOptions(screen.getByRole('combobox', { name: 'Situação financeira' }), 'OVERDUE');
     expect(get).toHaveBeenLastCalledWith('/platform/organizations', { params: expect.objectContaining({ page: 1, financialStanding: ['OVERDUE'] }) });
+  });
+
+  it('regularizes a pending Organization with the contracted price and billing dates', async () => {
+    const user = userEvent.setup();
+    vi.spyOn(httpClient, 'get').mockResolvedValue({ data: { data: [pendingOrganization], meta: { page: 1, pageSize: 20, total: 1, totalPages: 1 } } } as never);
+    const post = vi.spyOn(httpClient, 'post').mockResolvedValue({ data: { ...pendingOrganization, lifecycle: ['PAID_CURRENT'] } } as never);
+    render(<MemoryRouter initialEntries={['/platform/organizations?lifecycle=PENDING_COMMERCIAL_SETUP']}><OrganizationsListPage /></MemoryRouter>, { wrapper });
+
+    await user.click(await screen.findByRole('button', { name: 'Regularizar Oficina Legada' }));
+    expect(screen.getAllByText('Configuração pendente').length).toBeGreaterThan(0);
+    await user.type(screen.getByLabelText('Preço contratado'), '89.90');
+    await user.type(screen.getByLabelText('Primeiro vencimento'), '2026-10-10');
+    await user.clear(screen.getByLabelText('Dia mensal de vencimento'));
+    await user.type(screen.getByLabelText('Dia mensal de vencimento'), '10');
+    await user.click(screen.getByRole('button', { name: 'Confirmar regularização' }));
+
+    expect(post).toHaveBeenCalledWith('/platform/organizations/org-pending/regularize-commercial-setup', {
+      contractedPrice: '89.90',
+      firstDueDate: '2026-10-10',
+      billingDay: 10,
+    });
+    expect(await screen.findByText('Configuração comercial de Oficina Legada regularizada.')).toBeInTheDocument();
+  });
+
+  it('keeps the pending setup visible when validation or the API rejects regularization', async () => {
+    const user = userEvent.setup();
+    vi.spyOn(httpClient, 'get').mockResolvedValue({ data: { data: [pendingOrganization], meta: { page: 1, pageSize: 20, total: 1, totalPages: 1 } } } as never);
+    const post = vi.spyOn(httpClient, 'post').mockRejectedValue(new ApiError({ status: 409, code: 'COMMERCIAL_SETUP_ALREADY_REGULARIZED', detail: 'Commercial setup is already regularized.' }));
+    render(<MemoryRouter initialEntries={['/platform/organizations']}><OrganizationsListPage /></MemoryRouter>, { wrapper });
+
+    await user.click(await screen.findByRole('button', { name: 'Regularizar Oficina Legada' }));
+    await user.type(screen.getByLabelText('Preço contratado'), '89.90');
+    await user.type(screen.getByLabelText('Primeiro vencimento'), '2026-10-10');
+    await user.clear(screen.getByLabelText('Dia mensal de vencimento'));
+    await user.type(screen.getByLabelText('Dia mensal de vencimento'), '29');
+    await user.click(screen.getByRole('button', { name: 'Confirmar regularização' }));
+    expect(screen.getByRole('alert')).toHaveTextContent('Informe um dia entre 1 e 28.');
+    expect(post).not.toHaveBeenCalled();
+
+    await user.clear(screen.getByLabelText('Dia mensal de vencimento'));
+    await user.type(screen.getByLabelText('Dia mensal de vencimento'), '10');
+    await user.click(screen.getByRole('button', { name: 'Confirmar regularização' }));
+    expect(await screen.findByRole('alert')).toHaveTextContent('Não foi possível regularizar a configuração comercial.');
+    expect(screen.getByText('Configuração pendente')).toBeInTheDocument();
   });
 });
