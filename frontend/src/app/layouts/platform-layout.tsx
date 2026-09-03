@@ -8,6 +8,7 @@ const navigation = [
   { to: '/platform/dashboard', label: 'Dashboard', icon: LayoutDashboard, end: true },
   { to: '/platform/organizations', label: 'Oficinas', icon: Building2 },
   { to: '/platform/commercial-accounts', label: 'Contas comerciais', icon: BriefcaseBusiness },
+  { to: '/platform/commercial-accounts/new', label: 'Provisionar conta', icon: BriefcaseBusiness },
   { to: '/platform/subscriptions', label: 'Assinaturas', icon: Receipt },
   { to: '/platform/charges', label: 'Cobranças', icon: CreditCard },
   { to: '/platform/plans', label: 'Planos', icon: CreditCard },

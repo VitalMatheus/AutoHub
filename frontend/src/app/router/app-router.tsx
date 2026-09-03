@@ -21,6 +21,7 @@ import { SubscriptionDetailPage, SubscriptionsListPage } from '@/features/platfo
 import { SubscriptionChargeDetailPage, SubscriptionChargesListPage } from '@/features/platform/pages/subscription-charge-pages';
 import { PlanDetailPage, PlansListPage } from '@/features/platform/pages/plan-pages';
 import { AuditEventsPage } from '@/features/platform/pages/audit-event-pages';
+import { ProvisionCommercialAccountPage } from '@/features/platform/pages/provision-commercial-account-pages';
 
 function HomeRedirect() {
   const { principal, isAuthenticated, isRestoring } = useAuth();
@@ -70,6 +71,7 @@ export function AppRouter() {
           <Route path="organizations" element={<OrganizationsListPage />} />
           <Route path="commercial-accounts" element={<CommercialAccountsListPage />} />
           <Route path="commercial-accounts/:id" element={<CommercialAccountDetailPage />} />
+          <Route path="commercial-accounts/new" element={<ProvisionCommercialAccountPage />} />
           <Route path="subscriptions" element={<SubscriptionsListPage />} />
           <Route path="subscriptions/:id" element={<SubscriptionDetailPage />} />
           <Route path="charges" element={<SubscriptionChargesListPage />} />
