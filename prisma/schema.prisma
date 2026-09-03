@@ -313,6 +313,8 @@ model Organization {
   vehicles               Vehicle[]
   services               Service[]
   products               Product[]
+  suppliers              Supplier[]
+  productSuppliers       ProductSupplier[]
   quotes                 Quote[]
   quoteItems             QuoteItem[]
   workOrders             WorkOrder[]
@@ -480,10 +482,53 @@ model Product {
   quoteItems     QuoteItem[]
   workOrderItems WorkOrderItem[]
   stockMovements StockMovement[]
+  suppliers      ProductSupplier[]
 
   @@unique([organizationId, id])
   @@unique([organizationId, sku])
   @@index([organizationId, active, name, id])
+}
+
+model Supplier {
+  id             String   @id @default(uuid()) @db.Uuid
+  organizationId String   @db.Uuid
+  name           String
+  document       String?
+  email          String?
+  phone          String?
+  notes          String?
+  active         Boolean  @default(true)
+  createdAt      DateTime @default(now()) @db.Timestamptz(3)
+  updatedAt      DateTime @updatedAt @db.Timestamptz(3)
+
+  organization Organization      @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  products     ProductSupplier[]
+
+  @@unique([organizationId, id])
+  @@unique([organizationId, document])
+  @@index([organizationId, active, name, id])
+}
+
+model ProductSupplier {
+  id             String   @id @default(uuid()) @db.Uuid
+  organizationId String   @db.Uuid
+  productId      String   @db.Uuid
+  supplierId     String   @db.Uuid
+  externalCode   String?
+  lastCost       Decimal? @db.Decimal(12, 2)
+  warrantyDays   Int      @default(0)
+  preferred      Boolean  @default(false)
+  createdAt      DateTime @default(now()) @db.Timestamptz(3)
+  updatedAt      DateTime @updatedAt @db.Timestamptz(3)
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  product      Product      @relation(fields: [organizationId, productId], references: [organizationId, id], onDelete: Restrict)
+  supplier     Supplier     @relation(fields: [organizationId, supplierId], references: [organizationId, id], onDelete: Restrict)
+
+  @@unique([organizationId, id])
+  @@unique([organizationId, productId, supplierId])
+  @@index([organizationId, supplierId])
+  @@index([organizationId, productId, preferred])
 }
 
 model Quote {
