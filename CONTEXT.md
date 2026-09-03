@@ -17,67 +17,83 @@ Uma oficina mecânica que opera como unidade independente dentro da plataforma e
 _Avoid_: Tenant, conta da oficina
 
 **Commercial Account**:
-Cliente contratante do AutoHub que reúne uma ou mais Organizations sob uma única relação comercial.
+Cliente contratante do AutoHub. No MVP corresponde a exatamente uma Organization, embora permaneça separado internamente para preservar a fronteira comercial.
 _Avoid_: Organization, Tenant, oficina
 
 **Plan**:
-Oferta comercial do AutoHub que define preço, periodicidade, limites de uso e funcionalidades incluídas; alterações futuras não modificam as condições já contratadas.
+Oferta comercial interna do AutoHub. O MVP expõe somente o AutoHub Básico e não oferece administração de Plans ao usuário.
 _Avoid_: pacote, assinatura
 
 **Plan Version**:
-Conjunto imutável e publicado de condições comerciais de um Plan disponível para novas contratações em determinado período.
+Conjunto imutável das condições padrão de um Plan usado para originar uma contratação, sem aparecer como conceito de navegação no MVP.
 _Avoid_: edição do plano, Subscription
 
 **Subscription**:
-Relação comercial entre uma Commercial Account e um Plan, preservando as condições contratadas e seu período de vigência.
+Relação comercial entre a Commercial Account de uma única Organization e o produto AutoHub Básico, preservando preço, vencimento e vigência contratados.
 _Avoid_: plano, oficina, cobrança
 
 **Contracted Price**:
-Valor recorrente preservado pela Subscription a partir da Plan Version e de eventual ajuste comercial recorrente.
-_Avoid_: preço atual do plano, desconto pontual
+Valor mensal acordado com uma Organization e preservado pela Subscription; alterações futuras não reescrevem mensalidades já emitidas.
+_Avoid_: preço atual do Plan, desconto pontual, valor de uma mensalidade emitida
+
+**Financial Standing**:
+Situação financeira derivada da única mensalidade aberta e da data de referência: Current, Due Soon, Overdue ou Payment Blocked.
+_Avoid_: Organization operational status, situação administrativa
 
 **Monthly Closing**:
-Retrato das condições comerciais e operacionais no fim de um mês civil em America/Recife, usado nas séries históricas da plataforma.
-_Avoid_: média mensal, projeção
+Retrato financeiro calculado para um instante de referência em America/Recife. Não implica uma série histórica ou fechamento contábil no MVP.
+_Avoid_: média mensal, projeção, fechamento contábil
 
 **Subscription Charge**:
-Obrigação financeira de uma Subscription referente a um período contratado, com valor, vencimento e saldo devido.
+Mensalidade integral de uma Subscription, com valor e vencimento. Uma Organization possui no máximo uma Subscription Charge aberta no MVP.
 _Avoid_: Payment, mensalidade paga, recebimento
 
 **Charge Settlement**:
-Registro imutável de um valor recebido ou estornado para liquidar total ou parcialmente uma Subscription Charge.
-_Avoid_: Payment, cobrança, edição de recebimento
+Registro imutável da quitação integral ou reversão de uma Subscription Charge, originado pelo gateway ou por baixa administrativa excepcional.
+_Avoid_: Payment, cobrança, pagamento parcial, edição de recebimento
+
+**Due Soon**:
+Condição financeira de uma Organization nos cinco dias civis anteriores ao vencimento de sua única mensalidade aberta.
+_Avoid_: atraso, notificação enviada, período de tolerância
+
+**Overdue Tolerance**:
+Cinco dias civis completos após o vencimento durante os quais a mensalidade está atrasada, mas a Organization ainda pode operar.
+_Avoid_: extensão do vencimento, Payment Grace Period contratual
 
 **Delinquent Subscription**:
-Subscription que possui ao menos uma Subscription Charge vencida, não cancelada e ainda não integralmente liquidada.
+Subscription cuja única Subscription Charge aberta passou do vencimento sem quitação integral.
 _Avoid_: assinatura suspensa, oficina inativa
 
 **Payment Grace Period**:
-Tolerância contratada após o vencimento de uma renovação durante a qual a Subscription está inadimplente, mas suas Organizations ainda podem operar.
+Termo legado para a tolerância após o vencimento. No MVP, use Overdue Tolerance: cinco dias civis fixos, sem alterar a data de vencimento.
 _Avoid_: Trial Period, prorrogação do vencimento
 
 **Commercial Access Restriction**:
-Condição derivada da Subscription e de suas Subscription Charges que permite o acesso, alerta sobre a tolerância ou bloqueia comercialmente todas as Organizations cobertas.
+Condição derivada da Subscription e de sua única Subscription Charge aberta que permite o acesso ou produz Payment Block depois da Overdue Tolerance.
 _Avoid_: Organization operational status, suspensão administrativa
+
+**Payment Block**:
+Bloqueio comercial automático aplicado após cinco dias civis completos de atraso e removido pela quitação integral da mensalidade aberta, sem alterar o Organization operational status.
+_Avoid_: suspensão administrativa, cancelamento, exclusão
 
 **Effective Access**:
 Permissão resultante da combinação entre o Organization operational status e a Commercial Access Restriction, sem alterar nenhum dos dois estados de origem.
 _Avoid_: status da assinatura, papel do usuário
 
 **Effective Cancellation**:
-Encerramento da vigência de uma Subscription na data em que o cancelamento produz efeito, independentemente da data em que foi solicitado.
+Encerramento da vigência comercial depois do período já pago; impede novas mensalidades sem apagar a Organization ou perdoar uma mensalidade aberta.
 _Avoid_: pedido de cancelamento, exclusão da oficina
 
 **Trial Period**:
-Período inicial opcional de 14 dias em que uma Subscription pode ser utilizada antes do primeiro período pago e sem contribuir para a receita recorrente.
-_Avoid_: plano gratuito, cortesia
+Conceito fora do MVP. O intervalo até o primeiro vencimento é configurado diretamente e não constitui um Trial Period separado.
+_Avoid_: período até o primeiro vencimento, cortesia
 
 **Awaiting First Payment**:
-Condição após o Trial Period, ou desde uma contratação sem teste, em que a Subscription ainda não iniciou seu primeiro período pago e o acesso aguarda a liquidação integral da primeira Subscription Charge.
-_Avoid_: Trial Period, Payment Grace Period, assinatura cancelada
+Termo legado fora da superfície do MVP; a primeira mensalidade segue o mesmo ciclo de Due Soon, vencimento, Overdue Tolerance e Payment Block das demais.
+_Avoid_: Trial Period, Overdue Tolerance, assinatura cancelada
 
 **Pending Commercial Setup**:
-Condição temporária de uma Commercial Account migrada cujo início e condições de cobrança ainda precisam ser confirmados pelo Super Admin.
+Condição temporária de uma Organization existente cujo preço ou primeiro vencimento ainda precisa ser confirmado pelo Super Admin; não gera dívida retroativa nem bloqueio comercial.
 _Avoid_: Trial Period, inadimplência, assinatura cancelada
 
 **Organization operational status**:
