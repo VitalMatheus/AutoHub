@@ -2,6 +2,7 @@ import { Type } from 'class-transformer';
 import { ApiPropertyOptional } from '@nestjs/swagger';
 import { OrganizationOperationalStatus } from '@prisma/client';
 import { IsEnum, IsInt, IsOptional, IsString, Max, Min } from 'class-validator';
+import { FinancialStandingStatus } from '../../billing/financial-standing';
 
 export enum OrganizationLifecycleFilter {
   TRIAL = 'TRIAL',
@@ -43,6 +44,10 @@ export class ListOrganizationsDto {
   @ApiPropertyOptional({ enum: OrganizationCommercialAccessFilter, isArray: true })
   @IsOptional() @IsEnum(OrganizationCommercialAccessFilter, { each: true })
   commercialAccess?: OrganizationCommercialAccessFilter[];
+
+  @ApiPropertyOptional({ enum: FinancialStandingStatus, isArray: true })
+  @IsOptional() @IsEnum(FinancialStandingStatus, { each: true })
+  financialStanding?: FinancialStandingStatus[];
 
   @ApiPropertyOptional({ enum: OrganizationSort, default: '-createdAt' })
   @IsOptional() @IsEnum(OrganizationSort)

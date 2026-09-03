@@ -49,8 +49,14 @@ describe('OpenAPI structure', () => {
     const organizationsGet = paths['/api/v1/platform/organizations']?.get;
     expect(organizationsGet?.responses['200']).toEqual(expect.objectContaining({ content: { 'application/json': { schema: { $ref: '#/components/schemas/OrganizationsResponseDto' } } } }));
     expect(organizationsGet?.responses).toEqual(expect.objectContaining({ '401': expect.any(Object), '403': expect.any(Object) }));
-    expect(organizationsGet?.parameters?.flatMap((parameter) => 'name' in parameter ? [parameter.name] : [])).toEqual(expect.arrayContaining(['search', 'operationalStatus', 'lifecycle', 'commercialAccess', 'sort', 'page', 'pageSize']));
+    expect(organizationsGet?.parameters?.flatMap((parameter) => 'name' in parameter ? [parameter.name] : [])).toEqual(expect.arrayContaining(['search', 'operationalStatus', 'lifecycle', 'commercialAccess', 'financialStanding', 'sort', 'page', 'pageSize']));
     expect(paths['/api/v1/platform/organizations/{id}']?.get?.responses['200']).toEqual(expect.objectContaining({ content: { 'application/json': { schema: { $ref: '#/components/schemas/OrganizationResponseDto' } } } }));
+    expect(schemas.OrganizationResponseDto).toEqual(expect.objectContaining({
+      properties: expect.objectContaining({
+        operationalStatus: expect.any(Object),
+        financialStanding: expect.objectContaining({ $ref: '#/components/schemas/OrganizationFinancialStandingDto' }),
+      }),
+    }));
     expect(paths['/api/v1/platform/plans']?.get).toBeDefined();
     const dashboardGet = paths['/api/v1/dashboard']?.get;
     expect(dashboardGet).toBeDefined();

@@ -14,6 +14,7 @@ import { addCivilDays } from '../billing/civil-dates';
 import { chargeBalance, deriveCommercialAccess } from '../billing/commercial-access';
 import { deriveSubscriptionConditions } from '../subscriptions/subscriptions.service';
 import { ListOrganizationsDto, OrganizationCommercialAccessFilter, OrganizationLifecycleFilter, OrganizationSort } from './dto/list-organizations.dto';
+import { deriveFinancialStanding } from '../billing/financial-standing';
 
 const organizationSelect = {
   id: true, name: true, document: true, phone: true, email: true, addressLine1: true, addressLine2: true,
@@ -128,10 +129,12 @@ export class OrganizationsService {
       ] } : {}),
     };
     const rows = await this.prisma.organization.findMany({ where, select: organizationSelect });
-    const projected = rows.map((row) => this.present(row));
+    const referenceAt = new Date();
+    const projected = rows.map((row) => this.present(row, referenceAt));
     const filtered = projected.filter((row) =>
       (!dto.lifecycle?.length || dto.lifecycle.some((value) => row.lifecycle.includes(value))) &&
-      (!dto.commercialAccess?.length || dto.commercialAccess.includes(row.commercialAccess as OrganizationCommercialAccessFilter)),
+      (!dto.commercialAccess?.length || dto.commercialAccess.includes(row.commercialAccess as OrganizationCommercialAccessFilter)) &&
+      (!dto.financialStanding?.length || dto.financialStanding.includes(row.financialStanding.status)),
     );
     filtered.sort(this.sorter(dto.sort ?? OrganizationSort.CREATED_AT_DESC));
     const data = filtered.slice((page - 1) * pageSize, page * pageSize);
@@ -157,6 +160,7 @@ export class OrganizationsService {
     };
     const openCharges = charges.filter((charge) => chargeBalance(charge).gt(0));
     const nextCharge = [...openCharges].sort((a, b) => a.dueDate.getTime() - b.dueDate.getTime())[0];
+    const financialStanding = deriveFinancialStanding(nextCharge?.dueDate ?? null, asOf);
     const blockDate = nextCharge ? recifeMidnight(addCivilDays(recifeCivilDate(nextCharge.dueDate), nextCharge.nature === 'RENEWAL' ? 6 : 1)) : null;
     const paidAmount = charges.reduce((sum, charge) => sum.add(charge.amount.sub(chargeBalance(charge))), new Prisma.Decimal(0));
     const outstandingAmount = openCharges.reduce((sum, charge) => sum.add(chargeBalance(charge)), new Prisma.Decimal(0));
@@ -176,6 +180,7 @@ export class OrganizationsService {
     if (subscription && activeUsers > subscription.contractedUserLimit) administrativePending.push('USER_LIMIT_EXCEEDED');
     return {
       ...row,
+      financialStanding,
       commercialAccount: account ? { id: account.id, name: account.name, billingEmail: account.billingEmail, billingDocument: account.billingDocument } : null,
       primaryContact: contact,
       plan: subscription?.planVersion ? {

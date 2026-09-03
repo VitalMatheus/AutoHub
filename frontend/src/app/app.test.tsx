@@ -217,6 +217,11 @@ describe('Organization Admin frontend shell', () => {
     render(<AppProviders />);
     expect(await screen.findByRole('heading', { name: 'Painel da plataforma' })).toBeInTheDocument();
     expect(window.location.pathname).toBe('/platform/dashboard');
+    expect(screen.getByRole('navigation', { name: 'Módulos da plataforma' }).querySelectorAll('a')).toHaveLength(3);
+    expect(screen.getByRole('link', { name: 'Visão geral' })).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'Mensalidades' })).toHaveAttribute('href', '/platform/charges');
+    expect(screen.queryByRole('link', { name: 'Contas comerciais' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('link', { name: 'Assinaturas' })).not.toBeInTheDocument();
     await user.click(screen.getByRole('link', { name: 'Oficinas' }));
     expect(await screen.findByRole('heading', { name: 'Organizations', level: 2 })).toBeInTheDocument();
     expect(screen.queryByRole('heading', { name: 'Clientes' })).not.toBeInTheDocument();

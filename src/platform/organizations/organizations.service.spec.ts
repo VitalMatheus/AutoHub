@@ -5,6 +5,8 @@ import { OrganizationCommercialAccessFilter, OrganizationLifecycleFilter } from 
 describe('OrganizationsService commercial onboarding', () => {
   const principal = { id: 'super-admin', name: 'Super Admin', email: 'super@example.com', role: 'SUPER_ADMIN', organizationId: null } as const;
 
+  afterEach(() => jest.useRealTimers());
+
   function setup(overrides: Record<string, unknown> = {}) {
     const tx = {
       planVersion: { findFirst: jest.fn().mockResolvedValue({ id: 'version-basic', status: 'PUBLISHED', price: '79.00', currency: 'BRL', interval: 'MONTHLY', organizationLimit: 1, userLimit: 3, workOrderLimit: null, gracePeriodDays: 5, plan: { archivedAt: null } }), findUnique: jest.fn() },
@@ -79,5 +81,37 @@ describe('OrganizationsService commercial onboarding', () => {
     }));
     expect(result.data[0]).not.toHaveProperty('customers');
     expect(result.meta.total).toBe(1);
+  });
+
+  it('filters Organizations by Financial Standing while keeping operational status separate', async () => {
+    jest.useFakeTimers().setSystemTime(new Date('2026-09-03T02:30:00.000Z'));
+    const { service, prisma } = setup();
+    const organization = (id: string, operationalStatus: 'ACTIVE' | 'SUSPENDED', dueDate: string) => ({
+      id, name: id, document: null, phone: null, email: null, addressLine1: null, addressLine2: null, city: null, state: null, postalCode: null,
+      operationalStatus, createdAt: new Date('2026-01-01T00:00:00.000Z'), updatedAt: new Date('2026-01-01T00:00:00.000Z'),
+      commercialAccount: {
+        id: `account-${id}`, name: id, billingEmail: null, billingDocument: null, primaryContactUserId: null, primaryContactOrganizationId: null,
+        primaryContact: null, organizations: [{ id, operationalStatus, users: [] }],
+        subscriptions: [{ id: `sub-${id}`, status: 'CURRENT', contractedPrice: new Prisma.Decimal('79.90'), contractedCurrency: 'BRL', contractedInterval: 'MONTHLY',
+          contractedOrganizationLimit: 1, contractedUserLimit: 3, contractedWorkOrderLimit: null, migratedAt: null, regularizedAt: null,
+          commercialStartAt: null, trialEnabled: false, trialStartsAt: null, trialEndsAt: null, firstPaymentReceivedAt: null, firstPaidPeriodStartedAt: null,
+          currentPeriodStart: null, currentPeriodEnd: null, cancellationRequestedAt: null, effectiveCancellationAt: null, planVersion: null,
+          charges: [{ nature: 'RENEWAL', dueDate: new Date(`${dueDate}T03:00:00.000Z`), amount: new Prisma.Decimal('79.90'), cancelledAt: null, settlements: [] }],
+        }],
+      },
+    });
+    prisma.organization.findMany = jest.fn().mockResolvedValue([
+      organization('due-today-suspended', 'SUSPENDED', '2026-09-02'),
+      organization('due-soon', 'ACTIVE', '2026-09-07'),
+    ]);
+
+    const result = await service.list({ page: 1, pageSize: 20, financialStanding: ['CURRENT'] } as never);
+
+    expect(result.data).toHaveLength(1);
+    expect(result.data[0]).toEqual(expect.objectContaining({
+      id: 'due-today-suspended',
+      operationalStatus: 'SUSPENDED',
+      financialStanding: { status: 'CURRENT', dueToday: true, dueDate: new Date('2026-09-02T03:00:00.000Z') },
+    }));
   });
 });

@@ -1,18 +1,13 @@
 import { useEffect, useRef, useState } from 'react';
 import { Link, NavLink, Outlet, useLocation } from 'react-router-dom';
-import { Building2, CreditCard, FileClock, LayoutDashboard, LogOut, Menu, Receipt, X, BriefcaseBusiness } from 'lucide-react';
+import { Building2, CreditCard, LayoutDashboard, LogOut, Menu, X } from 'lucide-react';
 import { useAuth } from '@/features/auth/auth-context';
 import { cn } from '@/shared/utils/cn';
 
 const navigation = [
-  { to: '/platform/dashboard', label: 'Dashboard', icon: LayoutDashboard, end: true },
+  { to: '/platform/dashboard', label: 'Visão geral', icon: LayoutDashboard, end: true },
   { to: '/platform/organizations', label: 'Oficinas', icon: Building2 },
-  { to: '/platform/commercial-accounts', label: 'Contas comerciais', icon: BriefcaseBusiness },
-  { to: '/platform/commercial-accounts/new', label: 'Provisionar conta', icon: BriefcaseBusiness },
-  { to: '/platform/subscriptions', label: 'Assinaturas', icon: Receipt },
-  { to: '/platform/charges', label: 'Cobranças', icon: CreditCard },
-  { to: '/platform/plans', label: 'Planos', icon: CreditCard },
-  { to: '/platform/audit-events', label: 'Auditoria', icon: FileClock },
+  { to: '/platform/charges', label: 'Mensalidades', icon: CreditCard },
 ];
 
 export function PlatformLayout() {

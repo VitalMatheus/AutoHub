@@ -82,6 +82,24 @@ describe('Platform Organizations and activation (e2e)', () => {
     expect(detail.body).toEqual(expect.objectContaining({ id: organization.id, commercialAccount: null, primaryContact: null, lifecycle: expect.any(Array), effectiveAccess: expect.any(Object), administrativePending: expect.any(Array) }));
   });
 
+  it('exposes and filters Financial Standing independently from operational status', async () => {
+    const login = await request(app.getHttpServer()).post('/api/v1/auth/login').send({ email: superEmail, password: superPassword }).expect(201);
+    const suffix = Date.now();
+    const created = await request(app.getHttpServer()).post('/api/v1/platform/organizations')
+      .set('Authorization', `Bearer ${login.body.accessToken}`)
+      .send({ name: `Standing-${suffix}`, trialEnabled: false, admin: { name: 'Standing Admin', email: `standing-${suffix}@example.com` } }).expect(201);
+
+    const response = await request(app.getHttpServer()).get('/api/v1/platform/organizations')
+      .query({ search: `Standing-${suffix}`, operationalStatus: 'ACTIVE', financialStanding: 'CURRENT' })
+      .set('Authorization', `Bearer ${login.body.accessToken}`).expect(200);
+
+    expect(response.body.data).toEqual([expect.objectContaining({
+      id: created.body.organization.id,
+      operationalStatus: 'ACTIVE',
+      financialStanding: expect.objectContaining({ status: 'CURRENT', dueToday: true, dueDate: expect.any(String) }),
+    })]);
+  });
+
   it('requires authentication for enriched Organization list and detail', async () => {
     await request(app.getHttpServer()).get('/api/v1/platform/organizations').expect(401);
     await request(app.getHttpServer()).get('/api/v1/platform/organizations/not-found').expect(401);

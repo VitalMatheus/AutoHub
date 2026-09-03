@@ -1,5 +1,12 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { OrganizationCommercialAccessFilter, OrganizationLifecycleFilter } from './list-organizations.dto';
+import { FinancialStandingStatus } from '../../billing/financial-standing';
+
+export class OrganizationFinancialStandingDto {
+  @ApiProperty({ enum: FinancialStandingStatus }) status!: FinancialStandingStatus;
+  @ApiProperty() dueToday!: boolean;
+  @ApiPropertyOptional({ format: 'date-time', nullable: true }) dueDate!: string | null;
+}
 
 export class OrganizationResponseDto {
   @ApiProperty() id!: string;
@@ -7,6 +14,7 @@ export class OrganizationResponseDto {
   @ApiPropertyOptional() document!: string | null;
   @ApiPropertyOptional() email!: string | null;
   @ApiProperty() operationalStatus!: string;
+  @ApiProperty({ type: OrganizationFinancialStandingDto }) financialStanding!: OrganizationFinancialStandingDto;
   @ApiProperty({ type: Object }) commercialAccount!: object | null;
   @ApiProperty({ type: Object, nullable: true }) primaryContact!: object | null;
   @ApiProperty({ type: Object, nullable: true }) plan!: object | null;
