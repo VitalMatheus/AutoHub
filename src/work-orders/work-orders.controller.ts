@@ -8,6 +8,7 @@ import { CreateWorkOrderItemDto } from './dto/create-work-order-item.dto';
 import { ListWorkOrdersDto } from './dto/list-work-orders.dto';
 import { UpdateWorkOrderDto } from './dto/update-work-order.dto';
 import { UpdateWorkOrderItemDto } from './dto/update-work-order-item.dto';
+import { CompleteWorkOrderDto } from './dto/complete-work-order.dto';
 import { WorkOrdersService } from './work-orders.service';
 
 type AuthenticatedRequest = Request & { user?: AuthenticatedPrincipal };
@@ -33,7 +34,7 @@ export class WorkOrdersController {
   @Post(':id/request-approval') @ApiCreatedResponse({ description: 'Work Order transitioned.' }) @ApiOperation({ summary: 'Move an OPEN Work Order to WAITING_APPROVAL' }) @ApiConflictResponse({ description: 'WORK_ORDER_INVALID_TRANSITION' }) @ApiNotFoundResponse() requestApproval(@Req() r: AuthenticatedRequest, @Param('id') id: string) { return this.workOrders.requestApproval(r.user!, id); }
   @Post(':id/start') @ApiCreatedResponse({ description: 'Work Order transitioned.' }) start(@Req() r: AuthenticatedRequest, @Param('id') id: string) { return this.workOrders.start(r.user!, id); }
   @Post(':id/wait-parts') @ApiCreatedResponse({ description: 'Work Order transitioned.' }) waitParts(@Req() r: AuthenticatedRequest, @Param('id') id: string) { return this.workOrders.waitParts(r.user!, id); }
-  @Post(':id/complete') @ApiCreatedResponse({ description: 'Work Order transitioned.' }) complete(@Req() r: AuthenticatedRequest, @Param('id') id: string) { return this.workOrders.complete(r.user!, id); }
+  @Post(':id/complete') @ApiCreatedResponse({ description: 'Work Order transitioned and stock consumed.' }) complete(@Req() r: AuthenticatedRequest, @Param('id') id: string, @Body() dto: CompleteWorkOrderDto) { return this.workOrders.complete(r.user!, id, dto); }
   @Post(':id/deliver') @ApiCreatedResponse({ description: 'Work Order transitioned.' }) deliver(@Req() r: AuthenticatedRequest, @Param('id') id: string) { return this.workOrders.deliver(r.user!, id); }
   @Post(':id/cancel') @ApiCreatedResponse({ description: 'Work Order transitioned.' }) cancel(@Req() r: AuthenticatedRequest, @Param('id') id: string) { return this.workOrders.cancel(r.user!, id); }
 }

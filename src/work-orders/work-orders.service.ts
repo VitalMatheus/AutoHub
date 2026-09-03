@@ -8,6 +8,7 @@ import { CreateWorkOrderItemDto } from './dto/create-work-order-item.dto';
 import { ListWorkOrdersDto } from './dto/list-work-orders.dto';
 import { UpdateWorkOrderDto } from './dto/update-work-order.dto';
 import { UpdateWorkOrderItemDto } from './dto/update-work-order-item.dto';
+import { CompleteWorkOrderDto, WorkOrderStockAllocationDto } from './dto/complete-work-order.dto';
 
 type WorkOrderAction = 'requestApproval' | 'start' | 'waitParts' | 'complete' | 'deliver' | 'cancel';
 const transitions: Record<WorkOrderAction, { from: string[]; to: string }> = {
@@ -64,7 +65,23 @@ export class WorkOrdersService {
 
   private format(workOrder: any) {
     const items = (workOrder.items ?? []).map((item: any) => ({ ...item, quantity: fixedScale(item.quantity, 3), unitPrice: fixedScale(item.unitPrice, 2), total: totalOf(item.quantity.toString(), item.unitPrice.toString()) }));
-    return { ...workOrder, items, total: sumTotals(items) };
+    const allocations = (workOrder.stockAllocations ?? []).map((allocation: any) => ({
+      id: allocation.id,
+      workOrderItemId: allocation.workOrderItemId,
+      quantity: allocation.quantity,
+      unitCost: allocation.unitCost?.toString() ?? null,
+      origin: allocation.stockEntry ? 'PURCHASE' : 'OPENING',
+      stockEntry: allocation.stockEntry ? {
+        id: allocation.stockEntry.id,
+        supplier: allocation.stockEntry.supplier ? { id: allocation.stockEntry.supplier.id, name: allocation.stockEntry.supplier.name } : null,
+        purchase: allocation.stockEntry.purchase ? { id: allocation.stockEntry.purchase.id, documentNumber: allocation.stockEntry.purchase.documentNumber } : null,
+        batchNumber: allocation.stockEntry.batchNumber,
+        warrantyExpiry: allocation.stockEntry.warrantyDays && allocation.stockEntry.purchaseDate
+          ? new Date(new Date(allocation.stockEntry.purchaseDate).getTime() + allocation.stockEntry.warrantyDays * 86400000).toISOString().slice(0, 10)
+          : null,
+      } : null,
+    }));
+    return { ...workOrder, items, stockAllocations: allocations, total: sumTotals(items) };
   }
 
   async create(principal: AuthenticatedPrincipal, dto: CreateWorkOrderDto) {
@@ -224,7 +241,7 @@ export class WorkOrdersService {
 
   async findOne(principal: AuthenticatedPrincipal, id: string) {
     const organizationId = this.tenant(principal);
-    const workOrder = await this.prisma.workOrder.findFirst({ where: { id, organizationId }, include: { items: { orderBy: { createdAt: 'asc' } } } });
+    const workOrder = await this.prisma.workOrder.findFirst({ where: { id, organizationId }, include: this.detailInclude() });
     if (!workOrder) throw new NotFoundException('Work Order not found');
     return this.format(workOrder);
   }
@@ -286,14 +303,14 @@ export class WorkOrdersService {
   async requestApproval(p: AuthenticatedPrincipal, id: string) { return this.transition(p, id, 'requestApproval'); }
   async start(p: AuthenticatedPrincipal, id: string) { return this.transition(p, id, 'start'); }
   async waitParts(p: AuthenticatedPrincipal, id: string) { return this.transition(p, id, 'waitParts'); }
-  async complete(p: AuthenticatedPrincipal, id: string) { return this.transition(p, id, 'complete'); }
+  async complete(p: AuthenticatedPrincipal, id: string, dto: CompleteWorkOrderDto = {}) { return this.transition(p, id, 'complete', dto); }
   async deliver(p: AuthenticatedPrincipal, id: string) { return this.transition(p, id, 'deliver'); }
   async cancel(p: AuthenticatedPrincipal, id: string) { return this.transition(p, id, 'cancel'); }
 
-  private async transition(principal: AuthenticatedPrincipal, id: string, action: WorkOrderAction) {
+  private async transition(principal: AuthenticatedPrincipal, id: string, action: WorkOrderAction, completeDto?: CompleteWorkOrderDto) {
     const organizationId = this.tenant(principal); const rule = transitions[action];
     return this.prisma.$transaction(async (tx) => {
-      if (action === 'complete') return this.completeInTransaction(tx, organizationId, id, rule);
+      if (action === 'complete') return this.completeInTransaction(tx, organizationId, id, rule, completeDto);
       const current = await tx.workOrder.findFirst({ where: { id, organizationId }, include: { items: { orderBy: { createdAt: 'asc' } } } });
       if (!current) throw new NotFoundException('Work Order not found');
       if (!rule.from.includes(current.status)) throw new ConflictException({ type: 'https://api.autohub.local/problems/work-order-invalid-transition', title: 'Work Order transition is not allowed', status: 409, detail: `Work Order cannot ${action} from ${current.status}.`, code: 'WORK_ORDER_INVALID_TRANSITION' });
@@ -302,7 +319,7 @@ export class WorkOrdersService {
     });
   }
 
-  private async completeInTransaction(tx: Prisma.TransactionClient, organizationId: string, id: string, rule: { from: string[]; to: string }) {
+  private async completeInTransaction(tx: Prisma.TransactionClient, organizationId: string, id: string, rule: { from: string[]; to: string }, dto?: CompleteWorkOrderDto) {
     const locked = await tx.$queryRaw<Array<{ id: string }>>`
       SELECT "id" FROM "WorkOrder"
       WHERE "id" = ${id}::uuid AND "organizationId" = ${organizationId}::uuid FOR UPDATE
@@ -313,11 +330,14 @@ export class WorkOrdersService {
     if (!rule.from.includes(current.status)) throw this.invalidTransition('complete', current.status);
 
     const required = new Map<string, number>();
+    const productItems = new Map<string, { id: string; productId: string; quantity: number }>();
     for (const item of current.items) {
       if (item.type !== 'PRODUCT' || !item.productId) continue;
       const value = item.quantity.toString();
       if (!/^\d+(\.0+)?$/.test(value)) throw new BadRequestException('Product quantities must be whole numbers to consume stock');
-      required.set(item.productId, (required.get(item.productId) ?? 0) + Number(value.split('.')[0]));
+      const quantity = Number(value.split('.')[0]);
+      required.set(item.productId, (required.get(item.productId) ?? 0) + quantity);
+      productItems.set(item.id, { id: item.id, productId: item.productId, quantity });
     }
     const insufficient: string[] = [];
     for (const productId of [...required.keys()].sort()) {
@@ -335,13 +355,99 @@ export class WorkOrdersService {
         detail: `Insufficient stock for Products: ${insufficient.join(', ')}.`, code: 'INSUFFICIENT_STOCK', products: insufficient,
       });
     }
+    const requested = dto?.allocations;
+    const allocations = requested ? await this.resolveRequestedAllocations(tx, organizationId, current.items, requested, required) : await this.resolveFifoAllocations(tx, organizationId, current.items, required);
     for (const [productId, quantity] of required) {
       await tx.product.update({ where: { organizationId_id: { organizationId, id: productId } }, data: { stockQuantity: { decrement: quantity } } });
       await tx.stockMovement.create({ data: { organizationId, productId, workOrderId: id, type: 'CONSUMPTION', quantityChange: -quantity } });
     }
-    const updated = await tx.workOrder.update({ where: { organizationId_id: { organizationId, id } }, data: { status: rule.to as any }, include: { items: { orderBy: { createdAt: 'asc' } } } });
+    for (const allocation of allocations) {
+      if (allocation.stockEntryId) {
+        await tx.stockEntry.update({ where: { id: allocation.stockEntryId }, data: { consumedQuantity: { increment: allocation.quantity } } });
+      }
+      await tx.workOrderStockAllocation.create({ data: { organizationId, workOrderId: id, workOrderItemId: allocation.workOrderItemId, stockEntryId: allocation.stockEntryId, quantity: allocation.quantity, unitCost: allocation.unitCost } });
+    }
+    await tx.workOrder.update({ where: { organizationId_id: { organizationId, id } }, data: { status: rule.to as any } });
+    const updated = await tx.workOrder.findFirstOrThrow({ where: { organizationId, id }, include: this.detailInclude() });
     return this.format(updated);
   }
+
+  private detailInclude() {
+    return {
+      items: { orderBy: { createdAt: 'asc' } },
+      stockAllocations: {
+        orderBy: { createdAt: 'asc' },
+        include: {
+          stockEntry: {
+            include: {
+              supplier: { select: { id: true, name: true } },
+              purchase: { select: { id: true, documentNumber: true } },
+            },
+          },
+        },
+      },
+    } as const;
+  }
+
+  private async resolveFifoAllocations(tx: Prisma.TransactionClient, organizationId: string, items: any[], required: Map<string, number>) {
+    const result: Array<{ workOrderItemId: string; stockEntryId?: string; quantity: number; unitCost: Prisma.Decimal | null }> = [];
+    for (const item of items.filter((candidate) => candidate.type === 'PRODUCT' && candidate.productId)) {
+      let remaining = Number(item.quantity.toString());
+      const entries = await tx.stockEntry.findMany({ where: { organizationId, productId: item.productId, status: 'AVAILABLE' }, orderBy: [{ purchaseDate: 'asc' }, { createdAt: 'asc' }], include: { purchase: { select: { status: true } } } });
+      for (const entry of entries) {
+        const available = entry.quantity - entry.consumedQuantity;
+        if (available <= 0 || entry.purchase.status !== 'CONFIRMED' || remaining === 0) continue;
+        const quantity = Math.min(remaining, available);
+        result.push({ workOrderItemId: item.id, stockEntryId: entry.id, quantity, unitCost: entry.unitCost });
+        remaining -= quantity;
+      }
+      if (remaining > 0) {
+        const product = await tx.product.findFirstOrThrow({ where: { id: item.productId, organizationId }, select: { stockQuantity: true } });
+        const traceableAvailable = entries.reduce((sum, entry) => sum + Math.max(0, entry.quantity - entry.consumedQuantity), 0);
+        const openingAvailable = Math.max(0, product.stockQuantity - traceableAvailable);
+        if (openingAvailable < remaining) throw this.insufficientStock(item.productId);
+        result.push({ workOrderItemId: item.id, quantity: remaining, unitCost: null });
+      }
+    }
+    return result;
+  }
+
+  private async resolveRequestedAllocations(tx: Prisma.TransactionClient, organizationId: string, items: any[], requested: WorkOrderStockAllocationDto[], required: Map<string, number>) {
+    const itemMap = new Map(items.map((item) => [item.id, item]));
+    const totals = new Map<string, number>();
+    const entryTotals = new Map<string, number>();
+    for (const allocation of requested) {
+      const item = itemMap.get(allocation.workOrderItemId);
+      if (!item || item.type !== 'PRODUCT' || !item.productId) throw new NotFoundException('Work Order Item not found');
+      totals.set(item.id, (totals.get(item.id) ?? 0) + allocation.quantity);
+      if (allocation.stockEntryId) entryTotals.set(allocation.stockEntryId, (entryTotals.get(allocation.stockEntryId) ?? 0) + allocation.quantity);
+    }
+    for (const item of items.filter((candidate) => candidate.type === 'PRODUCT' && candidate.productId)) {
+      const expected = Number(item.quantity.toString());
+      if (totals.get(item.id) !== expected) throw new ConflictException('Stock allocations must exactly match each Product quantity');
+    }
+    const entries = await tx.stockEntry.findMany({ where: { organizationId, id: { in: [...entryTotals.keys()] } }, include: { purchase: { select: { status: true } } } });
+    const byId = new Map(entries.map((entry) => [entry.id, entry]));
+    for (const [entryId, quantity] of entryTotals) {
+      const entry = byId.get(entryId);
+      if (!entry || entry.status !== 'AVAILABLE' || entry.purchase.status !== 'CONFIRMED' || entry.quantity - entry.consumedQuantity < quantity) throw new ConflictException('Stock entry is cancelled or has insufficient stock');
+    }
+    const productOpening = new Map<string, number>();
+    for (const item of items.filter((candidate) => candidate.type === 'PRODUCT' && candidate.productId)) {
+      const itemAllocations = requested.filter((allocation) => allocation.workOrderItemId === item.id);
+      const opening = itemAllocations.filter((allocation) => !allocation.stockEntryId).reduce((sum, allocation) => sum + allocation.quantity, 0);
+      if (opening) productOpening.set(item.productId, (productOpening.get(item.productId) ?? 0) + opening);
+    }
+    for (const [productId, opening] of productOpening) {
+      const product = await tx.product.findFirstOrThrow({ where: { id: productId, organizationId }, select: { stockQuantity: true } });
+      const availableEntries = await tx.stockEntry.aggregate({ where: { organizationId, productId, status: 'AVAILABLE' }, _sum: { quantity: true } });
+      const consumed = await tx.stockEntry.aggregate({ where: { organizationId, productId, status: 'AVAILABLE' }, _sum: { consumedQuantity: true } });
+      if (product.stockQuantity - ((availableEntries._sum.quantity ?? 0) - (consumed._sum.consumedQuantity ?? 0)) < opening) throw this.insufficientStock(productId);
+    }
+    return requested.map((allocation) => ({ ...allocation, unitCost: allocation.stockEntryId ? byId.get(allocation.stockEntryId)!.unitCost : null }));
+  }
+
+  private insufficientStock(product: string): ConflictException { return new ConflictException({ code: 'INSUFFICIENT_STOCK', detail: `Insufficient stock for Product ${product}.` }); }
 
   private invalidTransition(action: string, status: string): ConflictException {
     return new ConflictException({ type: 'https://api.autohub.local/problems/work-order-invalid-transition', title: 'Work Order transition is not allowed', status: 409, detail: `Work Order cannot ${action} from ${status}.`, code: 'WORK_ORDER_INVALID_TRANSITION' });

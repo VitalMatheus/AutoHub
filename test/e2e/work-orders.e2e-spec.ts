@@ -24,6 +24,7 @@ describe('Work Orders (e2e)', () => {
     const where = { organizationId: { in: [organizationId, otherOrganizationId] } };
     await prisma.payment.deleteMany({ where });
     await prisma.stockMovement.deleteMany({ where });
+    await prisma.workOrderStockAllocation.deleteMany({ where });
     await prisma.workOrderItem.deleteMany({ where });
     await prisma.workOrder.deleteMany({ where });
     await prisma.quoteItem.deleteMany({ where });
