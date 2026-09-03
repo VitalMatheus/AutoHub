@@ -20,6 +20,7 @@ import { OrganizationsListPage } from '@/features/platform/pages/organization-pa
 import { SubscriptionDetailPage, SubscriptionsListPage } from '@/features/platform/pages/subscription-pages';
 import { SubscriptionChargeDetailPage, SubscriptionChargesListPage } from '@/features/platform/pages/subscription-charge-pages';
 import { PlanDetailPage, PlansListPage } from '@/features/platform/pages/plan-pages';
+import { AuditEventsPage } from '@/features/platform/pages/audit-event-pages';
 
 function HomeRedirect() {
   const { principal, isAuthenticated, isRestoring } = useAuth();
@@ -75,7 +76,7 @@ export function AppRouter() {
           <Route path="charges/:id" element={<SubscriptionChargeDetailPage />} />
           <Route path="plans" element={<PlansListPage />} />
           <Route path="plans/:id" element={<PlanDetailPage />} />
-          <Route path="audit-events" element={<FutureModulePage title="Auditoria" />} />
+          <Route path="audit-events" element={<AuditEventsPage />} />
         </Route>
       </Route>
       <Route path="*" element={<HomeRedirect />} />
