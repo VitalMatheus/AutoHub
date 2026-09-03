@@ -18,7 +18,7 @@ import { SettingsPage } from '@/features/settings/pages/settings-pages';
 import { CommercialAccountDetailPage, CommercialAccountsListPage } from '@/features/platform/pages/commercial-account-pages';
 import { OrganizationsListPage } from '@/features/platform/pages/organization-pages';
 import { SubscriptionDetailPage, SubscriptionsListPage } from '@/features/platform/pages/subscription-pages';
-import { SubscriptionChargeDetailPage, SubscriptionChargesListPage } from '@/features/platform/pages/subscription-charge-pages';
+import { NewSubscriptionChargePage, SubscriptionChargeDetailPage, SubscriptionChargesListPage } from '@/features/platform/pages/subscription-charge-pages';
 import { PlanDetailPage, PlansListPage } from '@/features/platform/pages/plan-pages';
 import { AuditEventsPage } from '@/features/platform/pages/audit-event-pages';
 import { ProvisionCommercialAccountPage } from '@/features/platform/pages/provision-commercial-account-pages';
@@ -75,6 +75,7 @@ export function AppRouter() {
           <Route path="subscriptions" element={<SubscriptionsListPage />} />
           <Route path="subscriptions/:id" element={<SubscriptionDetailPage />} />
           <Route path="charges" element={<SubscriptionChargesListPage />} />
+          <Route path="charges/new" element={<NewSubscriptionChargePage />} />
           <Route path="charges/:id" element={<SubscriptionChargeDetailPage />} />
           <Route path="plans" element={<PlansListPage />} />
           <Route path="plans/:id" element={<PlanDetailPage />} />
