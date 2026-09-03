@@ -1,4 +1,6 @@
 import { deriveFinancialStanding } from './financial-standing';
+import { deriveCommercialAccess } from './commercial-access';
+import { Prisma } from '@prisma/client';
 
 describe('deriveFinancialStanding', () => {
   const dueDate = new Date('2026-09-15T00:00:00.000Z');
@@ -42,5 +44,14 @@ describe('deriveFinancialStanding', () => {
       dueToday: false,
       dueDate,
     });
+  });
+
+  it('uses the same six-day boundary for a first monthly charge', () => {
+    const charge = {
+      nature: 'FIRST_PAYMENT', dueDate, amount: new Prisma.Decimal('100.00'),
+      cancelledAt: null, settlements: [],
+    };
+    expect(deriveCommercialAccess([charge], new Date('2026-09-21T02:59:59.999Z')).commercialAccess).toBe('ACCESS_ALLOWED');
+    expect(deriveCommercialAccess([charge], new Date('2026-09-21T03:00:00.000Z')).commercialAccess).toBe('PAYMENT_BLOCKED');
   });
 });

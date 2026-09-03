@@ -8,16 +8,14 @@ export async function fetchDashboardSummary(): Promise<DashboardSummary> {
 
 export type DashboardData = {
   referenceAt: string; timezone: string;
-  organizations: { total: number; active: number; inactive: number; suspended: number; commerciallyBlocked: number };
-  subscriptions: { trial: number; paidCurrent: number; awaitingFirstPayment: number; delinquent: number; effectivelyCancelled: number; pendingCommercialSetup: number };
-  monthly: { newOrganizations: number; newCommercialAccounts: number; effectiveCancellations: number; operationalDeactivations: number };
-  financial: { mrr: string; receivedRevenue: string; pendingRevenue: { upcoming: string; overdue: string; total: string } };
-  series: Array<{ month: string; mrr: string; organizations: number; receivedRevenue: string; newOrganizations: number; newCommercialAccounts: number; effectiveCancellations: number; operationalDeactivations: number }>;
+  organizations: { total: number; current: number; dueSoon: number; overdue: number; paymentBlocked: number; suspended: number };
+  financial: { receivedRevenue: string; openWithinDue: string; overdue: string };
+  attentionOrganizations: Array<{ id: string; name: string; reasons: string[] }>;
 };
 
 export type AuditEvent = { id: string; occurredAt: string; actor: { type: 'USER' | 'SYSTEM'; name: string | null; email: string | null }; action: string; target: { type: string; id: string }; reason: string | null };
 
-export async function fetchDashboard(params: { from?: string; to?: string }): Promise<DashboardData> {
+export async function fetchDashboard(params?: { asOf?: string }): Promise<DashboardData> {
   return (await httpClient.get<DashboardData>('/dashboard', { params })).data;
 }
 

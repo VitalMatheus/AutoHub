@@ -48,7 +48,7 @@ describe('Platform Commercial Accounts (e2e)', () => {
   });
 
   it('lists and details the account, unit, and active ADMIN contact', async () => {
-    const list = await request(app.getHttpServer()).get('/api/v1/platform/commercial-accounts').set('Authorization', `Bearer ${superToken}`).expect(200);
+    const list = await request(app.getHttpServer()).get('/api/v1/platform/commercial-accounts').query({ search: `Commercial ${suffix}` }).set('Authorization', `Bearer ${superToken}`).expect(200);
     const found = list.body.data.find((item: { id: string }) => item.id === accountId);
     expect(found).toEqual(expect.objectContaining({ id: accountId, missingPrimaryContact: false }));
     expect(found.primaryContact).toEqual(expect.objectContaining({ id: contactId, role: 'ADMIN', status: 'ACTIVE' }));

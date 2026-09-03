@@ -6,7 +6,7 @@ import { ApiError, getAccessToken, httpClient, setAccessToken } from '@/shared/a
 
 const principal = { id: 'user-1', name: 'Ana Admin', email: 'ana@example.com', role: 'ADMIN' as const, organizationId: 'org-1' };
 const superAdmin = { id: 'user-2', name: 'Sofia Platform', email: 'sofia@example.com', role: 'SUPER_ADMIN' as const, organizationId: null };
-const platformDashboard = { referenceAt: '2026-01-20T12:00:00.000Z', timezone: 'America/Recife', organizations: { total: 0, active: 0, inactive: 0, suspended: 0, commerciallyBlocked: 0 }, subscriptions: { trial: 0, paidCurrent: 0, awaitingFirstPayment: 0, delinquent: 0, effectivelyCancelled: 0, pendingCommercialSetup: 0 }, monthly: { newOrganizations: 0, newCommercialAccounts: 0, effectiveCancellations: 0, operationalDeactivations: 0 }, financial: { mrr: '0.00', receivedRevenue: '0.00', pendingRevenue: { upcoming: '0.00', overdue: '0.00', total: '0.00' } }, series: [] };
+const platformDashboard = { referenceAt: '2026-01-20T12:00:00.000Z', timezone: 'America/Recife', organizations: { total: 0, current: 0, dueSoon: 0, overdue: 0, paymentBlocked: 0, suspended: 0 }, financial: { receivedRevenue: '0.00', openWithinDue: '0.00', overdue: '0.00' }, attentionOrganizations: [] };
 function platformGet(url: string) { if (url.startsWith('/dashboard')) return Promise.resolve({ data: platformDashboard }); if (url.startsWith('/platform/audit-events')) return Promise.resolve({ data: { data: [] } }); if (url.startsWith('/platform/organizations')) return Promise.resolve({ data: { data: [], meta: { page: 1, pageSize: 20, total: 0, totalPages: 0 } } }); return Promise.resolve({ data: superAdmin }); }
 
 describe('Organization Admin frontend shell', () => {
@@ -169,7 +169,7 @@ describe('Organization Admin frontend shell', () => {
 
     render(<AppProviders />);
 
-    expect(await screen.findByRole('heading', { name: 'Painel da plataforma' })).toBeInTheDocument();
+    expect(await screen.findByRole('heading', { name: 'Visão geral' })).toBeInTheDocument();
     expect(screen.getByText('Área da plataforma')).toBeInTheDocument();
     expect(screen.queryByRole('heading', { name: 'Sua oficina está pronta' })).not.toBeInTheDocument();
   });
@@ -182,7 +182,7 @@ describe('Organization Admin frontend shell', () => {
     render(<AppProviders />);
 
     expect(await screen.findByRole('heading', { name: 'Sua oficina está pronta' })).toBeInTheDocument();
-    expect(screen.queryByRole('heading', { name: 'Painel da plataforma' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('heading', { name: 'Visão geral' })).not.toBeInTheDocument();
   });
 
   it('redirects a Super Admin away from the organization area without rendering its content', async () => {
@@ -192,7 +192,7 @@ describe('Organization Admin frontend shell', () => {
 
     render(<AppProviders />);
 
-    expect(await screen.findByRole('heading', { name: 'Painel da plataforma' })).toBeInTheDocument();
+    expect(await screen.findByRole('heading', { name: 'Visão geral' })).toBeInTheDocument();
     expect(screen.queryByRole('heading', { name: 'Sua oficina está pronta' })).not.toBeInTheDocument();
   });
 
@@ -202,7 +202,7 @@ describe('Organization Admin frontend shell', () => {
     vi.spyOn(httpClient, 'get').mockImplementation((url) => platformGet(url) as never);
 
     render(<AppProviders />);
-    await screen.findByRole('heading', { name: 'Painel da plataforma' });
+    await screen.findByRole('heading', { name: 'Visão geral' });
     await user.click(screen.getByRole('button', { name: 'Sair' }));
 
     expect(await screen.findByRole('heading', { name: 'Entrar na oficina' })).toBeInTheDocument();
@@ -215,7 +215,7 @@ describe('Organization Admin frontend shell', () => {
     vi.spyOn(httpClient, 'post').mockResolvedValue({ data: { accessToken: 'restored-token', expiresIn: 900, tokenType: 'Bearer' } } as never);
 
     render(<AppProviders />);
-    expect(await screen.findByRole('heading', { name: 'Painel da plataforma' })).toBeInTheDocument();
+    expect(await screen.findByRole('heading', { name: 'Visão geral' })).toBeInTheDocument();
     expect(window.location.pathname).toBe('/platform/dashboard');
     expect(screen.getByRole('navigation', { name: 'Módulos da plataforma' }).querySelectorAll('a')).toHaveLength(3);
     expect(screen.getByRole('link', { name: 'Visão geral' })).toBeInTheDocument();

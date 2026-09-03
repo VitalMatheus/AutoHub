@@ -99,6 +99,20 @@ enum ChargeSettlementKind {
   REVERSAL
 }
 
+enum ChargeSettlementOrigin {
+  GATEWAY
+  ADMINISTRATIVE
+}
+
+enum AdministrativeSettlementMethod {
+  PIX
+  CREDIT_CARD
+  BANK_TRANSFER
+  CASH
+  CHECK
+  OTHER
+}
+
 model Plan {
   id         String    @id @default(uuid()) @db.Uuid
   name       String    @unique
@@ -330,6 +344,8 @@ model ChargeSettlement {
   chargeId             String               @db.Uuid
   originalSettlementId String?              @db.Uuid
   kind                 ChargeSettlementKind @default(RECEIPT)
+  origin               ChargeSettlementOrigin @default(GATEWAY)
+  method               AdministrativeSettlementMethod?
   amount               Decimal              @db.Decimal(12, 2)
   receivedAt           DateTime             @db.Timestamptz(3)
   effectiveAt          DateTime?            @db.Timestamptz(3)

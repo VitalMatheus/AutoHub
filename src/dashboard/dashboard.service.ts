@@ -5,6 +5,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { chargeBalance } from '../platform/billing/commercial-access';
 import { addCivilMonths, recifeCivilDate, recifeMidnight } from '../platform/billing/civil-dates';
 import { deriveSubscriptionConditions } from '../platform/subscriptions/subscriptions.service';
+import { deriveFinancialStanding } from '../platform/billing/financial-standing';
 import { AuditAction, AuditTargetType } from '../platform/audit-events/dto/list-audit-events.dto';
 import { DashboardQueryDto } from './dto/dashboard-query.dto';
 
@@ -16,7 +17,7 @@ const subscriptionSelect = {
   cancellationRequestedAt: true, effectiveCancellationAt: true, migratedAt: true, regularizedAt: true, commercialStartAt: true,
   charges: { select: { amount: true, dueDate: true, nature: true, cancelledAt: true, settlements: { select: { amount: true } } } },
 } as const;
-const organizationSelect = { id: true, operationalStatus: true, commercialAccountId: true } as const;
+const organizationSelect = { id: true, name: true, operationalStatus: true, commercialAccountId: true } as const;
 const settlementSelect = { amount: true, kind: true, receivedAt: true, effectiveAt: true, charge: { select: { cancelledAt: true } } } as const;
 type SubscriptionRow = Prisma.SubscriptionGetPayload<{ select: typeof subscriptionSelect }>;
 
@@ -102,9 +103,6 @@ export class DashboardService {
     const currentMonthStart = monthStart(currentMonth);
     const currentMonthEnd = monthStart(nextMonth(currentMonth));
     const monthCutoff = referenceAt < currentMonthEnd ? new Date(referenceAt.getTime() + 1) : currentMonthEnd;
-    const from = query.from ?? addCivilMonths(`${currentMonth}-01`, -11).slice(0, 7);
-    const to = query.to ?? currentMonth;
-    if (monthDifference(from, to) > 24 || from > to || to > currentMonth) throw new BadRequestException('Historical interval must contain 1 to 24 completed/current months and cannot be in the future');
     const today = civil;
 
     return this.prisma.$transaction(async (tx) => {
@@ -114,40 +112,33 @@ export class DashboardService {
         tx.chargeSettlement.findMany({ where: { OR: [{ receivedAt: { lte: referenceAt } }, { effectiveAt: { lte: referenceAt } }] }, select: settlementSelect }),
         tx.auditEvent.findMany({ where: { occurredAt: { lte: referenceAt } }, select: { targetType: true, targetId: true, action: true, occurredAt: true, before: true, after: true } }),
       ]);
-      const organizationEvents = auditEvents.filter((event) => event.targetType === AuditTargetType.ORGANIZATION);
-      const organizationCreatedEvents = organizationEvents.filter((event) => event.action === AuditAction.ORGANIZATION_CREATED);
-      const commercialAccountCreatedEvents = auditEvents.filter((event) => event.targetType === AuditTargetType.COMMERCIAL_ACCOUNT && event.action === AuditAction.COMMERCIAL_ACCOUNT_CREATED);
-      const deactivationEvents = organizationEvents.filter((event) => event.action === AuditAction.ORGANIZATION_DEACTIVATED);
       const conditions = new Map<string, ReturnType<typeof deriveSubscriptionConditions>>();
       for (const subscription of subscriptions) conditions.set(subscription.id, deriveSubscriptionConditions(subscription, referenceAt));
       const byAccount = new Map<string, SubscriptionRow[]>();
       for (const subscription of subscriptions) if (subscription.commercialAccountId) byAccount.set(subscription.commercialAccountId, [...(byAccount.get(subscription.commercialAccountId) ?? []), subscription]);
 
-      const organizationCounts = { total: organizations.length, active: 0, inactive: 0, suspended: 0, commerciallyBlocked: 0 };
+      const organizationCounts = { total: organizations.length, current: 0, dueSoon: 0, overdue: 0, paymentBlocked: 0, suspended: 0 };
+      const attentionOrganizations: Array<{ id: string; name: string; reasons: string[] }> = [];
       for (const organization of organizations) {
-        if (organization.operationalStatus === 'ACTIVE') organizationCounts.active++;
-        if (organization.operationalStatus === 'INACTIVE') organizationCounts.inactive++;
         if (organization.operationalStatus === 'SUSPENDED') organizationCounts.suspended++;
         const accountSubscriptions = organization.commercialAccountId ? byAccount.get(organization.commercialAccountId) ?? [] : [];
-        if (accountSubscriptions.some((subscription) => conditions.get(subscription.id)!.commercialAccess === 'PAYMENT_BLOCKED')) organizationCounts.commerciallyBlocked++;
+        const subscription = accountSubscriptions.find((candidate) => candidate.status !== 'ENDED');
+        const condition = subscription ? conditions.get(subscription.id)! : null;
+        const openCharge = subscription?.charges.filter((charge) => !charge.cancelledAt && chargeBalance(charge).gt(0)).sort((a, b) => a.dueDate.getTime() - b.dueDate.getTime())[0];
+        const standing = openCharge && !condition?.pendingCommercialSetup ? deriveFinancialStanding(openCharge.dueDate, referenceAt).status : 'CURRENT';
+        if (standing === 'CURRENT') organizationCounts.current++;
+        if (standing === 'DUE_SOON') organizationCounts.dueSoon++;
+        if (standing === 'OVERDUE') organizationCounts.overdue++;
+        if (standing === 'PAYMENT_BLOCKED') organizationCounts.paymentBlocked++;
+        const reasons = [
+          ...(standing === 'DUE_SOON' ? ['DUE_SOON'] : []),
+          ...(standing === 'OVERDUE' ? ['OVERDUE'] : []),
+          ...(standing === 'PAYMENT_BLOCKED' ? ['PAYMENT_BLOCKED'] : []),
+          ...(organization.operationalStatus === 'SUSPENDED' ? ['SUSPENDED'] : []),
+        ];
+        if (reasons.length && attentionOrganizations.length < 5) attentionOrganizations.push({ id: organization.id, name: organization.name, reasons });
       }
 
-      const subscriptionCounts = { trial: 0, paidCurrent: 0, awaitingFirstPayment: 0, delinquent: 0, effectivelyCancelled: 0, pendingCommercialSetup: 0 };
-      for (const subscription of subscriptions) {
-        const condition = conditions.get(subscription.id)!;
-        if (condition.trial) subscriptionCounts.trial++;
-        if (condition.awaitingFirstPayment) subscriptionCounts.awaitingFirstPayment++;
-        if (condition.delinquent) subscriptionCounts.delinquent++;
-        if (condition.effectiveCancellation) subscriptionCounts.effectivelyCancelled++;
-        if (condition.pendingCommercialSetup) subscriptionCounts.pendingCommercialSetup++;
-        if (subscription.status === 'CURRENT' && !condition.trial && !condition.awaitingFirstPayment && !condition.pendingCommercialSetup && !condition.effectiveCancellation) subscriptionCounts.paidCurrent++;
-      }
-
-      let mrr = new Prisma.Decimal(0);
-      for (const subscription of subscriptions) {
-        const condition = conditions.get(subscription.id)!;
-        if (subscription.status === 'CURRENT' && subscription.firstPaidPeriodStartedAt && subscription.firstPaidPeriodStartedAt <= referenceAt && !condition.effectiveCancellation && !condition.trial && !condition.awaitingFirstPayment && !condition.pendingCommercialSetup) mrr = mrr.add(subscription.contractedPrice);
-      }
       let upcoming = new Prisma.Decimal(0); let overdue = new Prisma.Decimal(0);
       for (const subscription of subscriptions) for (const charge of subscription.charges) {
         const balance = chargeBalance(charge);
@@ -163,10 +154,8 @@ export class DashboardService {
       return {
         referenceAt: referenceAt.toISOString(), timezone: 'America/Recife',
         organizations: organizationCounts,
-        subscriptions: subscriptionCounts,
-        monthly: { newOrganizations: new Set(organizationCreatedEvents.filter((event) => inRange(event.occurredAt, currentMonthStart, monthCutoff)).map((event) => event.targetId)).size, newCommercialAccounts: new Set(commercialAccountCreatedEvents.filter((event) => inRange(event.occurredAt, currentMonthStart, monthCutoff)).map((event) => event.targetId)).size, effectiveCancellations: subscriptions.filter((subscription) => inRange(subscription.effectiveCancellationAt, currentMonthStart, monthCutoff)).length, operationalDeactivations: new Set(deactivationEvents.filter((event) => inRange(event.occurredAt, currentMonthStart, monthCutoff)).map((event) => event.targetId)).size },
-        financial: { mrr: money(mrr), receivedRevenue: money(received), pendingRevenue: { upcoming: money(upcoming), overdue: money(overdue), total: money(upcoming.add(overdue)) } },
-        series: this.buildSeries({ from, to, currentMonth, referenceAt, organizations, subscriptions, settlements, auditEvents }),
+        financial: { receivedRevenue: money(received), openWithinDue: money(upcoming), overdue: money(overdue) },
+        attentionOrganizations,
       };
     });
   }

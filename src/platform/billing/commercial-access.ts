@@ -30,7 +30,9 @@ export function deriveCommercialAccess(charges: AccessCharge[], asOf = new Date(
     const due = charge.dueDate.toISOString().slice(0, 10);
     const overdue = today > due;
     if (overdue) delinquent = true;
-    const blockingDate = addCivilDays(due, charge.nature === 'RENEWAL' ? 6 : 1);
+    // Every monthly charge has the same five complete civil days of tolerance.
+    // The block starts at 00:00 on the sixth day after its due date.
+    const blockingDate = addCivilDays(due, 6);
     if (today >= blockingDate) return { commercialAccess: 'PAYMENT_BLOCKED', delinquent, paymentGracePeriod: false };
     if (charge.nature === 'RENEWAL' && overdue) paymentGracePeriod = true;
   }

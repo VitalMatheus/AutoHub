@@ -7,7 +7,7 @@ import { configureApplication } from '../../src/bootstrap';
 import { PrismaService } from '../../src/prisma/prisma.service';
 
 describe('Platform Subscriptions (e2e)', () => {
-  let app: INestApplication; let prisma: PrismaService; let accountId: string; let subscriptionId: string; let adminId: string;
+  let app: INestApplication; let prisma: PrismaService; let accountId: string; let subscriptionId: string; let adminId: string; let planVersionId: string;
   let superToken: string; let adminToken: string; const suffix = Date.now(); const password = 'correct horse battery staple';
 
   beforeAll(async () => {
@@ -17,14 +17,17 @@ describe('Platform Subscriptions (e2e)', () => {
     const account = await prisma.commercialAccount.create({ data: { name: `Subscription Account ${suffix}` } }); accountId = account.id;
     const organization = await prisma.organization.create({ data: { name: `Subscription Unit ${suffix}`, commercialAccountId: account.id } });
     const admin = await prisma.user.create({ data: { organizationId: organization.id, name: 'Subscription Admin', email: `subscription-admin-${suffix}@example.com`, passwordHash: hash, role: 'ADMIN', status: 'ACTIVE' } }); adminId = admin.id;
-    const version = await prisma.planVersion.findFirstOrThrow({ where: { status: 'PUBLISHED' }, orderBy: { createdAt: 'asc' } });
+    const version = await prisma.planVersion.findFirstOrThrow({ where: { status: 'PUBLISHED' }, orderBy: { createdAt: 'asc' } }); planVersionId = version.id;
     const subscription = await prisma.subscription.create({ data: { commercialAccountId: account.id, planVersionId: version.id, migratedAt: new Date('2026-01-01'), contractedPrice: version.price, contractedCurrency: version.currency, contractedInterval: version.interval, contractedOrganizationLimit: version.organizationLimit, contractedUserLimit: version.userLimit, contractedWorkOrderLimit: version.workOrderLimit, contractedGracePeriodDays: version.gracePeriodDays, trialEnabled: false } }); subscriptionId = subscription.id;
     superToken = (await request(app.getHttpServer()).post('/api/v1/auth/login').send({ email: operator.email, password }).expect(201)).body.accessToken;
     adminToken = (await request(app.getHttpServer()).post('/api/v1/auth/login').send({ email: admin.email, password }).expect(201)).body.accessToken;
   });
 
   afterAll(async () => {
-    await prisma.auditEvent.deleteMany({ where: { targetId: subscriptionId } }); await prisma.subscription.delete({ where: { id: subscriptionId } });
+    await prisma.auditEvent.deleteMany({ where: { commercialAccountId: accountId } });
+    await prisma.chargeSettlement.deleteMany({ where: { charge: { commercialAccountId: accountId } } });
+    await prisma.subscriptionCharge.deleteMany({ where: { commercialAccountId: accountId } });
+    await prisma.subscription.deleteMany({ where: { commercialAccountId: accountId } });
     await prisma.user.delete({ where: { id: adminId } }); await prisma.organization.deleteMany({ where: { commercialAccountId: accountId } }); await prisma.commercialAccount.delete({ where: { id: accountId } });
     await prisma.user.deleteMany({ where: { email: { startsWith: `subscription-super-${suffix}` } } }); await app.close();
   });
@@ -40,5 +43,36 @@ describe('Platform Subscriptions (e2e)', () => {
   it('keeps subscription administration exclusive to Super Admins', async () => {
     await request(app.getHttpServer()).get('/api/v1/platform/subscriptions').expect(401);
     await request(app.getHttpServer()).get('/api/v1/platform/subscriptions').set('Authorization', `Bearer ${adminToken}`).expect(403);
+  });
+
+  it('ends a Subscription without deleting history and allows a new isolated contract', async () => {
+    const oldCharge = await prisma.subscriptionCharge.create({
+      data: { commercialAccountId: accountId, subscriptionId, amount: '79.00', dueDate: new Date('2026-09-01T03:00:00.000Z'), nature: 'RENEWAL' },
+    });
+
+    await request(app.getHttpServer()).post(`/api/v1/platform/subscriptions/${subscriptionId}/cancel-immediately`)
+      .set('Authorization', `Bearer ${superToken}`).send({ reason: 'Encerramento solicitado pela oficina' }).expect(201);
+
+    const oldAfterCancellation = await prisma.subscription.findUniqueOrThrow({ where: { id: subscriptionId } });
+    expect(oldAfterCancellation.status).toBe('ENDED');
+    expect(await prisma.subscriptionCharge.findUnique({ where: { id: oldCharge.id } })).not.toBeNull();
+    expect(await prisma.organization.findUnique({ where: { commercialAccountId: accountId } })).not.toBeNull();
+    await request(app.getHttpServer()).post(`/api/v1/platform/subscription-charges/${oldCharge.id}/administrative-settlement`)
+      .set('Authorization', `Bearer ${superToken}`).send({ amount: '79.00', method: 'BANK_TRANSFER', effectiveAt: new Date(Date.now() - 60_000).toISOString(), reason: 'Quitação após cancelamento' }).expect(201)
+      .expect(({ body }) => expect(body.outstandingAmount).toBe('0.00'));
+
+    const recontrated = await request(app.getHttpServer()).post('/api/v1/platform/subscriptions')
+      .set('Authorization', `Bearer ${superToken}`).send({ commercialAccountId: accountId, planVersionId, trialEnabled: false }).expect(201);
+    expect(recontrated.body.id).not.toBe(subscriptionId);
+    expect(recontrated.body.status).toBe('CURRENT');
+
+    const subscriptions = await prisma.subscription.findMany({ where: { commercialAccountId: accountId }, orderBy: { createdAt: 'asc' } });
+    expect(subscriptions).toHaveLength(2);
+    expect(subscriptions[0].status).toBe('ENDED');
+    expect(subscriptions[1].status).toBe('CURRENT');
+    expect(await prisma.subscriptionCharge.count({ where: { subscriptionId } })).toBe(1);
+    expect(await prisma.subscriptionCharge.count({ where: { subscriptionId: recontrated.body.id } })).toBe(1);
+    expect(await prisma.auditEvent.count({ where: { commercialAccountId: accountId, action: 'subscription.cancelled' } })).toBeGreaterThanOrEqual(1);
+    expect(await prisma.auditEvent.count({ where: { targetId: recontrated.body.id, action: 'subscription.created' } })).toBe(1);
   });
 });

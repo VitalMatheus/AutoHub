@@ -46,7 +46,7 @@ export class AuditEventsService {
       PLAN: ['name', 'archivedAt'], PLAN_VERSION: ['price', 'currency', 'interval', 'organizationLimit', 'userLimit', 'workOrderLimit', 'gracePeriodDays'],
       SUBSCRIPTION: ['planVersionId', 'contractedPrice', 'contractedCurrency', 'contractedInterval', 'contractedOrganizationLimit', 'contractedUserLimit', 'contractedWorkOrderLimit', 'contractedGracePeriodDays', 'status', 'migratedAt', 'regularizedAt', 'commercialStartAt', 'firstDueDate', 'billingDay', 'firstPaymentReceivedAt', 'firstPaidPeriodStartedAt', 'trialEnabled', 'trialStartsAt', 'trialEndsAt', 'currentPeriodStart', 'currentPeriodEnd', 'cancellationRequestedAt', 'effectiveCancellationAt', 'scheduledPlanVersionId', 'scheduledPlanEffectiveAt', 'scheduledPlanReason', 'scheduledRecurringAdjustment', 'scheduledAdjustmentEffectiveAt', 'scheduledAdjustmentReason'],
       SUBSCRIPTION_CHARGE: ['amount', 'dueDate', 'nature', 'billingPeriodStart', 'billingPeriodEnd', 'cancelledAt'],
-      CHARGE_SETTLEMENT: ['amount', 'receivedAt', 'effectiveAt', 'reversalReason'],
+      CHARGE_SETTLEMENT: ['amount', 'receivedAt', 'effectiveAt', 'reason', 'origin', 'method'],
     };
     return Object.fromEntries((fields[targetType] ?? []).filter((key) => key in value).map((key) => [key, value[key]])) as Prisma.InputJsonObject;
   }

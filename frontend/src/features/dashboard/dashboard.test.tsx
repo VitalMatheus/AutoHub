@@ -33,11 +33,15 @@ describe('Dashboard', () => {
     expect(screen.getByText('As atividades serão exibidas quando houver dados disponíveis.')).toBeInTheDocument();
   });
 
-  it('labels monthly cards with the reference month', async () => {
-    const dashboard = { referenceAt: '2026-01-20T12:00:00.000Z', timezone: 'America/Recife', organizations: { total: 1, active: 1, inactive: 0, suspended: 0, commerciallyBlocked: 0 }, subscriptions: { trial: 0, paidCurrent: 1, awaitingFirstPayment: 0, delinquent: 0, effectivelyCancelled: 0, pendingCommercialSetup: 0 }, monthly: { newOrganizations: 0, newCommercialAccounts: 2, effectiveCancellations: 0, operationalDeactivations: 0 }, financial: { mrr: '79.00', receivedRevenue: '79.00', pendingRevenue: { upcoming: '0.00', overdue: '0.00', total: '0.00' } }, series: [{ month: '2025-02', mrr: '79.00', organizations: 1, receivedRevenue: '0.00', newOrganizations: 0, newCommercialAccounts: 0, effectiveCancellations: 0, operationalDeactivations: 0 }] };
+  it('shows reduced commercial metrics, attention links and no historical series', async () => {
+    const dashboard = { referenceAt: '2026-01-20T12:00:00.000Z', timezone: 'America/Recife', organizations: { total: 3, current: 1, dueSoon: 1, overdue: 1, paymentBlocked: 1, suspended: 1 }, financial: { receivedRevenue: '79.00', openWithinDue: '20.00', overdue: '100.00' }, attentionOrganizations: [{ id: 'org-1', name: 'Oficina Central', reasons: ['OVERDUE'] }] };
     vi.spyOn(httpClient, 'get').mockImplementation((url) => url === '/dashboard' ? Promise.resolve({ data: dashboard }) as never : Promise.resolve({ data: { data: [] } }) as never);
     const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
     render(<QueryClientProvider client={queryClient}><MemoryRouter><PlatformHomePage /></MemoryRouter></QueryClientProvider>);
-    expect(await screen.findAllByText('Mês de referência: 01/2026')).toHaveLength(3); expect(screen.getByText('Valores pendentes classificados em próximos e vencidos. Competência: 01/2026.')).toBeInTheDocument();
+    expect(await screen.findByText('Oficina Central')).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'Ver detalhe' })).toHaveAttribute('href', '/platform/organizations/org-1');
+    expect(screen.getByText('Em aberto no prazo')).toBeInTheDocument();
+    expect(screen.queryByText('MRR')).not.toBeInTheDocument();
+    expect(screen.queryByText('Evolução do MRR')).not.toBeInTheDocument();
   });
 });

@@ -46,6 +46,16 @@ describe('OpenAPI structure', () => {
     expect(paths['/api/v1/platform/organizations/{id}/deactivate']?.post).toBeDefined();
     expect(paths['/api/v1/platform/organizations/{id}/suspend']?.post).toBeDefined();
     expect(paths['/api/v1/platform/organizations/{id}/reactivate']?.post).toBeDefined();
+    const accountCharge = paths['/api/v1/account/subscription-charge']?.get;
+    expect(accountCharge).toEqual(expect.objectContaining({
+      responses: expect.objectContaining({ '200': expect.any(Object), '401': expect.any(Object), '403': expect.any(Object), '404': expect.any(Object) }),
+    }));
+    expect(accountCharge?.responses['200']).toEqual(expect.objectContaining({ content: expect.objectContaining({ 'application/json': { schema: { $ref: '#/components/schemas/AccountSubscriptionChargeResponseDto' } } }) }));
+    expect(schemas.AccountSubscriptionChargeResponseDto).toEqual(expect.objectContaining({ properties: expect.objectContaining({ amount: expect.objectContaining({ type: 'string' }), paidAmount: expect.objectContaining({ type: 'string' }), outstandingAmount: expect.objectContaining({ type: 'string' }) }) }));
+    const administrativeSettlement = paths['/api/v1/platform/subscription-charges/{id}/administrative-settlement']?.post;
+    expect(administrativeSettlement).toEqual(expect.objectContaining({ requestBody: expect.objectContaining({ content: { 'application/json': { schema: { $ref: '#/components/schemas/AdministrativeSettlementDto' } } } }) }));
+    expect(administrativeSettlement?.responses).toEqual(expect.objectContaining({ '201': expect.any(Object), '400': expect.any(Object), '401': expect.any(Object), '403': expect.any(Object), '404': expect.any(Object), '409': expect.any(Object) }));
+    expect(schemas.AdministrativeSettlementDto).toEqual(expect.objectContaining({ required: expect.arrayContaining(['amount', 'method', 'effectiveAt', 'reason']) }));
     const registerOrganization = paths['/api/v1/platform/organizations']?.post;
     expect(registerOrganization?.requestBody).toEqual(expect.objectContaining({
       content: { 'application/json': { schema: { $ref: '#/components/schemas/CreateOrganizationDto' } } },
@@ -89,7 +99,7 @@ describe('OpenAPI structure', () => {
     expect(paths['/api/v1/platform/plans']?.get).toBeDefined();
     const dashboardGet = paths['/api/v1/dashboard']?.get;
     expect(dashboardGet).toBeDefined();
-    expect(dashboardGet?.parameters?.flatMap((parameter) => 'name' in parameter ? [parameter.name] : [])).toEqual(expect.arrayContaining(['asOf', 'from', 'to']));
+    expect(dashboardGet?.parameters?.flatMap((parameter) => 'name' in parameter ? [parameter.name] : [])).toEqual(['asOf']);
     expect(dashboardGet?.responses['200']).toEqual(expect.objectContaining({ content: { 'application/json': { schema: { $ref: '#/components/schemas/DashboardResponseDto' } } } }));
     expect(schemas.DashboardResponseDto).toBeDefined();
     expect(paths['/api/v1/platform/commercial-accounts']?.get).toBeDefined();

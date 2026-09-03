@@ -163,7 +163,7 @@ export class AuthService {
     const access = trial && !cancellationEffective ? 'ACCESS_ALLOWED' : !subscription.firstPaymentReceivedAt || cancellationEffective ? 'PAYMENT_BLOCKED' : derivedAccess.commercialAccess;
     const openCharges = subscription.charges.filter((charge) => charge.cancelledAt === null && chargeBalance(charge).gt(0));
     const due = openCharges.sort((a, b) => a.dueDate.getTime() - b.dueDate.getTime())[0];
-    const block = due ? addCivilDays(due.dueDate.toISOString().slice(0, 10), due.nature === 'RENEWAL' ? 6 : 1) : null;
+    const block = due ? addCivilDays(due.dueDate.toISOString().slice(0, 10), 6) : null;
     const today = recifeCivilDate(now);
     const remainingDays = block && block > today ? Math.round((Date.parse(`${block}T12:00:00Z`) - Date.parse(`${today}T12:00:00Z`)) / 86400000) : 0;
     return { commercialAccess: access, nextDueDate: due ? due.dueDate.toISOString().slice(0, 10) : null, blockDate: block, remainingDays, instruction: access === 'PAYMENT_BLOCKED' ? 'Settle the outstanding Subscription Charge to restore access.' : 'Your account is available.' };
