@@ -62,6 +62,8 @@ export type CreateSubscriptionChargeInput = {
   externalId?: string;
 };
 export type UpdateSubscriptionChargeInput = { amount?: string; dueDate?: string; reason: string };
+export type CreateChargeSettlementInput = { amount: string; receivedAt: string; reason?: string };
+export type ReverseChargeSettlementInput = { reason: string; effectiveAt?: string };
 
 export const listSubscriptionCharges = (params: SubscriptionChargeParams) =>
   httpClient.get<SubscriptionChargeList>('/platform/subscription-charges', { params }).then((response) => response.data);
@@ -73,3 +75,7 @@ export const updateSubscriptionCharge = (id: string, input: UpdateSubscriptionCh
   httpClient.patch<SubscriptionCharge>(`/platform/subscription-charges/${id}`, input).then((response) => response.data);
 export const cancelSubscriptionCharge = (id: string) =>
   httpClient.post<SubscriptionCharge>(`/platform/subscription-charges/${id}/cancel`).then((response) => response.data);
+export const createChargeSettlement = (id: string, input: CreateChargeSettlementInput) =>
+  httpClient.post<SubscriptionCharge>(`/platform/subscription-charges/${id}/settlements`, input).then((response) => response.data);
+export const reverseChargeSettlement = (id: string, settlementId: string, input: ReverseChargeSettlementInput) =>
+  httpClient.post<SubscriptionCharge>(`/platform/subscription-charges/${id}/settlements/${settlementId}/reverse`, input).then((response) => response.data);

@@ -93,4 +93,35 @@ describe('Platform subscription charges', () => {
     await user.click(screen.getByRole('button', { name: 'Confirmar cancelamento' }));
     await waitFor(() => expect(post).toHaveBeenCalledWith('/platform/subscription-charges/charge-1/cancel'));
   });
+
+  it('registers a decimal receipt only within the open balance and confirms before mutating', async () => {
+    const user = userEvent.setup();
+    const post = vi.spyOn(httpClient, 'post').mockResolvedValue({ data: charge } as never);
+    vi.spyOn(httpClient, 'get').mockResolvedValue({ data: charge } as never);
+    render(<MemoryRouter initialEntries={['/platform/charges/charge-1']}><Routes><Route path="/platform/charges/:id" element={<SubscriptionChargeDetailPage />} /></Routes></MemoryRouter>, { wrapper });
+    await user.click(await screen.findByRole('button', { name: 'Registrar recebimento' }));
+    await user.type(screen.getByLabelText('Valor do recebimento'), '20.00');
+    expect(screen.getByRole('button', { name: 'Continuar' })).toBeEnabled();
+    await user.click(screen.getByRole('button', { name: 'Continuar' }));
+    expect(screen.getByText('Confirmar recebimento?')).toBeInTheDocument();
+    expect(post).not.toHaveBeenCalled();
+    await user.click(screen.getByRole('button', { name: 'Confirmar recebimento' }));
+    await waitFor(() => expect(post).toHaveBeenCalledWith('/platform/subscription-charges/charge-1/settlements', expect.objectContaining({ amount: '20.00', receivedAt: expect.any(String) })));
+  });
+
+  it('requires a reason and confirmation before reversing a receipt, preserving the original history item', async () => {
+    const user = userEvent.setup();
+    const post = vi.spyOn(httpClient, 'post').mockResolvedValue({ data: charge } as never);
+    vi.spyOn(httpClient, 'get').mockResolvedValue({ data: charge } as never);
+    render(<MemoryRouter initialEntries={['/platform/charges/charge-1']}><Routes><Route path="/platform/charges/:id" element={<SubscriptionChargeDetailPage />} /></Routes></MemoryRouter>, { wrapper });
+    await user.click(await screen.findByRole('button', { name: 'Estornar recebimento' }));
+    expect(screen.getByRole('button', { name: 'Continuar para estorno' })).toBeDisabled();
+    await user.type(screen.getByLabelText('Motivo do estorno'), 'Pagamento duplicado');
+    await user.click(screen.getByRole('button', { name: 'Continuar para estorno' }));
+    expect(screen.getByText('Confirmar estorno?')).toBeInTheDocument();
+    expect(post).not.toHaveBeenCalled();
+    await user.click(screen.getByRole('button', { name: 'Confirmar estorno' }));
+    await waitFor(() => expect(post).toHaveBeenCalledWith('/platform/subscription-charges/charge-1/settlements/settlement-1/reverse', expect.objectContaining({ reason: 'Pagamento duplicado', effectiveAt: expect.any(String) })));
+    expect(screen.getByText(/Recebimento · R\$ 40,00/)).toBeInTheDocument();
+  });
 });
