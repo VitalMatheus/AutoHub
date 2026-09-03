@@ -23,6 +23,7 @@ import { AuditEventsPage } from '@/features/platform/pages/audit-event-pages';
 import { ProvisionCommercialAccountPage } from '@/features/platform/pages/provision-commercial-account-pages';
 import { FinanceExpensePage, FinanceIndexPage, FinancePage } from '@/features/finance/pages/finance-page';
 import { NewSupplierPage, SupplierDetailPage, SuppliersListPage } from '@/features/suppliers/pages/supplier-pages';
+import { NewPurchasePage, PurchaseDetailPage, PurchasesListPage } from '@/features/purchases/pages/purchase-pages';
 
 function HomeRedirect() {
   const { principal, isAuthenticated, isRestoring } = useAuth();
@@ -63,6 +64,9 @@ export function AppRouter() {
           <Route path="suppliers" element={<SuppliersListPage />} />
           <Route path="suppliers/new" element={<NewSupplierPage />} />
           <Route path="suppliers/:id" element={<SupplierDetailPage />} />
+          <Route path="purchases" element={<PurchasesListPage />} />
+          <Route path="purchases/new" element={<NewPurchasePage />} />
+          <Route path="purchases/:id" element={<PurchaseDetailPage />} />
           <Route path="finance" element={<FinanceIndexPage />} />
           <Route path="finance/work-orders/:workOrderId" element={<FinancePage />} />
           <Route path="finance/expenses/:expenseId" element={<FinanceExpensePage />} />

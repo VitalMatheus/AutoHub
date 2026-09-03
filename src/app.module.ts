@@ -23,6 +23,7 @@ import { SubscriptionsModule } from './platform/subscriptions/subscriptions.modu
 import { SubscriptionChargesModule } from './platform/subscription-charges/subscription-charges.module';
 import { ExpensesModule } from './expenses/expenses.module';
 import { SuppliersModule } from './suppliers/suppliers.module';
+import { PurchasesModule } from './purchases/purchases.module';
 
 @Module({
   imports: [
@@ -52,6 +53,7 @@ import { SuppliersModule } from './suppliers/suppliers.module';
     SubscriptionChargesModule,
     ExpensesModule,
     SuppliersModule,
+    PurchasesModule,
   ],
   providers: [SecurityLogger],
   exports: [SecurityLogger],
