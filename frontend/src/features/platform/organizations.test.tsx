@@ -17,6 +17,7 @@ describe('Platform Organizations', () => {
     const get = vi.spyOn(httpClient, 'get').mockResolvedValue({ data: { data: [organization], meta: { page: 1, pageSize: 20, total: 1, totalPages: 1 } } } as never);
     render(<MemoryRouter initialEntries={['/platform/organizations?search=Motor&operationalStatus=ACTIVE&lifecycle=PAID_CURRENT&commercialAccess=ACCESS_ALLOWED&sort=name&page=1']}><OrganizationsListPage /></MemoryRouter>, { wrapper });
     expect(await screen.findByText('Motor Recife')).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'Cadastrar oficina' })).toHaveAttribute('href', '/platform/organizations/new');
     expect(screen.getByText('Ana Lima')).toBeInTheDocument();
     expect(screen.getByText('AutoHub Básico')).toBeInTheDocument();
     expect(screen.getByText('Atual')).toBeInTheDocument();

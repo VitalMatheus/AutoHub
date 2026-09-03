@@ -19,7 +19,7 @@ import { RegularizeCommercialSetupDto } from './dto/regularize-commercial-setup.
 
 const organizationSelect = {
   id: true, name: true, document: true, phone: true, email: true, addressLine1: true, addressLine2: true,
-  city: true, state: true, postalCode: true, operationalStatus: true, createdAt: true, updatedAt: true,
+  city: true, state: true, postalCode: true, notes: true, operationalStatus: true, createdAt: true, updatedAt: true,
   commercialAccount: { select: {
     id: true, name: true, billingEmail: true, billingDocument: true, primaryContactUserId: true,
     primaryContactOrganizationId: true,
@@ -38,6 +38,11 @@ const organizationSelect = {
   } },
 } as const;
 
+const organizationRegistrationSelect = {
+  id: true, name: true, document: true, phone: true, email: true, addressLine1: true, addressLine2: true,
+  city: true, state: true, postalCode: true, notes: true, operationalStatus: true, createdAt: true, updatedAt: true,
+} as const;
+
 @Injectable()
 export class OrganizationsService {
   constructor(private readonly prisma: PrismaService, private readonly config: ConfigService, private readonly auditEvents: AuditEventsService) {}
@@ -47,67 +52,46 @@ export class OrganizationsService {
   private hashToken(token: string) { return createHash('sha256').update(token).digest('hex'); }
 
   async create(principal: AuthenticatedPrincipal, dto: CreateOrganizationDto) {
-    const adminName = dto.admin?.name ?? dto.adminName;
-    const adminEmail = dto.admin?.email ?? dto.adminEmail;
-    if (!adminName || !adminEmail) throw new BadRequestException('First Organization Admin is required');
-    const activationToken = randomBytes(32).toString('base64url');
+    const firstDueDate = new Date(`${dto.firstDueDate}T00:00:00.000Z`);
+    if (!Number.isFinite(firstDueDate.getTime()) || firstDueDate.toISOString().slice(0, 10) !== dto.firstDueDate) {
+      throw new BadRequestException('firstDueDate must be a valid civil date');
+    }
+    const contractedPrice = new Prisma.Decimal(dto.contractedPrice ?? '79.00');
+    if (!contractedPrice.gt(0)) throw new BadRequestException('contractedPrice must be greater than zero');
+    const activationSecret = randomBytes(32).toString('base64url');
     const expiresDays = this.config.get<number>('ACTIVATION_TOKEN_TTL_DAYS') ?? 3;
     try {
       const result = await this.prisma.$transaction(async (tx) => {
-        const version = dto.planVersionId
-          ? await tx.planVersion.findUnique({ where: { id: dto.planVersionId }, select: { id: true, status: true, price: true, currency: true, interval: true, organizationLimit: true, userLimit: true, workOrderLimit: true, gracePeriodDays: true, plan: { select: { archivedAt: true } } } })
-          : await tx.planVersion.findFirst({ where: { plan: { name: 'AutoHub Básico', archivedAt: null }, status: 'PUBLISHED' }, orderBy: [{ publishedAt: 'desc' }, { version: 'desc' }], select: { id: true, status: true, price: true, currency: true, interval: true, organizationLimit: true, userLimit: true, workOrderLimit: true, gracePeriodDays: true, plan: { select: { archivedAt: true } } } });
-        if (!version) throw new BadRequestException(dto.planVersionId ? 'Plan Version not found' : 'Basic Plan is not available');
+        const version = await tx.planVersion.findFirst({ where: { plan: { name: 'AutoHub Básico', archivedAt: null }, status: 'PUBLISHED' }, orderBy: [{ publishedAt: 'desc' }, { version: 'desc' }], select: { id: true, status: true, price: true, currency: true, interval: true, organizationLimit: true, userLimit: true, workOrderLimit: true, gracePeriodDays: true, plan: { select: { archivedAt: true } } } });
+        if (!version) throw new BadRequestException('Basic Plan is not available');
         if (version.status !== 'PUBLISHED' || version.plan.archivedAt) throw new ConflictException('Only published Plan Versions from an active Plan can be contracted');
-        const explicitTrialStart = dto.trialStartsAt ? new Date(dto.trialStartsAt) : null;
-        const trialEndsAt = explicitTrialStart ? new Date(explicitTrialStart) : null;
-        if (trialEndsAt) trialEndsAt.setUTCDate(trialEndsAt.getUTCDate() + 14);
-        let existingSubscription: any = null;
-        const existingAccount = dto.commercialAccountId
-          ? await tx.commercialAccount.findUnique({ where: { id: dto.commercialAccountId }, select: { id: true, name: true, billingEmail: true, billingDocument: true, primaryContactOrganizationId: true, primaryContactUserId: true, createdAt: true, updatedAt: true } })
-          : null;
-        if (dto.commercialAccountId && !existingAccount) throw new NotFoundException('Commercial Account not found');
-        if (existingAccount) {
-          await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtextextended(${existingAccount.id}, 0))`;
-          existingSubscription = await tx.subscription.findFirst({ where: { commercialAccountId: existingAccount.id, status: { not: 'ENDED' } }, orderBy: { createdAt: 'desc' }, select: { id: true, planVersionId: true, status: true, trialEnabled: true, trialStartsAt: true, trialEndsAt: true, contractedPrice: true, contractedOrganizationLimit: true } });
-          const organizationCount = await tx.organization.count({ where: { commercialAccountId: existingAccount.id, operationalStatus: { not: 'INACTIVE' } } });
-          if (existingSubscription && organizationCount >= existingSubscription.contractedOrganizationLimit) throw new ConflictException({ code: 'PLAN_ORGANIZATION_LIMIT_REACHED', detail: `The Commercial Account allows at most ${existingSubscription.contractedOrganizationLimit} non-inactive Organizations.` });
-        }
-        const commercialAccount = existingAccount ?? await tx.commercialAccount.create({ data: { name: dto.name.trim(), billingEmail: dto.email ? this.normalizeEmail(dto.email) : undefined, billingDocument: dto.document ? this.normalizeDocument(dto.document) : undefined } });
+        const commercialAccount = await tx.commercialAccount.create({ data: { name: dto.name.trim(), billingEmail: dto.email ? this.normalizeEmail(dto.email) : undefined, billingDocument: dto.document ? this.normalizeDocument(dto.document) : undefined } });
         const organization = await tx.organization.create({ data: {
           commercialAccountId: commercialAccount.id,
           name: dto.name.trim(), document: dto.document ? this.normalizeDocument(dto.document) : undefined, phone: dto.phone, email: dto.email ? this.normalizeEmail(dto.email) : undefined,
-          addressLine1: dto.addressLine1, addressLine2: dto.addressLine2, city: dto.city, state: dto.state, postalCode: dto.postalCode,
-        }, select: organizationSelect });
+          addressLine1: dto.addressLine1, addressLine2: dto.addressLine2, city: dto.city, state: dto.state, postalCode: dto.postalCode, notes: dto.notes,
+        }, select: organizationRegistrationSelect });
         const admin = await tx.user.create({ data: {
-          organizationId: organization.id, name: adminName.trim(), email: this.normalizeEmail(adminEmail), role: 'ADMIN', status: 'PENDING_ACTIVATION',
+          organizationId: organization.id, name: dto.admin.name.trim(), email: this.normalizeEmail(dto.admin.email), role: 'ADMIN', status: 'PENDING_ACTIVATION',
         }, select: { id: true, name: true, email: true, role: true, status: true, organizationId: true } });
-        await tx.actionToken.create({ data: { userId: admin.id, purpose: 'ACTIVATE_ACCOUNT', tokenHash: this.hashToken(activationToken), expiresAt: new Date(Date.now() + expiresDays * 86400000) } });
-        if (!existingAccount || !existingAccount.primaryContactUserId) await tx.commercialAccount.update({ where: { id: commercialAccount.id }, data: { primaryContactOrganizationId: organization.id, primaryContactUserId: admin.id } });
-        const subscription = existingSubscription ?? await tx.subscription.create({ data: {
-          commercialAccountId: commercialAccount.id, planVersionId: version.id, status: 'SCHEDULED',
-          contractedPrice: version.price, contractedCurrency: version.currency, contractedInterval: version.interval,
+        await tx.actionToken.create({ data: { userId: admin.id, purpose: 'ACTIVATE_ACCOUNT', tokenHash: this.hashToken(activationSecret), expiresAt: new Date(Date.now() + expiresDays * 86400000) } });
+        await tx.commercialAccount.update({ where: { id: commercialAccount.id }, data: { primaryContactOrganizationId: organization.id, primaryContactUserId: admin.id } });
+        const subscription = await tx.subscription.create({ data: {
+          commercialAccountId: commercialAccount.id, planVersionId: version.id, status: 'CURRENT',
+          contractedPrice, contractedCurrency: version.currency, contractedInterval: version.interval,
           contractedOrganizationLimit: version.organizationLimit, contractedUserLimit: version.userLimit,
           contractedWorkOrderLimit: version.workOrderLimit, contractedGracePeriodDays: version.gracePeriodDays,
-          trialEnabled: dto.trialEnabled !== false, trialStartsAt: dto.trialEnabled !== false ? explicitTrialStart : null,
-          trialEndsAt: dto.trialEnabled !== false ? trialEndsAt : null, commercialStartAt: dto.trialEnabled !== false ? explicitTrialStart : null,
-        }, select: { id: true, planVersionId: true, status: true, trialEnabled: true, trialStartsAt: true, trialEndsAt: true, contractedPrice: true } });
-        if (!existingAccount) await this.auditEvents.record(tx, principal, { action: AuditAction.COMMERCIAL_ACCOUNT_CREATED, targetType: AuditTargetType.COMMERCIAL_ACCOUNT, targetId: commercialAccount.id, commercialAccountId: commercialAccount.id, after: { name: commercialAccount.name, organizationId: organization.id, primaryContactId: admin.id } });
+          commercialStartAt: new Date(), firstDueDate, billingDay: dto.billingDay,
+          trialEnabled: false, trialStartsAt: null, trialEndsAt: null,
+        }, select: { id: true, planVersionId: true, status: true, trialEnabled: true, trialStartsAt: true, trialEndsAt: true, contractedPrice: true, firstDueDate: true, billingDay: true } });
+        await this.auditEvents.record(tx, principal, { action: AuditAction.COMMERCIAL_ACCOUNT_CREATED, targetType: AuditTargetType.COMMERCIAL_ACCOUNT, targetId: commercialAccount.id, commercialAccountId: commercialAccount.id, after: { name: commercialAccount.name, organizationId: organization.id, primaryContactId: admin.id } });
         await this.auditEvents.record(tx, principal, { action: AuditAction.ORGANIZATION_CREATED, targetType: AuditTargetType.ORGANIZATION, targetId: organization.id, organizationId: organization.id, after: { name: organization.name, operationalStatus: organization.operationalStatus, initialAdminId: admin.id, initialAdminName: admin.name, initialAdminEmail: admin.email } });
         await this.auditEvents.record(tx, principal, { action: AuditAction.USER_INVITATION_ISSUED, targetType: AuditTargetType.USER, targetId: admin.id, organizationId: organization.id, after: { name: admin.name, email: admin.email, role: admin.role, status: admin.status } });
-        if (!existingSubscription) await this.auditEvents.record(tx, principal, { action: AuditAction.SUBSCRIPTION_CREATED, targetType: AuditTargetType.SUBSCRIPTION, targetId: subscription.id, commercialAccountId: commercialAccount.id, after: { planVersionId: subscription.planVersionId, status: subscription.status, trialEnabled: subscription.trialEnabled, trialStartsAt: subscription.trialStartsAt, trialEndsAt: subscription.trialEndsAt, contractedPrice: subscription.contractedPrice } });
-        if (!existingSubscription && dto.trialEnabled === false) {
-          const charge = await tx.subscriptionCharge.create({ data: { commercialAccountId: commercialAccount.id, subscriptionId: subscription.id, organizationId: organization.id, amount: version.price, dueDate: recifeMidnight(recifeCivilDate(new Date())), nature: 'FIRST_PAYMENT' }, select: { id: true, dueDate: true } });
-          await this.auditEvents.record(tx, principal, { action: AuditAction.SUBSCRIPTION_CHARGE_CREATED, targetType: AuditTargetType.SUBSCRIPTION_CHARGE, targetId: charge.id, commercialAccountId: commercialAccount.id, organizationId: organization.id, after: { nature: 'FIRST_PAYMENT', dueDate: charge.dueDate } });
-        }
-        return {
-          organization: { ...organization, commercialAccount: { ...organization.commercialAccount, primaryContactUserId: admin.id } },
-          commercialAccount: { ...commercialAccount, primaryContactOrganizationId: existingAccount?.primaryContactOrganizationId ?? organization.id, primaryContactUserId: existingAccount?.primaryContactUserId ?? admin.id },
-          admin,
-          subscription,
-        };
+        await this.auditEvents.record(tx, principal, { action: AuditAction.SUBSCRIPTION_CREATED, targetType: AuditTargetType.SUBSCRIPTION, targetId: subscription.id, commercialAccountId: commercialAccount.id, after: { planVersionId: subscription.planVersionId, status: subscription.status, firstDueDate: subscription.firstDueDate, billingDay: subscription.billingDay, trialEnabled: false, contractedPrice: subscription.contractedPrice } });
+        const { commercialAccount: _commercialAccount, ...registeredOrganization } = organization as typeof organization & { commercialAccount?: unknown };
+        return { organization: registeredOrganization, admin };
       });
-      return { ...result, activationToken };
+      return { ...result, activationSecret };
     } catch (error) {
       if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002') throw new ConflictException('Organization or admin already exists');
       throw error;

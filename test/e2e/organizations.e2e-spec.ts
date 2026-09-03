@@ -6,7 +6,7 @@ import * as argon2 from 'argon2';
 import { AppModule } from '../../src/app.module';
 import { configureApplication } from '../../src/bootstrap';
 import { PrismaService } from '../../src/prisma/prisma.service';
-import { addCivilDays, recifeCivilDate, recifeMidnight } from '../../src/platform/billing/civil-dates';
+import { recifeCivilDate } from '../../src/platform/billing/civil-dates';
 
 describe('Platform Organizations and activation (e2e)', () => {
   let app: INestApplication;
@@ -24,42 +24,82 @@ describe('Platform Organizations and activation (e2e)', () => {
 
   afterAll(async () => { await prisma.user.delete({ where: { email: superEmail } }); await app.close(); });
 
-  it('provisions an Organization and a pending first admin transactionally', async () => {
+  it('registers the workshop, initial admin and simple commercial relationship atomically', async () => {
     const login = await request(app.getHttpServer()).post('/api/v1/auth/login').send({ email: superEmail, password: superPassword }).expect(201);
     const email = `first-admin-${Date.now()}@example.com`;
-    const response = await request(app.getHttpServer()).post('/api/v1/platform/organizations').set('Authorization', `Bearer ${login.body.accessToken}`).send({ name: ' Oficina Central ', admin: { name: 'First Admin', email } }).expect(201);
-    expect(response.body.activationToken).toEqual(expect.any(String));
+    const documentSuffix = String(Date.now()).slice(-2);
+    const response = await request(app.getHttpServer()).post('/api/v1/platform/organizations').set('Authorization', `Bearer ${login.body.accessToken}`).send({
+      name: ' Oficina Central ', phone: '(81) 99999-0000', document: `12.345.678/0001-${documentSuffix}`,
+      addressLine1: 'Rua das Oficinas, 10', city: 'Recife', state: 'PE', postalCode: '50000-000', notes: 'Contato pela manhã',
+      admin: { name: 'First Admin', email }, contractedPrice: '89.90', firstDueDate: '2026-10-10', billingDay: 10,
+    }).expect(201);
+    expect(response.body.activationSecret).toEqual(expect.any(String));
+    expect(response.body).not.toHaveProperty('activationToken');
     expect(response.body.organization.name).toBe('Oficina Central');
     const admin = await prisma.user.findUnique({ where: { email } });
     expect(admin).toEqual(expect.objectContaining({ status: 'PENDING_ACTIVATION', role: 'ADMIN' }));
-    const account = await prisma.commercialAccount.findFirst({ where: { organizations: { some: { id: response.body.organization.id } } }, include: { subscriptions: true } });
+    const account = await prisma.commercialAccount.findFirst({ where: { organizations: { some: { id: response.body.organization.id } } }, include: { organizations: true, subscriptions: true } });
     expect(account?.primaryContactUserId).toBe(admin!.id);
-    expect(account?.subscriptions[0]).toEqual(expect.objectContaining({ trialEnabled: true, trialStartsAt: null, trialEndsAt: null }));
+    expect(account?.organizations).toHaveLength(1);
+    expect(account?.subscriptions).toHaveLength(1);
+    expect(account?.subscriptions[0]).toEqual(expect.objectContaining({
+      firstDueDate: new Date('2026-10-10T00:00:00.000Z'), billingDay: 10,
+      trialEnabled: false, trialStartsAt: null, trialEndsAt: null,
+    }));
+    expect(account?.subscriptions[0].contractedPrice.toFixed(2)).toBe('89.90');
     const token = await prisma.actionToken.findFirst({ where: { userId: admin!.id } });
     expect(token).toEqual(expect.objectContaining({ usedAt: null }));
-    expect(token!.tokenHash).not.toBe(response.body.activationToken);
+    expect(token!.tokenHash).not.toBe(response.body.activationSecret);
 
-    await request(app.getHttpServer()).post('/api/v1/auth/activate').send({ token: response.body.activationToken, password: 'new secure password 123' }).expect(201);
+    await request(app.getHttpServer()).post('/api/v1/auth/activate').send({ token: response.body.activationSecret, password: 'new secure password 123' }).expect(201);
     const activatedSubscription = await prisma.subscription.findFirst({ where: { commercialAccountId: account!.id } });
-    expect(activatedSubscription).toEqual(expect.objectContaining({ status: 'CURRENT', trialEnabled: true, trialStartsAt: expect.any(Date), trialEndsAt: expect.any(Date) }));
-    expect(activatedSubscription!.trialEndsAt).toEqual(recifeMidnight(addCivilDays(recifeCivilDate(activatedSubscription!.trialStartsAt!), 14)));
-    await request(app.getHttpServer()).post('/api/v1/auth/activate').send({ token: response.body.activationToken, password: 'another secure password' }).expect(401);
+    expect(activatedSubscription).toEqual(expect.objectContaining({ trialEnabled: false, trialStartsAt: null, trialEndsAt: null }));
+    await request(app.getHttpServer()).post('/api/v1/auth/activate').send({ token: response.body.activationSecret, password: 'another secure password' }).expect(401);
     expect((await prisma.user.findUnique({ where: { email } }))!.status).toBe('ACTIVE');
     const auditEvents = await prisma.auditEvent.findMany({ where: { commercialAccountId: account!.id } });
-    expect(JSON.stringify(auditEvents)).not.toContain(response.body.activationToken);
+    expect(JSON.stringify(auditEvents)).not.toContain(response.body.activationSecret);
   });
 
-  it('allows disabling Trial but blocks operational access after activation', async () => {
+  it.each([
+    [{ admin: { name: 'Admin', email: 'missing-phone@example.com' }, contractedPrice: '79.00', firstDueDate: '2026-10-10', billingDay: 10 }, 'phone'],
+    [{ phone: '81999990000', admin: { name: 'Admin', email: 'missing-date@example.com' }, contractedPrice: '79.00', billingDay: 10 }, 'firstDueDate'],
+    [{ phone: '81999990000', admin: { name: 'Admin', email: 'invalid-day@example.com' }, contractedPrice: '79.00', firstDueDate: '2026-10-29', billingDay: 29 }, 'billingDay'],
+  ])('rejects an incomplete or invalid simple registration payload', async (partial, _field) => {
     const login = await request(app.getHttpServer()).post('/api/v1/auth/login').send({ email: superEmail, password: superPassword }).expect(201);
-    const email = `no-trial-admin-${Date.now()}@example.com`;
     const response = await request(app.getHttpServer()).post('/api/v1/platform/organizations')
       .set('Authorization', `Bearer ${login.body.accessToken}`)
-      .send({ name: 'No Trial Workshop', trialEnabled: false, admin: { name: 'No Trial Admin', email } }).expect(201);
-    await request(app.getHttpServer()).post('/api/v1/auth/activate').send({ token: response.body.activationToken, password: 'new secure password 123' }).expect(201);
-    const adminLogin = await request(app.getHttpServer()).post('/api/v1/auth/login').send({ email, password: 'new secure password 123' }).expect(201);
-    await request(app.getHttpServer()).get('/api/v1/auth/me').set('Authorization', `Bearer ${adminLogin.body.accessToken}`).expect(200);
-    await request(app.getHttpServer()).get('/api/v1/customers').set('Authorization', `Bearer ${adminLogin.body.accessToken}`).expect(403)
-      .expect(({ body }) => expect(body.code).toBe('COMMERCIAL_ACCESS_BLOCKED'));
+      .send({ name: `Invalid Workshop ${Date.now()}`, ...partial }).expect(400);
+    expect(response.body).toEqual(expect.objectContaining({ status: 400, code: 'HTTP_400' }));
+  });
+
+  it('uses BRL 79.00 by default and leaves no commercial records after an admin conflict', async () => {
+    const login = await request(app.getHttpServer()).post('/api/v1/auth/login').send({ email: superEmail, password: superPassword }).expect(201);
+    const suffix = Date.now();
+    const adminEmail = `registration-conflict-${suffix}@example.com`;
+    const payload = {
+      name: `Default Price ${suffix}`, phone: '81999990000', admin: { name: 'Default Admin', email: adminEmail },
+      firstDueDate: '2026-10-15', billingDay: 15,
+    };
+    const created = await request(app.getHttpServer()).post('/api/v1/platform/organizations')
+      .set('Authorization', `Bearer ${login.body.accessToken}`).send(payload).expect(201);
+    const organization = await prisma.organization.findUniqueOrThrow({ where: { id: created.body.organization.id } });
+    const subscription = await prisma.subscription.findFirstOrThrow({ where: { commercialAccountId: organization.commercialAccountId } });
+    expect(subscription.contractedPrice.toFixed(2)).toBe('79.00');
+    expect(subscription.trialEnabled).toBe(false);
+
+    const before = {
+      organizations: await prisma.organization.count(),
+      accounts: await prisma.commercialAccount.count(),
+      subscriptions: await prisma.subscription.count(),
+    };
+    await request(app.getHttpServer()).post('/api/v1/platform/organizations')
+      .set('Authorization', `Bearer ${login.body.accessToken}`)
+      .send({ ...payload, name: `Conflicting Workshop ${suffix}` }).expect(409);
+    expect({
+      organizations: await prisma.organization.count(),
+      accounts: await prisma.commercialAccount.count(),
+      subscriptions: await prisma.subscription.count(),
+    }).toEqual(before);
   });
 
   it('returns 403 to an Organization Admin on platform endpoints', async () => {
@@ -85,13 +125,13 @@ describe('Platform Organizations and activation (e2e)', () => {
   it('exposes and filters Financial Standing independently from operational status', async () => {
     const login = await request(app.getHttpServer()).post('/api/v1/auth/login').send({ email: superEmail, password: superPassword }).expect(201);
     const suffix = Date.now();
+    const today = recifeCivilDate(new Date());
     const created = await request(app.getHttpServer()).post('/api/v1/platform/organizations')
       .set('Authorization', `Bearer ${login.body.accessToken}`)
-      .send({ name: `Standing-${suffix}`, trialEnabled: false, admin: { name: 'Standing Admin', email: `standing-${suffix}@example.com` } }).expect(201);
-    const today = recifeCivilDate(new Date());
-    await request(app.getHttpServer()).post(`/api/v1/platform/organizations/${created.body.organization.id}/regularize-commercial-setup`)
-      .set('Authorization', `Bearer ${login.body.accessToken}`)
-      .send({ contractedPrice: '79.00', firstDueDate: today, billingDay: Math.min(Number(today.slice(-2)), 28) }).expect(201);
+      .send({ name: `Standing-${suffix}`, phone: '81999990000', firstDueDate: today, billingDay: Math.min(Number(today.slice(-2)), 28), admin: { name: 'Standing Admin', email: `standing-${suffix}@example.com` } }).expect(201);
+    const standingOrganization = await prisma.organization.findUniqueOrThrow({ where: { id: created.body.organization.id }, select: { commercialAccountId: true } });
+    const standingSubscription = await prisma.subscription.findFirstOrThrow({ where: { commercialAccountId: standingOrganization.commercialAccountId } });
+    await prisma.subscriptionCharge.create({ data: { commercialAccountId: standingOrganization.commercialAccountId!, subscriptionId: standingSubscription.id, amount: '79.00', dueDate: new Date(`${today}T00:00:00.000Z`), nature: 'FIRST_PAYMENT' } });
 
     const response = await request(app.getHttpServer()).get('/api/v1/platform/organizations')
       .query({ search: `Standing-${suffix}`, operationalStatus: 'ACTIVE', financialStanding: 'CURRENT' })
@@ -109,7 +149,7 @@ describe('Platform Organizations and activation (e2e)', () => {
     const suffix = Date.now();
     const created = await request(app.getHttpServer()).post('/api/v1/platform/organizations')
       .set('Authorization', `Bearer ${login.body.accessToken}`)
-      .send({ name: `Pending Setup-${suffix}`, admin: { name: 'Pending Admin', email: `pending-${suffix}@example.com` } }).expect(201);
+      .send({ name: `Pending Setup-${suffix}`, phone: '81999990000', firstDueDate: '2026-10-10', billingDay: 10, admin: { name: 'Pending Admin', email: `pending-${suffix}@example.com` } }).expect(201);
     const organizationId = created.body.organization.id as string;
     const organization = await prisma.organization.findUniqueOrThrow({ where: { id: organizationId }, select: { commercialAccountId: true } });
     const subscription = await prisma.subscription.findFirstOrThrow({ where: { commercialAccountId: organization.commercialAccountId } });

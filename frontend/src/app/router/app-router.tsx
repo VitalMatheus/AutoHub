@@ -69,9 +69,9 @@ export function AppRouter() {
           <Route index element={<Navigate to="dashboard" replace />} />
           <Route path="dashboard" element={<PlatformHomePage />} />
           <Route path="organizations" element={<OrganizationsListPage />} />
+          <Route path="organizations/new" element={<ProvisionCommercialAccountPage />} />
           <Route path="commercial-accounts" element={<CommercialAccountsListPage />} />
           <Route path="commercial-accounts/:id" element={<CommercialAccountDetailPage />} />
-          <Route path="commercial-accounts/new" element={<ProvisionCommercialAccountPage />} />
           <Route path="subscriptions" element={<SubscriptionsListPage />} />
           <Route path="subscriptions/:id" element={<SubscriptionDetailPage />} />
           <Route path="charges" element={<SubscriptionChargesListPage />} />

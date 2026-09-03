@@ -7,37 +7,74 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { ApiError, httpClient } from '@/shared/api/http';
 import { ProvisionCommercialAccountPage } from './pages/provision-commercial-account-pages';
 
-const plan = { id: 'plan-1', name: 'AutoHub Básico', archivedAt: null, createdAt: '2026-01-01', updatedAt: '2026-01-01', versions: [{ id: 'version-1', planId: 'plan-1', version: 1, status: 'PUBLISHED', price: '79.00', currency: 'BRL', interval: 'MONTHLY', organizationLimit: 1, userLimit: 3, workOrderLimit: null, gracePeriodDays: 5, publishedAt: '2026-01-01', createdAt: '2026-01-01' }] };
-const created = { organization: { id: 'org-1', name: 'Oficina Recife', operationalStatus: 'ACTIVE' }, commercialAccount: { id: 'account-1', name: 'Grupo Motor', billingEmail: 'financeiro@motor.test', billingDocument: '12345678000190', primaryContactOrganizationId: 'org-1', primaryContactUserId: 'user-1' }, admin: { id: 'user-1', name: 'Ana Lima', email: 'ana@motor.test', role: 'ADMIN', status: 'PENDING_ACTIVATION' }, subscription: { id: 'sub-1', planVersionId: 'version-1', status: 'SCHEDULED', trialEnabled: true, trialStartsAt: null, trialEndsAt: null, contractedPrice: '79.00' }, activationToken: 'secret-only-once' };
-const wrapper = ({ children }: { children: React.ReactNode }) => <QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}>{children}</QueryClientProvider>;
-const renderPage = () => render(<MemoryRouter initialEntries={['/platform/commercial-accounts/new']}><Routes><Route path="/platform/commercial-accounts/new" element={<ProvisionCommercialAccountPage />} /><Route path="/platform/commercial-accounts" element={<p>Lista de contas</p>} /></Routes></MemoryRouter>, { wrapper });
+const created = {
+  organization: { id: 'org-1', name: 'Oficina Recife', operationalStatus: 'ACTIVE' },
+  admin: { id: 'user-1', name: 'Ana Lima', email: 'ana@motor.test', role: 'ADMIN', status: 'PENDING_ACTIVATION' },
+  activationSecret: 'secret-only-once',
+};
+const wrapper = ({ children }: { children: React.ReactNode }) => (
+  <QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}>{children}</QueryClientProvider>
+);
+const renderPage = () => render(
+  <MemoryRouter initialEntries={['/platform/organizations/new']}>
+    <Routes>
+      <Route path="/platform/organizations/new" element={<ProvisionCommercialAccountPage />} />
+      <Route path="/platform/organizations" element={<p>Lista de oficinas</p>} />
+    </Routes>
+  </MemoryRouter>,
+  { wrapper },
+);
 
 async function fillRequired(user: ReturnType<typeof userEvent.setup>) {
-  await user.type(screen.getByLabelText('Nome comercial'), 'Grupo Motor');
-  await user.click(screen.getByRole('button', { name: 'Continuar' }));
-  await user.type(screen.getByLabelText('Nome da Organization'), 'Oficina Recife');
-  await user.click(screen.getByRole('button', { name: 'Continuar' }));
+  await user.type(screen.getByLabelText('Nome da oficina'), 'Oficina Recife');
+  await user.type(screen.getByLabelText('Telefone da oficina'), '(81) 99999-0000');
   await user.type(screen.getByLabelText('Nome do administrador'), 'Ana Lima');
   await user.type(screen.getByLabelText('E-mail do administrador'), 'ana@motor.test');
-  await user.click(screen.getByRole('button', { name: 'Continuar' }));
+  await user.type(screen.getByLabelText('Primeiro vencimento'), '2026-10-10');
 }
 
-describe('Provisioning a Commercial Account', () => {
-  beforeEach(() => { vi.restoreAllMocks(); });
+describe('Cadastro simples de oficina', () => {
+  beforeEach(() => {
+    vi.restoreAllMocks();
+    localStorage.clear();
+    sessionStorage.clear();
+  });
 
-  it('loads real published plan versions and completes the wizard with an in-memory activation secret', async () => {
+  it('cadastra oficina e configuração comercial em uma única chamada sem expor conceitos internos', async () => {
     const user = userEvent.setup();
-    const get = vi.spyOn(httpClient, 'get').mockResolvedValue({ data: { data: [plan], meta: { totalPages: 1 } } } as never);
+    const get = vi.spyOn(httpClient, 'get');
     const post = vi.spyOn(httpClient, 'post').mockResolvedValue({ data: created } as never);
     renderPage();
-    await screen.findByRole('heading', { name: 'Provisionar Commercial Account' });
-    expect(get).toHaveBeenCalledWith('/platform/plans', { params: { page: 1, pageSize: 100 } });
+
+    expect(screen.getByRole('heading', { name: 'Cadastrar oficina' })).toBeInTheDocument();
+    expect(screen.getByLabelText('Preço contratado')).toHaveValue('79.00');
+    expect(screen.queryByText(/Commercial Account|Plan Version|Subscription|Trial/i)).not.toBeInTheDocument();
     await fillRequired(user);
-    expect(await screen.findByRole('option', { name: /AutoHub Básico · v1/ })).toBeInTheDocument();
-    await user.selectOptions(screen.getByLabelText('Plan Version'), 'version-1');
-    await user.click(screen.getByRole('button', { name: 'Continuar' }));
-    await user.click(screen.getByRole('button', { name: 'Provisionar conta' }));
-    expect(post).toHaveBeenCalledWith('/platform/organizations', expect.objectContaining({ name: 'Oficina Recife', admin: { name: 'Ana Lima', email: 'ana@motor.test' }, planVersionId: 'version-1', trialEnabled: true }));
+    await user.type(screen.getByLabelText('Documento'), '12.345.678/0001-90');
+    await user.type(screen.getByLabelText('Endereço'), 'Rua do Sol, 100');
+    await user.type(screen.getByLabelText('Complemento'), 'Galpão B');
+    await user.type(screen.getByLabelText('Cidade'), 'Recife');
+    await user.type(screen.getByLabelText('Estado'), 'PE');
+    await user.type(screen.getByLabelText('CEP'), '50000-000');
+    await user.type(screen.getByLabelText('Observações'), 'Contato prefere WhatsApp');
+    await user.click(screen.getByRole('button', { name: 'Cadastrar oficina' }));
+
+    expect(get).not.toHaveBeenCalled();
+    expect(post).toHaveBeenCalledWith('/platform/organizations', {
+      name: 'Oficina Recife',
+      phone: '(81) 99999-0000',
+      admin: { name: 'Ana Lima', email: 'ana@motor.test' },
+      contractedPrice: '79.00',
+      firstDueDate: '2026-10-10',
+      billingDay: 10,
+      document: '12.345.678/0001-90',
+      addressLine1: 'Rua do Sol, 100',
+      addressLine2: 'Galpão B',
+      city: 'Recife',
+      state: 'PE',
+      postalCode: '50000-000',
+      notes: 'Contato prefere WhatsApp',
+    });
     expect(await screen.findByText('Segredo de ativação')).toBeInTheDocument();
     expect(screen.getByDisplayValue('secret-only-once')).toBeInTheDocument();
     expect(localStorage.length).toBe(0);
@@ -45,44 +82,31 @@ describe('Provisioning a Commercial Account', () => {
     expect(window.location.href).not.toContain('secret-only-once');
   });
 
-  it('shows validation beside the step, pending state, backend errors, copy, and warns before leaving without copying', async () => {
+  it('exige os dados essenciais e limita o vencimento aos dias 1 a 28', async () => {
     const user = userEvent.setup();
-    let resolve!: (value: unknown) => void;
-    vi.spyOn(httpClient, 'get').mockResolvedValue({ data: { data: [plan], meta: { totalPages: 1 } } } as never);
-    const post = vi.spyOn(httpClient, 'post').mockReturnValue(new Promise((done) => { resolve = done; }) as never);
+    const post = vi.spyOn(httpClient, 'post');
     renderPage();
-    await screen.findByRole('heading', { name: 'Provisionar Commercial Account' });
-    await user.click(screen.getByRole('button', { name: 'Continuar' }));
-    expect(screen.getByText('Informe o nome comercial.')).toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: 'Cadastrar oficina' }));
+    expect(screen.getByRole('alert')).toHaveTextContent('Preencha os campos obrigatórios');
+    expect(post).not.toHaveBeenCalled();
+
     await fillRequired(user);
-    await user.selectOptions(screen.getByLabelText('Plan Version'), 'version-1');
-    await user.click(screen.getByRole('button', { name: 'Continuar' }));
-    await user.click(screen.getByRole('button', { name: 'Provisionar conta' }));
-    expect(screen.getByRole('button', { name: 'Provisionando…' })).toBeDisabled();
-    resolve({ data: created });
-    await screen.findByText('Segredo de ativação');
-    vi.spyOn(window, 'confirm').mockReturnValue(false);
-    await user.click(screen.getByRole('button', { name: 'Sair' }));
-    expect(screen.getByDisplayValue('secret-only-once')).toBeInTheDocument();
-    await user.click(screen.getByRole('button', { name: 'Copiar segredo' }));
-    expect(await screen.findByText('Segredo copiado.')).toBeInTheDocument();
-    await user.click(screen.getByRole('button', { name: 'Sair' }));
-    expect(await screen.findByText('Lista de contas')).toBeInTheDocument();
-    expect(screen.queryByText('secret-only-once')).not.toBeInTheDocument();
+    await user.clear(screen.getByLabelText('Primeiro vencimento'));
+    await user.type(screen.getByLabelText('Primeiro vencimento'), '2026-10-29');
+    await user.click(screen.getByRole('button', { name: 'Cadastrar oficina' }));
+    expect(screen.getByRole('alert')).toHaveTextContent('O vencimento mensal deve ocorrer entre os dias 1 e 28.');
+    expect(post).not.toHaveBeenCalled();
   });
 
-  it('renders a safe backend error without losing entered context', async () => {
+  it('preserva o formulário quando a API rejeita o cadastro', async () => {
     const user = userEvent.setup();
-    vi.spyOn(httpClient, 'get').mockResolvedValue({ data: { data: [plan], meta: { totalPages: 1 } } } as never);
-    vi.spyOn(httpClient, 'post').mockRejectedValue(new ApiError({ status: 409, detail: 'The Commercial Account allows at most 1 non-inactive Organizations.', code: 'PLAN_ORGANIZATION_LIMIT_REACHED' }));
+    vi.spyOn(httpClient, 'post').mockRejectedValue(new ApiError({ status: 409, code: 'ORGANIZATION_ALREADY_EXISTS', detail: 'Organization already exists.' }));
     renderPage();
-    await screen.findByRole('heading', { name: 'Provisionar Commercial Account' });
     await fillRequired(user);
-    await user.selectOptions(screen.getByLabelText('Plan Version'), 'version-1');
-    await user.click(screen.getByRole('button', { name: 'Continuar' }));
-    await user.click(screen.getByRole('button', { name: 'Provisionar conta' }));
-    expect(await screen.findByRole('alert')).toHaveTextContent('Não foi possível concluir o provisionamento.');
-    expect(screen.getByText('Revise os dados da Subscription e tente novamente.')).toBeInTheDocument();
-    expect(screen.getByText('Grupo Motor')).toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: 'Cadastrar oficina' }));
+
+    expect(await screen.findByRole('alert')).toHaveTextContent('Não foi possível cadastrar a oficina.');
+    expect(screen.getByLabelText('Nome da oficina')).toHaveValue('Oficina Recife');
   });
 });

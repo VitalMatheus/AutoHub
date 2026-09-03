@@ -1,55 +1,50 @@
 import { Type } from 'class-transformer';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { IsBoolean, IsDateString, IsEmail, IsOptional, IsString, IsNotEmpty, IsUUID, ValidateNested, Length } from 'class-validator';
+import { IsDefined, IsEmail, IsOptional, IsString, IsNotEmpty, ValidateNested, Length, Matches, IsInt, Min, Max } from 'class-validator';
 
 export class FirstAdminDto {
+  @ApiProperty()
   @IsString() @IsNotEmpty() @Length(1, 160)
   name!: string;
 
+  @ApiProperty({ format: 'email' })
   @IsEmail() email!: string;
 }
 
 export class CreateOrganizationDto {
+  @ApiProperty()
   @IsString() @IsNotEmpty() @Length(1, 160)
   name!: string;
 
   @IsOptional() @IsString() @Length(1, 30)
   document?: string;
 
-  @IsOptional() @IsString() phone?: string;
+  @ApiProperty()
+  @IsString() @IsNotEmpty() @Length(1, 30)
+  phone!: string;
   @IsOptional() @IsEmail() email?: string;
   @IsOptional() @IsString() addressLine1?: string;
   @IsOptional() @IsString() addressLine2?: string;
   @IsOptional() @IsString() city?: string;
   @IsOptional() @IsString() state?: string;
   @IsOptional() @IsString() postalCode?: string;
+  @IsOptional() @IsString() notes?: string;
 
-  @IsOptional() @ValidateNested() @Type(() => FirstAdminDto)
-  admin?: FirstAdminDto;
+  @ApiProperty({ type: FirstAdminDto })
+  @IsDefined() @ValidateNested() @Type(() => FirstAdminDto)
+  admin!: FirstAdminDto;
 
-  // Flat aliases keep the endpoint convenient for clients while `admin` remains
-  // the canonical nested representation.
-  @IsOptional() @IsString() @Length(1, 160)
-  adminName?: string;
+  @ApiPropertyOptional({ type: 'string', default: '79.00', pattern: '^\\d+\\.\\d{2}$' })
+  @IsOptional() @Matches(/^\d+\.\d{2}$/)
+  contractedPrice?: string;
 
-  @IsOptional() @IsEmail()
-  adminEmail?: string;
+  @ApiProperty({ type: 'string', format: 'date', example: '2026-10-10' })
+  @Matches(/^\d{4}-\d{2}-\d{2}$/)
+  firstDueDate!: string;
 
-  @ApiPropertyOptional({ format: 'uuid', description: 'Published Plan Version selected by the Super Admin. Defaults to the current AutoHub Básico version.' })
-  @IsOptional() @IsUUID()
-  planVersionId?: string;
-
-  @ApiPropertyOptional({ format: 'uuid', description: 'Existing Commercial Account to which this Organization is added.' })
-  @IsOptional() @IsUUID()
-  commercialAccountId?: string;
-
-  @ApiPropertyOptional({ default: true, description: 'Whether the 14-day Trial Period is enabled.' })
-  @IsOptional() @IsBoolean()
-  trialEnabled?: boolean;
-
-  @ApiPropertyOptional({ format: 'date-time', description: 'Explicitly authorized Trial Period start. Without it, the Trial starts at first admin activation.' })
-  @IsOptional() @IsDateString()
-  trialStartsAt?: string;
+  @ApiProperty({ minimum: 1, maximum: 28, example: 10 })
+  @Type(() => Number) @IsInt() @Min(1) @Max(28)
+  billingDay!: number;
 }
 
 class ProvisionedOrganizationDto {
@@ -66,29 +61,8 @@ class ProvisionedAdminDto {
   @ApiProperty() status!: string;
 }
 
-class ProvisionedAccountDto {
-  @ApiProperty() id!: string;
-  @ApiProperty() name!: string;
-  @ApiPropertyOptional() billingEmail?: string;
-  @ApiPropertyOptional() billingDocument?: string;
-  @ApiProperty() primaryContactOrganizationId!: string;
-  @ApiProperty() primaryContactUserId!: string;
-}
-
-class ProvisionedSubscriptionDto {
-  @ApiProperty() id!: string;
-  @ApiProperty() planVersionId!: string;
-  @ApiProperty() status!: string;
-  @ApiProperty() trialEnabled!: boolean;
-  @ApiPropertyOptional({ format: 'date-time', nullable: true }) trialStartsAt!: string | null;
-  @ApiPropertyOptional({ format: 'date-time', nullable: true }) trialEndsAt!: string | null;
-  @ApiProperty() contractedPrice!: string;
-}
-
 export class CreateOrganizationResponseDto {
   @ApiProperty({ type: ProvisionedOrganizationDto }) organization!: ProvisionedOrganizationDto;
-  @ApiProperty({ type: ProvisionedAccountDto }) commercialAccount!: ProvisionedAccountDto;
   @ApiProperty({ type: ProvisionedAdminDto }) admin!: ProvisionedAdminDto;
-  @ApiProperty({ type: ProvisionedSubscriptionDto }) subscription!: ProvisionedSubscriptionDto;
-  @ApiProperty() activationToken!: string;
+  @ApiProperty({ description: 'One-time activation secret. It is never persisted or audited.', minLength: 32, writeOnly: true }) activationSecret!: string;
 }

@@ -22,9 +22,10 @@ describe('Subscription Charges and Settlements (e2e)', () => {
 
   it('derives balances, accepts partial settlement, and replays provider deliveries idempotently', async () => {
     const login = await request(app.getHttpServer()).post('/api/v1/auth/login').send({ email, password }).expect(201);
-    const provisioned = await request(app.getHttpServer()).post('/api/v1/platform/organizations').set('Authorization', `Bearer ${login.body.accessToken}`).send({ name: `Charge Workshop ${Date.now()}`, adminName: `Admin ${Date.now()}`, adminEmail: `admin-${Date.now()}@example.com` }).expect(201);
-    const { commercialAccount, subscription } = provisioned.body;
-    const charge = await request(app.getHttpServer()).post('/api/v1/platform/subscription-charges').set('Authorization', `Bearer ${login.body.accessToken}`).send({ commercialAccountId: commercialAccount.id, subscriptionId: subscription.id, amount: '100.00', dueDate: '2099-01-01', nature: 'EXTRAORDINARY', provider: 'manual-test', externalId: `charge-${Date.now()}` }).expect(201);
+    const provisioned = await request(app.getHttpServer()).post('/api/v1/platform/organizations').set('Authorization', `Bearer ${login.body.accessToken}`).send({ name: `Charge Workshop ${Date.now()}`, phone: '81999990000', firstDueDate: '2026-10-10', billingDay: 10, admin: { name: `Admin ${Date.now()}`, email: `admin-${Date.now()}@example.com` } }).expect(201);
+    const organization = await prisma.organization.findUniqueOrThrow({ where: { id: provisioned.body.organization.id }, select: { commercialAccountId: true } });
+    const subscription = await prisma.subscription.findFirstOrThrow({ where: { commercialAccountId: organization.commercialAccountId }, select: { id: true } });
+    const charge = await request(app.getHttpServer()).post('/api/v1/platform/subscription-charges').set('Authorization', `Bearer ${login.body.accessToken}`).send({ commercialAccountId: organization.commercialAccountId, subscriptionId: subscription.id, amount: '100.00', dueDate: '2099-01-01', nature: 'EXTRAORDINARY', provider: 'manual-test', externalId: `charge-${Date.now()}` }).expect(201);
     expect(charge.body).toEqual(expect.objectContaining({ amount: '100.00', condition: 'PENDING', paidAmount: '0.00', outstandingAmount: '100.00' }));
 
     const settlement = { amount: '40.00', receivedAt: new Date().toISOString(), provider: 'manual-test', externalId: `settlement-${Date.now()}` };

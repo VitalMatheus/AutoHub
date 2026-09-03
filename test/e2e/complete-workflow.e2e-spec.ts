@@ -53,10 +53,16 @@ describe('Complete workshop workflow (e2e)', () => {
     const superLogin = await api.post('/api/v1/auth/login').send({ email: superEmail, password }).expect(201);
     const provisioned = await api.post('/api/v1/platform/organizations')
       .set('Authorization', `Bearer ${superLogin.body.accessToken}`)
-      .send({ name: `Workflow Workshop ${suffix}`, admin: { name: 'Workflow Admin', email: adminEmail } })
+      .send({ name: `Workflow Workshop ${suffix}`, phone: '81999990000', firstDueDate: '2026-10-10', billingDay: 10, admin: { name: 'Workflow Admin', email: adminEmail } })
       .expect(201);
     organizationId = provisioned.body.organization.id;
-    await api.post('/api/v1/auth/activate').send({ token: provisioned.body.activationToken, password }).expect(201);
+    await api.post('/api/v1/auth/activate').send({ token: provisioned.body.activationSecret, password }).expect(201);
+    const commercial = await prisma.organization.findUniqueOrThrow({ where: { id: organizationId }, select: { commercialAccountId: true } });
+    const subscription = await prisma.subscription.findFirstOrThrow({ where: { commercialAccountId: commercial.commercialAccountId }, select: { id: true } });
+    const firstCharge = await api.post('/api/v1/platform/subscription-charges').set('Authorization', `Bearer ${superLogin.body.accessToken}`)
+      .send({ commercialAccountId: commercial.commercialAccountId, subscriptionId: subscription.id, amount: '79.00', dueDate: '2026-10-10', nature: 'FIRST_PAYMENT' }).expect(201);
+    await api.post(`/api/v1/platform/subscription-charges/${firstCharge.body.id}/settlements`).set('Authorization', `Bearer ${superLogin.body.accessToken}`)
+      .send({ amount: '79.00', receivedAt: new Date().toISOString() }).expect(201);
     const adminLogin = await api.post('/api/v1/auth/login').send({ email: adminEmail, password }).expect(201);
     const auth = { Authorization: `Bearer ${adminLogin.body.accessToken}` };
 

@@ -46,6 +46,28 @@ describe('OpenAPI structure', () => {
     expect(paths['/api/v1/platform/organizations/{id}/deactivate']?.post).toBeDefined();
     expect(paths['/api/v1/platform/organizations/{id}/suspend']?.post).toBeDefined();
     expect(paths['/api/v1/platform/organizations/{id}/reactivate']?.post).toBeDefined();
+    const registerOrganization = paths['/api/v1/platform/organizations']?.post;
+    expect(registerOrganization?.requestBody).toEqual(expect.objectContaining({
+      content: { 'application/json': { schema: { $ref: '#/components/schemas/CreateOrganizationDto' } } },
+    }));
+    expect(registerOrganization?.responses).toEqual(expect.objectContaining({
+      '201': expect.objectContaining({ content: expect.objectContaining({ 'application/json': { schema: { $ref: '#/components/schemas/CreateOrganizationResponseDto' } } }) }),
+      '400': expect.any(Object), '401': expect.any(Object), '403': expect.any(Object), '409': expect.any(Object),
+    }));
+    expect(schemas.CreateOrganizationDto).toEqual(expect.objectContaining({
+      required: expect.arrayContaining(['name', 'phone', 'admin', 'firstDueDate', 'billingDay']),
+      properties: expect.objectContaining({
+        contractedPrice: expect.objectContaining({ type: 'string', default: '79.00' }),
+        firstDueDate: expect.objectContaining({ type: 'string', format: 'date' }),
+        billingDay: expect.objectContaining({ type: 'number', minimum: 1, maximum: 28 }),
+      }),
+    }));
+    expect((schemas.CreateOrganizationDto as { properties?: Record<string, unknown> }).properties).not.toEqual(expect.objectContaining({
+      planVersionId: expect.anything(), commercialAccountId: expect.anything(), trialEnabled: expect.anything(), trialStartsAt: expect.anything(),
+    }));
+    expect(schemas.CreateOrganizationResponseDto).toEqual(expect.objectContaining({
+      properties: expect.objectContaining({ activationSecret: expect.objectContaining({ type: 'string', writeOnly: true }) }),
+    }));
     const regularizeCommercialSetup = paths['/api/v1/platform/organizations/{id}/regularize-commercial-setup']?.post;
     expect(regularizeCommercialSetup?.requestBody).toEqual(expect.objectContaining({
       content: { 'application/json': { schema: { $ref: '#/components/schemas/RegularizeCommercialSetupDto' } } },

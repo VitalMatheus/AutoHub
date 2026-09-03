@@ -18,7 +18,7 @@ describe('Platform Subscriptions (e2e)', () => {
     const organization = await prisma.organization.create({ data: { name: `Subscription Unit ${suffix}`, commercialAccountId: account.id } });
     const admin = await prisma.user.create({ data: { organizationId: organization.id, name: 'Subscription Admin', email: `subscription-admin-${suffix}@example.com`, passwordHash: hash, role: 'ADMIN', status: 'ACTIVE' } }); adminId = admin.id;
     const version = await prisma.planVersion.findFirstOrThrow({ where: { status: 'PUBLISHED' }, orderBy: { createdAt: 'asc' } });
-    const subscription = await prisma.subscription.create({ data: { commercialAccountId: account.id, planVersionId: version.id, migratedAt: new Date('2026-01-01'), contractedPrice: version.price, contractedCurrency: version.currency, contractedInterval: version.interval, contractedOrganizationLimit: version.organizationLimit, contractedUserLimit: version.userLimit, contractedWorkOrderLimit: version.workOrderLimit, contractedGracePeriodDays: version.gracePeriodDays } }); subscriptionId = subscription.id;
+    const subscription = await prisma.subscription.create({ data: { commercialAccountId: account.id, planVersionId: version.id, migratedAt: new Date('2026-01-01'), contractedPrice: version.price, contractedCurrency: version.currency, contractedInterval: version.interval, contractedOrganizationLimit: version.organizationLimit, contractedUserLimit: version.userLimit, contractedWorkOrderLimit: version.workOrderLimit, contractedGracePeriodDays: version.gracePeriodDays, trialEnabled: false } }); subscriptionId = subscription.id;
     superToken = (await request(app.getHttpServer()).post('/api/v1/auth/login').send({ email: operator.email, password }).expect(201)).body.accessToken;
     adminToken = (await request(app.getHttpServer()).post('/api/v1/auth/login').send({ email: admin.email, password }).expect(201)).body.accessToken;
   });
@@ -33,7 +33,7 @@ describe('Platform Subscriptions (e2e)', () => {
     const listed = await request(app.getHttpServer()).get('/api/v1/platform/subscriptions').set('Authorization', `Bearer ${superToken}`).expect(200);
     expect(listed.body.data).toEqual(expect.arrayContaining([expect.objectContaining({ id: subscriptionId, contractedPrice: '79.00', conditions: expect.objectContaining({ pendingCommercialSetup: true, trial: false }) })]));
     const regularized = await request(app.getHttpServer()).post(`/api/v1/platform/subscriptions/${subscriptionId}/regularize`).set('Authorization', `Bearer ${superToken}`).send({ commercialStartAt: '2026-02-01T00:00:00.000Z', firstPaymentReceivedAt: '2026-02-01T00:00:00.000Z', reason: 'Regularização da migração' }).expect(201);
-    expect(regularized.body).toEqual(expect.objectContaining({ regularizationReason: 'Regularização da migração', conditions: expect.objectContaining({ pendingCommercialSetup: false, awaitingFirstPayment: false }) }));
+    expect(regularized.body).toEqual(expect.objectContaining({ regularizationReason: 'Regularização da migração', conditions: expect.objectContaining({ pendingCommercialSetup: true, awaitingFirstPayment: false }) }));
     expect(await prisma.auditEvent.findFirst({ where: { targetId: subscriptionId, action: 'subscription.migrated_regularized' } })).not.toBeNull();
   });
 

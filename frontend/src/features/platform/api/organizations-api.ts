@@ -13,6 +13,24 @@ export type OrganizationTransition = 'activate' | 'deactivate' | 'suspend' | 're
 export const transitionOrganization = (id: string, action: OrganizationTransition, reason?: string) => httpClient.post<Organization>(`/platform/organizations/${id}/${action}`, reason ? { reason } : undefined).then((response) => response.data);
 export type RegularizeCommercialSetupInput = { contractedPrice: string; firstDueDate: string; billingDay: number };
 export const regularizeCommercialSetup = (id: string, input: RegularizeCommercialSetupInput) => httpClient.post<Organization>(`/platform/organizations/${id}/regularize-commercial-setup`, input).then((response) => response.data);
-export type ProvisionOrganizationInput = { name: string; document?: string; email?: string; admin: { name: string; email: string }; planVersionId: string; trialEnabled: boolean; trialStartsAt?: string };
-export type ProvisionOrganizationResult = { organization: { id: string; name: string; operationalStatus: string }; commercialAccount: { id: string; name: string; billingEmail?: string; billingDocument?: string; primaryContactOrganizationId: string; primaryContactUserId: string }; admin: { id: string; name: string; email: string; role: string; status: string }; subscription: { id: string; planVersionId: string; status: string; trialEnabled: boolean; trialStartsAt: string | null; trialEndsAt: string | null; contractedPrice: string }; activationToken: string };
+export type ProvisionOrganizationInput = {
+  name: string;
+  phone: string;
+  admin: { name: string; email: string };
+  contractedPrice: string;
+  firstDueDate: string;
+  billingDay: number;
+  document?: string;
+  addressLine1?: string;
+  addressLine2?: string;
+  city?: string;
+  state?: string;
+  postalCode?: string;
+  notes?: string;
+};
+export type ProvisionOrganizationResult = {
+  organization: { id: string; name: string; operationalStatus: string };
+  admin: { id: string; name: string; email: string; role: string; status: string };
+  activationSecret: string;
+};
 export const provisionOrganization = (input: ProvisionOrganizationInput) => httpClient.post<ProvisionOrganizationResult>('/platform/organizations', input).then((response) => response.data);

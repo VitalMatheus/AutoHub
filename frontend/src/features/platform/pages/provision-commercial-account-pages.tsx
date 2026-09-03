@@ -1,37 +1,159 @@
-import { useMemo, useState } from 'react';
+import { useState } from 'react';
 import { ArrowLeft, Check, Copy, ShieldAlert } from 'lucide-react';
 import { Link, useNavigate } from 'react-router-dom';
-import { useQuery } from '@tanstack/react-query';
-import { listPlans, type PlanVersion } from '../api/plans-api';
-import { provisionOrganization, type ProvisionOrganizationInput, type ProvisionOrganizationResult } from '../api/organizations-api';
-import { PlatformError, PlatformLoading } from '../components/platform-primitives';
-import { ApiError, getUserFacingError } from '@/shared/api/http';
-import { formatPlatformMoney } from '../platform-formatters';
+import {
+  provisionOrganization,
+  type ProvisionOrganizationInput,
+  type ProvisionOrganizationResult,
+} from '../api/organizations-api';
 
 const inputClass = 'w-full rounded-xl border border-slate-300 bg-white px-3 py-2.5 text-sm outline-none focus:ring-2 focus:ring-violet-500';
-const steps = ['Dados comerciais', 'Primeira Organization', 'Admin / Primary Contact', 'Subscription', 'Revisão'];
-type Form = { commercialName: string; billingEmail: string; billingDocument: string; organizationName: string; organizationEmail: string; adminName: string; adminEmail: string; planVersionId: string; trialEnabled: boolean; trialStartsAt: string };
-const initialForm: Form = { commercialName: '', billingEmail: '', billingDocument: '', organizationName: '', organizationEmail: '', adminName: '', adminEmail: '', planVersionId: '', trialEnabled: true, trialStartsAt: '' };
-type SelectableVersion = PlanVersion & { planName: string };
+type Form = {
+  name: string;
+  phone: string;
+  adminName: string;
+  adminEmail: string;
+  contractedPrice: string;
+  firstDueDate: string;
+  document: string;
+  addressLine1: string;
+  addressLine2: string;
+  city: string;
+  state: string;
+  postalCode: string;
+  notes: string;
+};
+const initialForm: Form = {
+  name: '',
+  phone: '',
+  adminName: '',
+  adminEmail: '',
+  contractedPrice: '79.00',
+  firstDueDate: '',
+  document: '',
+  addressLine1: '',
+  addressLine2: '',
+  city: '',
+  state: '',
+  postalCode: '',
+  notes: '',
+};
 
 export function ProvisionCommercialAccountPage() {
-  const navigate = useNavigate(); const [step, setStep] = useState(0); const [form, setForm] = useState<Form>(initialForm); const [errors, setErrors] = useState<Record<string, string>>({}); const [result, setResult] = useState<ProvisionOrganizationResult | null>(null); const [copied, setCopied] = useState(false); const [saveError, setSaveError] = useState<unknown>(null); const [submitting, setSubmitting] = useState(false);
-  const plans = useQuery({ queryKey: ['platform-provision-plans'], queryFn: async () => { const response = await listPlans({ page: 1, pageSize: 100 }); return response.data.flatMap((plan) => plan.archivedAt ? [] : plan.versions.filter((version) => version.status === 'PUBLISHED').map((version) => ({ ...version, planName: plan.name }))); } });
-  const selectedPlan = useMemo(() => plans.data?.find((version) => version.id === form.planVersionId), [plans.data, form.planVersionId]);
-  const update = (key: keyof Form, value: string | boolean) => setForm((current) => ({ ...current, [key]: value }));
-  const validate = (target: number) => { const next: Record<string, string> = {}; if (target === 0 && !form.commercialName.trim()) next.commercialName = 'Informe o nome comercial.'; if (target === 1 && !form.organizationName.trim()) next.organizationName = 'Informe o nome da Organization.'; if (target === 2) { if (!form.adminName.trim()) next.adminName = 'Informe o nome do administrador.'; if (!form.adminEmail.trim() || !/^\S+@\S+\.\S+$/.test(form.adminEmail)) next.adminEmail = 'Informe um e-mail válido para o administrador.'; } if (target === 3 && !form.planVersionId) next.planVersionId = 'Selecione uma Plan Version publicada.'; setErrors(next); return Object.keys(next).length === 0; };
-  const next = () => { if (validate(step)) setStep((current) => Math.min(4, current + 1)); };
-  const submit = async () => { if (!validate(3) || !selectedPlan) { setStep(3); return; } setSubmitting(true); setSaveError(null); try { const payload: ProvisionOrganizationInput = { name: form.organizationName.trim(), document: form.billingDocument.trim() || undefined, email: form.billingEmail.trim() || form.organizationEmail.trim() || undefined, admin: { name: form.adminName.trim(), email: form.adminEmail.trim() }, planVersionId: form.planVersionId, trialEnabled: form.trialEnabled, trialStartsAt: form.trialEnabled && form.trialStartsAt ? new Date(`${form.trialStartsAt}T00:00:00`).toISOString() : undefined }; setResult(await provisionOrganization(payload)); } catch (error) { setSaveError(error); } finally { setSubmitting(false); } };
-  const leave = () => { if (result && !copied && !window.confirm('Se você sair agora, o segredo de ativação não poderá ser recuperado. Deseja sair?')) return; navigate('/platform/commercial-accounts'); };
-  if (result) return <Success result={result} copied={copied} onCopy={async () => { await navigator.clipboard.writeText(result.activationToken); setCopied(true); }} onLeave={leave} />;
-  if (plans.isPending) return <PlatformLoading label="Carregando Plan Versions disponíveis…" />;
-  if (plans.isError) return <PlatformError error={plans.error} fallback="Não foi possível carregar os Plans para o provisionamento." onRetry={() => void plans.refetch()} />;
-  return <section aria-labelledby="provision-title" className="mx-auto max-w-4xl space-y-6"><button type="button" onClick={leave} className="inline-flex items-center gap-2 text-sm font-semibold text-violet-700"><ArrowLeft size={16} />Voltar para Contas comerciais</button><div><p className="text-sm font-semibold uppercase tracking-wide text-violet-700">Administração da plataforma</p><h2 id="provision-title" className="mt-2 text-3xl font-bold tracking-tight">Provisionar Commercial Account</h2><p className="mt-2 text-slate-600">Crie a conta, sua primeira Organization, o contato principal e a Subscription em uma única operação.</p></div><ol aria-label="Etapas do provisionamento" className="grid gap-2 sm:grid-cols-5">{steps.map((label, index) => <li key={label} className={`rounded-xl p-3 text-xs ${index === step ? 'bg-violet-600 text-white' : index < step ? 'bg-violet-100 text-violet-800' : 'bg-white text-slate-500'}`}><span className="font-semibold">{index + 1}. {label}</span></li>)}</ol>{saveError && <div role="alert" className="rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-800"><strong>Não foi possível concluir o provisionamento.</strong><p className="mt-1">{saveError instanceof ApiError ? getUserFacingError(saveError.problem, 'Revise os dados da Subscription e tente novamente.') : 'Revise os dados da Subscription e tente novamente.'}</p></div>}<div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">{step === 0 && <Commercial form={form} update={update} errors={errors} />}{step === 1 && <Organization form={form} update={update} errors={errors} />}{step === 2 && <Admin form={form} update={update} errors={errors} />}{step === 3 && <Subscription form={form} update={update} errors={errors} plans={plans.data ?? []} />}{step === 4 && <Review form={form} plan={selectedPlan} />}<div className="mt-8 flex justify-between"><button type="button" onClick={() => setStep((current) => Math.max(0, current - 1))} disabled={step === 0} className="rounded-xl border border-slate-300 px-4 py-2 text-sm font-medium disabled:opacity-40">Anterior</button>{step < 4 ? <button type="button" onClick={next} className="rounded-xl bg-violet-600 px-4 py-2 text-sm font-semibold text-white">Continuar</button> : <button type="button" disabled={submitting} onClick={() => void submit()} className="rounded-xl bg-violet-600 px-4 py-2 text-sm font-semibold text-white disabled:opacity-50">{submitting ? 'Provisionando…' : 'Provisionar conta'}</button>}</div></div></section>;
+  const navigate = useNavigate();
+  const [form, setForm] = useState<Form>(initialForm);
+  const [error, setError] = useState('');
+  const [result, setResult] = useState<ProvisionOrganizationResult | null>(null);
+  const [copied, setCopied] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
+  const update = (key: keyof Form, value: string) => setForm((current) => ({ ...current, [key]: value }));
+
+  const submit = async (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    const required = [form.name, form.phone, form.adminName, form.adminEmail, form.contractedPrice, form.firstDueDate];
+    if (required.some((value) => !value.trim()) || !/^\S+@\S+\.\S+$/.test(form.adminEmail)) {
+      setError('Preencha os campos obrigatórios e informe um e-mail válido.');
+      return;
+    }
+    if (!/^\d+(\.\d{1,2})?$/.test(form.contractedPrice) || Number(form.contractedPrice) <= 0) {
+      setError('Informe um preço contratado válido.');
+      return;
+    }
+    const billingDay = Number(form.firstDueDate.slice(8, 10));
+    if (!Number.isInteger(billingDay) || billingDay < 1 || billingDay > 28) {
+      setError('O vencimento mensal deve ocorrer entre os dias 1 e 28.');
+      return;
+    }
+    const optional = (value: string) => value.trim() || undefined;
+    const payload: ProvisionOrganizationInput = {
+      name: form.name.trim(),
+      phone: form.phone.trim(),
+      admin: { name: form.adminName.trim(), email: form.adminEmail.trim() },
+      contractedPrice: form.contractedPrice.trim(),
+      firstDueDate: form.firstDueDate,
+      billingDay,
+      document: optional(form.document),
+      addressLine1: optional(form.addressLine1),
+      addressLine2: optional(form.addressLine2),
+      city: optional(form.city),
+      state: optional(form.state),
+      postalCode: optional(form.postalCode),
+      notes: optional(form.notes),
+    };
+    setSubmitting(true);
+    setError('');
+    try {
+      setResult(await provisionOrganization(payload));
+    } catch {
+      setError('Não foi possível cadastrar a oficina. Revise os dados e tente novamente.');
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const leave = () => {
+    if (result && !copied && !window.confirm('Se você sair agora, o segredo de ativação não poderá ser recuperado. Deseja sair?')) return;
+    navigate('/platform/organizations');
+  };
+
+  if (result) {
+    return <Success result={result} copied={copied} onCopy={async () => {
+      await navigator.clipboard.writeText(result.activationSecret);
+      setCopied(true);
+    }} onLeave={leave} />;
+  }
+
+  return <section aria-labelledby="workshop-registration-title" className="mx-auto max-w-4xl space-y-6">
+    <Link to="/platform/organizations" className="inline-flex items-center gap-2 text-sm font-semibold text-violet-700"><ArrowLeft size={16} />Voltar para oficinas</Link>
+    <div>
+      <p className="text-sm font-semibold uppercase tracking-wide text-violet-700">Administração da plataforma</p>
+      <h2 id="workshop-registration-title" className="mt-2 text-3xl font-bold tracking-tight">Cadastrar oficina</h2>
+      <p className="mt-2 text-slate-600">Crie a oficina, seu administrador inicial e as condições comerciais em uma única operação.</p>
+    </div>
+    <form noValidate onSubmit={submit} className="space-y-6 rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+      {error && <p role="alert" className="rounded-xl border border-red-200 bg-red-50 p-3 text-sm text-red-800">{error}</p>}
+      <fieldset>
+        <legend className="text-lg font-semibold">Oficina</legend>
+        <div className="mt-4 grid gap-4 sm:grid-cols-2">
+          <Field required label="Nome da oficina" value={form.name} onChange={(value) => update('name', value)} />
+          <Field required label="Telefone da oficina" value={form.phone} onChange={(value) => update('phone', value)} />
+          <Field label="Documento" value={form.document} onChange={(value) => update('document', value)} />
+          <Field label="Endereço" value={form.addressLine1} onChange={(value) => update('addressLine1', value)} />
+          <Field label="Complemento" value={form.addressLine2} onChange={(value) => update('addressLine2', value)} />
+          <Field label="Cidade" value={form.city} onChange={(value) => update('city', value)} />
+          <Field label="Estado" value={form.state} onChange={(value) => update('state', value)} />
+          <Field label="CEP" value={form.postalCode} onChange={(value) => update('postalCode', value)} />
+        </div>
+        <label className="mt-4 block text-sm font-medium text-slate-700">Observações<textarea aria-label="Observações" className={`${inputClass} mt-1 min-h-24`} value={form.notes} onChange={(event) => update('notes', event.target.value)} /></label>
+      </fieldset>
+      <fieldset>
+        <legend className="text-lg font-semibold">Administrador inicial</legend>
+        <div className="mt-4 grid gap-4 sm:grid-cols-2">
+          <Field required label="Nome do administrador" value={form.adminName} onChange={(value) => update('adminName', value)} />
+          <Field required type="email" label="E-mail do administrador" value={form.adminEmail} onChange={(value) => update('adminEmail', value)} />
+        </div>
+      </fieldset>
+      <fieldset>
+        <legend className="text-lg font-semibold">Condições comerciais</legend>
+        <p className="mt-1 text-sm text-slate-500">O primeiro vencimento inicia o ciclo mensal; não existe período de teste separado.</p>
+        <div className="mt-4 grid gap-4 sm:grid-cols-2">
+          <Field required inputMode="decimal" label="Preço contratado" value={form.contractedPrice} onChange={(value) => update('contractedPrice', value)} />
+          <Field required type="date" label="Primeiro vencimento" value={form.firstDueDate} onChange={(value) => update('firstDueDate', value)} />
+        </div>
+      </fieldset>
+      <div className="flex justify-end"><button type="submit" disabled={submitting} className="rounded-xl bg-violet-600 px-5 py-2.5 text-sm font-semibold text-white disabled:opacity-50">{submitting ? 'Cadastrando…' : 'Cadastrar oficina'}</button></div>
+    </form>
+  </section>;
 }
-function Field({ label, value, onChange, error, type = 'text' }: { label: string; value: string; onChange: (value: string) => void; error?: string; type?: string }) { return <label className="block text-sm font-medium text-slate-700">{label}<input aria-label={label} type={type} className={`${inputClass} mt-1`} value={value} onChange={(event) => onChange(event.target.value)} aria-invalid={Boolean(error)} />{error && <span className="mt-1 block text-xs font-normal text-red-700">{error}</span>}</label>; }
-function Commercial({ form, update, errors }: { form: Form; update: (key: keyof Form, value: string | boolean) => void; errors: Record<string, string> }) { return <div><h3 className="text-lg font-semibold">Dados comerciais</h3><p className="mt-1 text-sm text-slate-500">Identificação e contato para cobrança da Commercial Account.</p><div className="mt-5 grid gap-4 sm:grid-cols-2"><Field label="Nome comercial" value={form.commercialName} onChange={(value) => update('commercialName', value)} error={errors.commercialName} /><Field label="E-mail de cobrança" value={form.billingEmail} onChange={(value) => update('billingEmail', value)} type="email" /><Field label="Documento de cobrança" value={form.billingDocument} onChange={(value) => update('billingDocument', value)} /></div></div>; }
-function Organization({ form, update, errors }: { form: Form; update: (key: keyof Form, value: string | boolean) => void; errors: Record<string, string> }) { return <div><h3 className="text-lg font-semibold">Primeira Organization</h3><p className="mt-1 text-sm text-slate-500">O contrato atual usa este nome para criar a primeira Organization e a Commercial Account.</p><div className="mt-5 grid gap-4 sm:grid-cols-2"><Field label="Nome da Organization" value={form.organizationName} onChange={(value) => update('organizationName', value)} error={errors.organizationName} /><Field label="E-mail da Organization" value={form.organizationEmail} onChange={(value) => update('organizationEmail', value)} type="email" /></div></div>; }
-function Admin({ form, update, errors }: { form: Form; update: (key: keyof Form, value: string | boolean) => void; errors: Record<string, string> }) { return <div><h3 className="text-lg font-semibold">Admin / Primary Contact</h3><p className="mt-1 text-sm text-slate-500">Esse administrador será o Primary Contact inicial, sem permissões adicionais.</p><div className="mt-5 grid gap-4 sm:grid-cols-2"><Field label="Nome do administrador" value={form.adminName} onChange={(value) => update('adminName', value)} error={errors.adminName} /><Field label="E-mail do administrador" value={form.adminEmail} onChange={(value) => update('adminEmail', value)} error={errors.adminEmail} type="email" /></div></div>; }
-function Subscription({ form, update, errors, plans }: { form: Form; update: (key: keyof Form, value: string | boolean) => void; errors: Record<string, string>; plans: SelectableVersion[] }) { return <div><h3 className="text-lg font-semibold">Subscription</h3><p className="mt-1 text-sm text-slate-500">Selecione uma condição publicada e real da API.</p><label className="mt-5 block text-sm font-medium text-slate-700">Plan Version<select aria-label="Plan Version" className={`${inputClass} mt-1`} value={form.planVersionId} onChange={(event) => update('planVersionId', event.target.value)}><option value="">Selecione…</option>{plans.map((plan) => <option key={plan.id} value={plan.id}>{plan.planName} · v{plan.version} — {formatPlatformMoney(plan.price)} / {plan.interval === 'MONTHLY' ? 'mês' : plan.interval}</option>)}</select>{errors.planVersionId && <span className="mt-1 block text-xs text-red-700">{errors.planVersionId}</span>}</label><label className="mt-5 flex items-center gap-3 text-sm"><input type="checkbox" checked={form.trialEnabled} onChange={(event) => update('trialEnabled', event.target.checked)} />Trial de 14 dias</label>{form.trialEnabled && <div className="mt-4"><Field label="Início autorizado do Trial (opcional)" value={form.trialStartsAt} onChange={(value) => update('trialStartsAt', value)} type="date" /></div>}</div>; }
-function Review({ form, plan }: { form: Form; plan?: SelectableVersion }) { return <div><h3 className="text-lg font-semibold">Revisão</h3><div className="mt-5 grid gap-4 sm:grid-cols-2 text-sm"><p><strong>Comercial:</strong> {form.commercialName}</p><p><strong>Organization:</strong> {form.organizationName}</p><p><strong>Primary Contact:</strong> {form.adminName} · {form.adminEmail}</p><p><strong>Subscription:</strong> {plan?.planName} v{plan?.version} · {plan && formatPlatformMoney(plan.price)} / {plan?.interval === 'MONTHLY' ? 'mês' : plan?.interval}</p><p><strong>Trial:</strong> {form.trialEnabled ? '14 dias' : 'desativado'}</p></div><p className="mt-5 rounded-xl bg-slate-50 p-4 text-sm text-slate-600">Os dados comerciais e da primeira Organization usam o contrato atual da API. O segredo de ativação será exibido uma única vez após o sucesso.</p></div>; }
-function Success({ result, copied, onCopy, onLeave }: { result: ProvisionOrganizationResult; copied: boolean; onCopy: () => Promise<void>; onLeave: () => void }) { return <section aria-labelledby="provision-success-title" className="mx-auto max-w-2xl space-y-6"><div className="rounded-2xl border border-emerald-200 bg-emerald-50 p-6"><Check className="text-emerald-700" size={28} /><h2 id="provision-success-title" className="mt-3 text-2xl font-bold text-emerald-950">Commercial Account provisionada</h2><p className="mt-2 text-sm text-emerald-900">{result.organization.name} e o administrador {result.admin.email} foram criados.</p></div><div className="rounded-2xl border border-amber-200 bg-amber-50 p-6"><div className="flex gap-3"><ShieldAlert className="shrink-0 text-amber-700" size={22} /><div><h3 className="font-semibold text-amber-950">Segredo de ativação</h3><p className="mt-1 text-sm text-amber-900">Copie agora. Por segurança, ele só ficará disponível nesta tela.</p><input readOnly aria-label="Segredo de ativação" value={result.activationToken} className={`${inputClass} mt-4 font-mono`} /><button type="button" onClick={() => void onCopy()} className="mt-3 inline-flex items-center gap-2 rounded-xl bg-amber-700 px-4 py-2 text-sm font-semibold text-white"><Copy size={16} />{copied ? 'Segredo copiado.' : 'Copiar segredo'}</button></div></div></div><button type="button" onClick={onLeave} className="rounded-xl border border-slate-300 px-4 py-2 text-sm font-semibold">Sair</button></section>; }
+
+function Field({ label, value, onChange, required, type = 'text', inputMode }: { label: string; value: string; onChange: (value: string) => void; required?: boolean; type?: string; inputMode?: React.HTMLAttributes<HTMLInputElement>['inputMode'] }) {
+  return <label className="block text-sm font-medium text-slate-700">{label}<input required={required} aria-label={label} type={type} inputMode={inputMode} className={`${inputClass} mt-1`} value={value} onChange={(event) => onChange(event.target.value)} /></label>;
+}
+
+function Success({ result, copied, onCopy, onLeave }: { result: ProvisionOrganizationResult; copied: boolean; onCopy: () => Promise<void>; onLeave: () => void }) {
+  return <section aria-labelledby="registration-success-title" className="mx-auto max-w-2xl space-y-6">
+    <div className="rounded-2xl border border-emerald-200 bg-emerald-50 p-6"><Check className="text-emerald-700" size={28} /><h2 id="registration-success-title" className="mt-3 text-2xl font-bold text-emerald-950">Oficina cadastrada</h2><p className="mt-2 text-sm text-emerald-900">{result.organization.name} e o administrador {result.admin.email} foram criados.</p></div>
+    <div className="rounded-2xl border border-amber-200 bg-amber-50 p-6"><div className="flex gap-3"><ShieldAlert className="shrink-0 text-amber-700" size={22} /><div className="min-w-0 flex-1"><h3 className="font-semibold text-amber-950">Segredo de ativação</h3><p className="mt-1 text-sm text-amber-900">Copie agora. Por segurança, ele só fica disponível nesta resposta.</p><input readOnly aria-label="Segredo de ativação" value={result.activationSecret} className={`${inputClass} mt-4 font-mono`} /><button type="button" onClick={() => void onCopy()} className="mt-3 inline-flex items-center gap-2 rounded-xl bg-amber-700 px-4 py-2 text-sm font-semibold text-white"><Copy size={16} />{copied ? 'Segredo copiado.' : 'Copiar segredo'}</button></div></div></div>
+    <button type="button" onClick={onLeave} className="rounded-xl border border-slate-300 px-4 py-2 text-sm font-semibold">Voltar para oficinas</button>
+  </section>;
+}

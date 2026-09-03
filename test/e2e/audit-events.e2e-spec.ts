@@ -35,7 +35,7 @@ describe('Platform audit events (e2e)', () => {
 
   it('records a safe, read-only timeline and filters it by actor/action/target', async () => {
     const created = await request(app.getHttpServer()).post('/api/v1/platform/organizations').set('Authorization', `Bearer ${superToken}`)
-      .send({ name: `Audited ${suffix}`, admin: { name: 'Audited Admin', email: adminEmail } }).expect(201);
+      .send({ name: `Audited ${suffix}`, phone: '81999990000', firstDueDate: '2026-10-10', billingDay: 10, admin: { name: 'Audited Admin', email: adminEmail } }).expect(201);
     organizationId = created.body.organization.id;
 
     const response = await request(app.getHttpServer()).get('/api/v1/platform/audit-events')
@@ -45,7 +45,7 @@ describe('Platform audit events (e2e)', () => {
     expect(response.body.data[0]).toEqual(expect.objectContaining({ action: 'organization.created', target: { type: 'ORGANIZATION', id: organizationId } }));
     expect(response.body.data[0].actor).toEqual(expect.objectContaining({ type: 'USER', name: 'Audit Operator', email: superEmail }));
     expect(response.body.data[0]).not.toHaveProperty('activationToken');
-    expect(JSON.stringify(response.body)).not.toContain(created.body.activationToken);
+    expect(JSON.stringify(response.body)).not.toContain(created.body.activationSecret);
 
     const superUser = await prisma.user.findUniqueOrThrow({ where: { email: superEmail }, select: { id: true } });
     await prisma.auditEvent.createMany({ data: [
@@ -76,7 +76,7 @@ describe('Platform audit events (e2e)', () => {
 
   it('does not persist an organization or audit event when provisioning fails', async () => {
     await request(app.getHttpServer()).post('/api/v1/platform/organizations').set('Authorization', `Bearer ${superToken}`)
-      .send({ name: `Rolled back ${suffix}`, admin: { name: 'Duplicate Admin', email: adminEmail } }).expect(409);
+      .send({ name: `Rolled back ${suffix}`, phone: '81999990000', firstDueDate: '2026-10-10', billingDay: 10, admin: { name: 'Duplicate Admin', email: adminEmail } }).expect(409);
 
     expect(await prisma.organization.count({ where: { name: `Rolled back ${suffix}` } })).toBe(0);
     expect(await prisma.auditEvent.count({ where: { action: 'organization.created', after: { path: ['name'], equals: `Rolled back ${suffix}` } } })).toBe(0);
@@ -89,7 +89,7 @@ describe('Platform audit events (e2e)', () => {
     const record = jest.spyOn(auditEvents, 'record').mockRejectedValueOnce(new Error('forced audit failure'));
 
     await request(app.getHttpServer()).post('/api/v1/platform/organizations').set('Authorization', `Bearer ${superToken}`)
-      .send({ name, admin: { name: 'Rolled Back Admin', email } }).expect(500);
+      .send({ name, phone: '81999990000', firstDueDate: '2026-10-10', billingDay: 10, admin: { name: 'Rolled Back Admin', email } }).expect(500);
     record.mockRestore();
 
     expect(await prisma.organization.count({ where: { name } })).toBe(0);

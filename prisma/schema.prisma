@@ -260,7 +260,7 @@ model ActionToken {
 
 model Organization {
   id                  String                        @id @default(uuid()) @db.Uuid
-  commercialAccountId String?                       @db.Uuid
+  commercialAccountId String?                       @unique @db.Uuid
   name                String
   document            String?                       @unique
   phone               String?
@@ -270,6 +270,7 @@ model Organization {
   city                String?
   state               String?
   postalCode          String?
+  notes               String?
   operationalStatus   OrganizationOperationalStatus @default(ACTIVE)
   nextQuoteNumber     Int                           @default(1)
   nextWorkOrderNumber Int                           @default(1)

@@ -14,7 +14,7 @@ describe('OrganizationsService commercial onboarding', () => {
       organization: { create: jest.fn().mockResolvedValue({ id: 'org-1', name: 'Oficina', document: null, phone: null, email: null, addressLine1: null, addressLine2: null, city: null, state: null, postalCode: null, operationalStatus: 'ACTIVE', createdAt: new Date(), updatedAt: new Date(), commercialAccount: { id: 'account-1', name: 'Oficina', primaryContactUserId: null } }), findMany: jest.fn(), findUnique: jest.fn() },
       user: { create: jest.fn().mockResolvedValue({ id: 'admin-1', name: 'Admin', email: 'admin@example.com', role: 'ADMIN', status: 'PENDING_ACTIVATION', organizationId: 'org-1' }) },
       actionToken: { create: jest.fn().mockResolvedValue({}) },
-      subscription: { create: jest.fn().mockResolvedValue({ id: 'subscription-1', planVersionId: 'version-basic', status: 'SCHEDULED', trialEnabled: true, trialStartsAt: null, trialEndsAt: null, contractedPrice: '79.00' }), update: jest.fn() },
+      subscription: { create: jest.fn().mockResolvedValue({ id: 'subscription-1', planVersionId: 'version-basic', status: 'CURRENT', trialEnabled: false, trialStartsAt: null, trialEndsAt: null, contractedPrice: new Prisma.Decimal('79.00'), firstDueDate: new Date('2026-10-10T00:00:00.000Z'), billingDay: 10 }), update: jest.fn() },
     };
     const prisma = { $transaction: jest.fn(async (callback: (value: typeof tx) => unknown) => callback(tx)), organization: tx.organization, ...overrides };
     const auditEvents = { record: jest.fn().mockResolvedValue(undefined) };
@@ -22,16 +22,55 @@ describe('OrganizationsService commercial onboarding', () => {
     return { service: new OrganizationsService(prisma as never, config as never, auditEvents as never), tx, prisma, auditEvents };
   }
 
-  it('creates the Primary Contact in the same onboarding transaction and defers the default Trial', async () => {
+  it('registers one workshop, its initial Admin and the AutoHub Basic Subscription atomically without a Trial Period', async () => {
     const { service, tx, auditEvents } = setup();
 
-    const result = await service.create(principal, { name: 'Oficina', admin: { name: 'Admin', email: 'ADMIN@example.com' }, trialEnabled: true });
+    const result = await service.create(principal, {
+      name: ' Oficina ', phone: '(81) 99999-9999', admin: { name: ' Admin ', email: 'ADMIN@example.com' },
+      firstDueDate: '2026-10-10', billingDay: 10,
+    });
 
     expect(tx.commercialAccount.update).toHaveBeenCalledWith({ where: { id: 'account-1' }, data: { primaryContactOrganizationId: 'org-1', primaryContactUserId: 'admin-1' } });
-    expect(tx.subscription.create).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ trialEnabled: true, trialStartsAt: null, trialEndsAt: null }) }));
+    expect(tx.subscription.create).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({
+      status: 'CURRENT', contractedPrice: new Prisma.Decimal('79.00'), firstDueDate: new Date('2026-10-10T00:00:00.000Z'),
+      billingDay: 10, trialEnabled: false, trialStartsAt: null, trialEndsAt: null,
+    }) }));
     expect(auditEvents.record).toHaveBeenCalledWith(expect.anything(), principal, expect.objectContaining({ action: 'subscription.created' }));
-    expect(result.activationToken).toEqual(expect.any(String));
-    expect(JSON.stringify(auditEvents.record.mock.calls)).not.toContain(result.activationToken);
+    expect(result).toEqual({
+      organization: expect.objectContaining({ id: 'org-1' }),
+      admin: expect.objectContaining({ id: 'admin-1', email: 'admin@example.com' }),
+      activationSecret: expect.any(String),
+    });
+    expect(JSON.stringify(result)).not.toContain('commercialAccount');
+    expect(JSON.stringify(result)).not.toContain('subscription');
+    expect(JSON.stringify(auditEvents.record.mock.calls)).not.toContain(result.activationSecret);
+    expect(tx.actionToken.create.mock.calls[0][0].data.tokenHash).not.toBe(result.activationSecret);
+  });
+
+  it('uses the explicitly contracted price and preserves optional registration data', async () => {
+    const { service, tx } = setup();
+
+    await service.create(principal, {
+      name: 'Oficina', phone: '81999999999', document: '12.345.678/0001-99', notes: 'Contrato anual negociado',
+      addressLine1: 'Rua A', addressLine2: 'Sala 2', city: 'Recife', state: 'PE', postalCode: '50000-000',
+      admin: { name: 'Admin', email: 'admin@example.com' }, contractedPrice: '89.90', firstDueDate: '2026-10-15', billingDay: 15,
+    });
+
+    expect(tx.organization.create).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({
+      document: '12345678000199', notes: 'Contrato anual negociado', addressLine1: 'Rua A', addressLine2: 'Sala 2',
+      city: 'Recife', state: 'PE', postalCode: '50000-000',
+    }) }));
+    expect(tx.subscription.create).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ contractedPrice: new Prisma.Decimal('89.90') }) }));
+  });
+
+  it.each([
+    [{ name: 'Oficina', phone: '81999999999', admin: { name: 'Admin', email: 'admin@example.com' }, contractedPrice: '0.00', firstDueDate: '2026-10-10', billingDay: 10 }, 'contractedPrice must be greater than zero'],
+    [{ name: 'Oficina', phone: '81999999999', admin: { name: 'Admin', email: 'admin@example.com' }, firstDueDate: '2026-02-30', billingDay: 10 }, 'firstDueDate must be a valid civil date'],
+  ])('rejects invalid registration commercial data before opening a transaction', async (dto, message) => {
+    const { service, prisma } = setup();
+
+    await expect(service.create(principal, dto)).rejects.toThrow(message);
+    expect(prisma.$transaction).not.toHaveBeenCalled();
   });
 
   it('rolls back the transaction when a provisioning step fails', async () => {
@@ -39,7 +78,7 @@ describe('OrganizationsService commercial onboarding', () => {
     const { service, prisma, tx } = setup();
     tx.actionToken.create.mockRejectedValue(failure);
 
-    await expect(service.create(principal, { name: 'Oficina', adminName: 'Admin', adminEmail: 'admin@example.com' })).rejects.toBe(failure);
+    await expect(service.create(principal, { name: 'Oficina', phone: '81999999999', admin: { name: 'Admin', email: 'admin@example.com' }, firstDueDate: '2026-10-10', billingDay: 10 })).rejects.toBe(failure);
     expect(prisma.$transaction).toHaveBeenCalledTimes(1);
   });
 

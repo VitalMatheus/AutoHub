@@ -21,7 +21,12 @@ type AuthenticatedRequest = Request & { user?: AuthenticatedPrincipal };
 export class OrganizationsController {
   constructor(private readonly organizations: OrganizationsService) {}
 
-  @Post() @ApiResponse({ status: 201, type: CreateOrganizationResponseDto })
+  @Post()
+  @ApiResponse({ status: 201, type: CreateOrganizationResponseDto })
+  @ApiResponse({ status: 400, description: 'Invalid registration data.' })
+  @ApiUnauthorizedResponse({ description: 'Authentication required.' })
+  @ApiForbiddenResponse({ description: 'Super Admin access required.' })
+  @ApiResponse({ status: 409, description: 'Organization or admin already exists.' })
   create(@Req() request: AuthenticatedRequest, @Body() dto: CreateOrganizationDto) { return this.organizations.create(request.user!, dto); }
   @Get() @ApiOperation({ summary: 'List enriched Organizations' }) @ApiResponse({ status: 200, type: OrganizationsResponseDto }) @ApiUnauthorizedResponse({ description: 'Authentication required.' }) @ApiForbiddenResponse({ description: 'Super Admin access required.' })
   list(@Query() dto: ListOrganizationsDto) { return this.organizations.list(dto); }
