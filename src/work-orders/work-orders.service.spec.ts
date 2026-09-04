@@ -47,7 +47,7 @@ describe('WorkOrdersService', () => {
     ['requestApproval', 'OPEN', 'WAITING_APPROVAL'], ['start', 'WAITING_APPROVAL', 'IN_PROGRESS'], ['waitParts', 'IN_PROGRESS', 'WAITING_PARTS'], ['complete', 'IN_PROGRESS', 'COMPLETED'], ['deliver', 'COMPLETED', 'DELIVERED'], ['cancel', 'OPEN', 'CANCELLED'],
   ] as const)('transitions %s', async (action, status, next) => {
     const current = { id: 'wo', organizationId: 'org', status, items: [] };
-    const tx = { $queryRaw: jest.fn().mockResolvedValue([{ id: 'wo' }]), workOrder: { findFirst: jest.fn().mockResolvedValue(current), update: jest.fn().mockResolvedValue({ ...current, status: next }) }, product: { update: jest.fn() }, stockMovement: { create: jest.fn() } };
+    const tx = { $queryRaw: jest.fn().mockResolvedValue([{ id: 'wo' }]), workOrder: { findFirst: jest.fn().mockResolvedValue(current), findFirstOrThrow: jest.fn().mockResolvedValue({ ...current, status: next, stockAllocations: [] }), update: jest.fn().mockResolvedValue({ ...current, status: next }) }, product: { update: jest.fn() }, stockMovement: { create: jest.fn() }, workOrderStockAllocation: { create: jest.fn() } };
     const prisma = { $transaction: jest.fn((cb: (value: unknown) => unknown) => cb(tx)) } as never;
     const result = await new WorkOrdersService(prisma)[action](principal, 'wo');
     expect(result.status).toBe(next);
