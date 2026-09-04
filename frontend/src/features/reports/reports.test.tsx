@@ -1,28 +1,23 @@
 import '@testing-library/jest-dom/vitest';
 import { render, screen } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { httpClient } from '@/shared/api/http';
 import { ReportsPage } from './pages/reports-page';
 
 describe('Reports page', () => {
   beforeEach(() => vi.restoreAllMocks());
 
-  it('renders an honest unavailable state without making API requests', () => {
+  it('renders the period controls and managerial report', async () => {
     const get = vi.spyOn(httpClient, 'get');
-    const post = vi.spyOn(httpClient, 'post');
-    const patch = vi.spyOn(httpClient, 'patch');
-    const request = vi.spyOn(httpClient, 'request');
+    vi.mocked(get).mockResolvedValue({ data: { from: '2026-09-01', to: '2026-09-30', timezone: 'America/Recife', revenue: { workOrders: '100.00', directSales: '50.00', total: '150.00' }, realizedExpenses: { total: '30.00', byCategory: [] }, cashResult: '120.00', grossProfit: '150.00', operatingProfit: '120.00', partsGrossMargin: { sales: '0.00', cost: null, margin: null, traceable: false }, accountsReceivable: [], accountsPayable: [], monthlyComparison: [] }, status: 200, statusText: 'OK', headers: {}, config: {} } as any);
 
-    render(<ReportsPage />);
+    const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    render(<QueryClientProvider client={queryClient}><ReportsPage /></QueryClientProvider>);
 
-    expect(screen.getByRole('heading', { name: 'Relatórios' })).toBeInTheDocument();
-    expect(screen.getByRole('heading', { name: 'Relatórios em breve' })).toBeInTheDocument();
-    expect(screen.getByRole('status')).toHaveTextContent('Indisponível');
-    expect(screen.getByText(/Ainda não há dados consolidados disponíveis/)).toBeInTheDocument();
-    expect(screen.getByText(/Métricas, receitas, atividades e indicadores/)).toBeInTheDocument();
-    expect(get).not.toHaveBeenCalled();
-    expect(post).not.toHaveBeenCalled();
-    expect(patch).not.toHaveBeenCalled();
-    expect(request).not.toHaveBeenCalled();
+    expect(screen.getByRole('heading', { name: 'Relatórios gerenciais' })).toBeInTheDocument();
+    expect(await screen.findByText('Resultado de caixa')).toBeInTheDocument();
+    expect(screen.getByLabelText('Período')).toBeInTheDocument();
+    expect(get).toHaveBeenCalledWith('/reports/managerial', expect.anything());
   });
 });

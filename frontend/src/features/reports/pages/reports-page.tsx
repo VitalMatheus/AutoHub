@@ -1,40 +1,14 @@
-import { BarChart3, Clock3 } from 'lucide-react';
+import { useState } from 'react';
+import { Download, FileBarChart } from 'lucide-react';
+import { useQuery } from '@tanstack/react-query';
+import { getManagerialReport, managerialReportCsvUrl } from '../api/reports-api';
+import { formatMoney as money } from '@/features/shared/money';
 
+const iso = (date: Date) => date.toISOString().slice(0, 10);
+function preset(kind: string) { const now = new Date(); const end = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + 1, 0)); if (kind === 'previous') return [iso(new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() - 1, 1))), iso(new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 0)))]; if (kind === 'year') return [iso(new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() - 11, 1))), iso(end)]; return [iso(new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1))), iso(end)]; }
 export function ReportsPage() {
-  return (
-    <div className="mx-auto max-w-4xl">
-      <header className="mb-6">
-        <h1 className="text-2xl font-bold text-slate-950">Relatórios</h1>
-        <p className="mt-1 text-sm text-slate-500">Acompanhe os resultados da sua oficina.</p>
-      </header>
-
-      <section className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm sm:p-8" aria-labelledby="reports-unavailable-title">
-        <div className="flex flex-col items-start gap-5 sm:flex-row">
-          <div className="flex size-12 shrink-0 items-center justify-center rounded-xl bg-blue-50 text-blue-700">
-            <BarChart3 size={24} aria-hidden="true" />
-          </div>
-          <div>
-            <div className="flex flex-wrap items-center gap-3">
-              <h2 id="reports-unavailable-title" className="text-xl font-semibold text-slate-900">Relatórios em breve</h2>
-              <span role="status" className="inline-flex items-center gap-1.5 rounded-full bg-amber-50 px-2.5 py-1 text-xs font-semibold text-amber-700">
-                <Clock3 size={14} aria-hidden="true" /> Indisponível
-              </span>
-            </div>
-            <p className="mt-3 max-w-2xl text-sm leading-6 text-slate-600">
-              Ainda não há dados consolidados disponíveis para gerar relatórios no AutoHub.
-              Esta área será liberada quando houver uma fonte de dados própria para esse fim.
-            </p>
-          </div>
-        </div>
-
-        <div className="mt-8 border-t border-slate-100 pt-6">
-          <h3 className="text-sm font-semibold text-slate-900">O que ainda não está disponível</h3>
-          <p className="mt-2 text-sm leading-6 text-slate-600">
-            Métricas, receitas, atividades e indicadores não são exibidos aqui porque ainda não
-            existe um endpoint de relatórios agregado no backend.
-          </p>
-        </div>
-      </section>
-    </div>
-  );
+  const initial = preset('current'); const [kind, setKind] = useState('current'); const [from, setFrom] = useState(initial[0]); const [to, setTo] = useState(initial[1]);
+  const query = useQuery({ queryKey: ['managerial-report', from, to], queryFn: () => getManagerialReport({ from, to }), enabled: Boolean(from && to) });
+  const changePreset = (value: string) => { setKind(value); if (value !== 'custom') { const [f, t] = preset(value); setFrom(f); setTo(t); } };
+  return <div className="mx-auto max-w-7xl"><header className="mb-6 flex flex-wrap items-end justify-between gap-4"><div><h1 className="text-2xl font-bold">Relatórios gerenciais</h1><p className="mt-1 text-sm text-slate-500">Visão em regime de caixa. Valores pendentes ficam separados.</p></div><a className="inline-flex items-center gap-2 rounded-xl border bg-white px-4 py-2 text-sm font-semibold" href={managerialReportCsvUrl({ from, to })}><Download size={16} />Exportar CSV</a></header><section className="mb-5 flex flex-wrap items-end gap-3 rounded-2xl border bg-white p-5 shadow-sm"><label className="text-sm font-semibold">Período<select aria-label="Período" value={kind} onChange={(e) => changePreset(e.target.value)} className="mt-1 block rounded-lg border px-3 py-2 font-normal"><option value="current">Este mês</option><option value="previous">Mês anterior</option><option value="year">Últimos 12 meses</option><option value="custom">Personalizado</option></select></label>{kind === 'custom' && <><label className="text-sm font-semibold">De<input type="date" value={from} onChange={(e) => setFrom(e.target.value)} className="mt-1 block rounded-lg border px-3 py-2 font-normal" /></label><label className="text-sm font-semibold">Até<input type="date" value={to} onChange={(e) => setTo(e.target.value)} className="mt-1 block rounded-lg border px-3 py-2 font-normal" /></label></>}</section>{query.isPending && <div role="status" className="p-8 text-center">Calculando relatório…</div>}{query.isError && <div role="alert" className="rounded-xl bg-red-50 p-4 text-red-700">Não foi possível carregar o relatório.</div>}{query.data && <><div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">{[['Receita realizada', query.data.revenue.total], ['Despesas pagas', query.data.realizedExpenses.total], ['Resultado de caixa', query.data.cashResult], ['Lucro operacional', query.data.operatingProfit]].map(([label, value]) => <section key={label} className="rounded-2xl border bg-white p-5 shadow-sm"><p className="text-sm text-slate-500">{label}</p><p className="mt-2 text-2xl font-bold">{money(value)}</p></section>)}</div><div className="mt-5 grid gap-5 lg:grid-cols-2"><section className="rounded-2xl border bg-white p-5 shadow-sm"><h2 className="flex items-center gap-2 font-semibold"><FileBarChart size={18} />DRE gerencial simplificada</h2><dl className="mt-4 space-y-3 text-sm"><div className="flex justify-between"><dt>Receitas de OS</dt><dd>{money(query.data.revenue.workOrders)}</dd></div><div className="flex justify-between"><dt>Receitas de vendas</dt><dd>{money(query.data.revenue.directSales)}</dd></div><div className="flex justify-between"><dt>Lucro bruto</dt><dd>{money(query.data.grossProfit)}</dd></div><div className="flex justify-between"><dt>Margem bruta de peças</dt><dd>{query.data.partsGrossMargin.margin ? money(query.data.partsGrossMargin.margin) : '— (custo não rastreável)'}</dd></div></dl></section><section className="rounded-2xl border bg-white p-5 shadow-sm"><h2 className="font-semibold">Contas em aberto</h2><div className="mt-4 grid gap-3 sm:grid-cols-2"><div><p className="text-sm text-slate-500">A receber</p><p className="text-xl font-bold">{money(query.data.accountsReceivable.reduce((sum, x) => sum + Number(x.balance), 0).toFixed(2))}</p></div><div><p className="text-sm text-slate-500">A pagar</p><p className="text-xl font-bold">{money(query.data.accountsPayable.reduce((sum, x) => sum + Number(x.balance), 0).toFixed(2))}</p></div></div><p className="mt-4 text-xs text-slate-500">Saldos pendentes não entram no resultado até a baixa confirmada.</p></section></div></>}</div>;
 }

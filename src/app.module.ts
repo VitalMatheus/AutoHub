@@ -25,6 +25,7 @@ import { ExpensesModule } from './expenses/expenses.module';
 import { SuppliersModule } from './suppliers/suppliers.module';
 import { PurchasesModule } from './purchases/purchases.module';
 import { DirectSalesModule } from './direct-sales/direct-sales.module';
+import { ReportsModule } from './reports/reports.module';
 
 @Module({
   imports: [
@@ -56,6 +57,7 @@ import { DirectSalesModule } from './direct-sales/direct-sales.module';
     SuppliersModule,
     PurchasesModule,
     DirectSalesModule,
+    ReportsModule,
   ],
   providers: [SecurityLogger],
   exports: [SecurityLogger],
