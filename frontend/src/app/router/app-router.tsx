@@ -24,6 +24,7 @@ import { ProvisionCommercialAccountPage } from '@/features/platform/pages/provis
 import { FinanceExpensePage, FinanceIndexPage, FinancePage } from '@/features/finance/pages/finance-page';
 import { NewSupplierPage, SupplierDetailPage, SuppliersListPage } from '@/features/suppliers/pages/supplier-pages';
 import { NewPurchasePage, PurchaseDetailPage, PurchasesListPage } from '@/features/purchases/pages/purchase-pages';
+import { DirectSaleDetailPage, DirectSalesListPage, NewDirectSalePage } from '@/features/direct-sales/pages/direct-sale-pages';
 
 function HomeRedirect() {
   const { principal, isAuthenticated, isRestoring } = useAuth();
@@ -67,6 +68,9 @@ export function AppRouter() {
           <Route path="purchases" element={<PurchasesListPage />} />
           <Route path="purchases/new" element={<NewPurchasePage />} />
           <Route path="purchases/:id" element={<PurchaseDetailPage />} />
+          <Route path="direct-sales" element={<DirectSalesListPage />} />
+          <Route path="direct-sales/new" element={<NewDirectSalePage />} />
+          <Route path="direct-sales/:id" element={<DirectSaleDetailPage />} />
           <Route path="finance" element={<FinanceIndexPage />} />
           <Route path="finance/work-orders/:workOrderId" element={<FinancePage />} />
           <Route path="finance/expenses/:expenseId" element={<FinanceExpensePage />} />

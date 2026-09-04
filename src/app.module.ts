@@ -24,6 +24,7 @@ import { SubscriptionChargesModule } from './platform/subscription-charges/subsc
 import { ExpensesModule } from './expenses/expenses.module';
 import { SuppliersModule } from './suppliers/suppliers.module';
 import { PurchasesModule } from './purchases/purchases.module';
+import { DirectSalesModule } from './direct-sales/direct-sales.module';
 
 @Module({
   imports: [
@@ -54,6 +55,7 @@ import { PurchasesModule } from './purchases/purchases.module';
     ExpensesModule,
     SuppliersModule,
     PurchasesModule,
+    DirectSalesModule,
   ],
   providers: [SecurityLogger],
   exports: [SecurityLogger],
