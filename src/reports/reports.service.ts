@@ -42,11 +42,11 @@ export class ReportsService {
     const byCategory = new Map<string, Prisma.Decimal>(); for (const p of expensePayments) byCategory.set(p.expense.category, add(byCategory.get(p.expense.category) ?? zero(), cents(p.amount)));
     const receivable = [
       ...workOrders.map((x) => ({ source: 'WORK_ORDER', id: x.id, number: x.number, balance: add(x.items.reduce((s, i) => add(s, cents(i.quantity).mul(i.unitPrice)), zero()), x.payments.reduce((s, p) => add(s, cents(p.amount).neg()), zero())) })),
-      ...sales.map((x) => ({ source: 'DIRECT_SALE', id: x.id, number: x.number, balance: add(x.items.reduce((s, i) => add(s, cents(i.quantity).mul(i.unitPrice).sub(i.discount)), zero()), x.payments.reduce((s, p) => add(s, cents(p.amount).neg()), zero())) })),
+      ...sales.filter((x) => x.status === 'CONFIRMED').map((x) => ({ source: 'DIRECT_SALE', id: x.id, number: x.number, balance: add(x.items.reduce((s, i) => add(s, cents(i.quantity).mul(i.unitPrice).sub(i.discount)), zero()), x.payments.reduce((s, p) => add(s, cents(p.amount).neg()), zero())) })),
     ].filter((x) => x.balance.gt(0)).map((x) => ({ ...x, balance: money(x.balance) }));
     const payable = expenses.map((x) => ({ ...x, balance: x.amount.sub(x.payments.reduce((s, p) => add(s, cents(p.amount)), zero())) })).filter((x) => x.balance.gt(0)).map((x) => ({ id: x.id, description: x.description, category: x.category, dueDate: dateOnly(x.dueDate), balance: money(x.balance) }));
-    const parts = [...workOrders.flatMap((x) => x.items.filter((i) => i.type === 'PRODUCT').map((i) => cents(i.quantity).mul(i.unitPrice))), ...sales.flatMap((x) => x.items.map((i) => cents(i.quantity).mul(i.unitPrice).sub(i.discount)))].reduce((s, x) => add(s, x), zero());
     const realizedWorkIds = new Set(payments.map((x) => x.workOrderId)); const realizedSaleIds = new Set(salePayments.map((x) => x.directSaleId));
+    const parts = [...workOrders.filter((x) => realizedWorkIds.has(x.id)).flatMap((x) => x.items.filter((i) => i.type === 'PRODUCT').map((i) => cents(i.quantity).mul(i.unitPrice))), ...sales.filter((x) => realizedSaleIds.has(x.id)).flatMap((x) => x.items.map((i) => cents(i.quantity).mul(i.unitPrice).sub(i.discount)))].reduce((s, x) => add(s, x), zero());
     const realizedAllocations = [...workOrders.filter((x) => realizedWorkIds.has(x.id)).flatMap((x) => x.stockAllocations), ...sales.filter((x) => realizedSaleIds.has(x.id)).flatMap((x) => x.stockAllocations)];
     const costs = realizedAllocations.filter((x) => x.unitCost !== null).reduce((s, x) => add(s, cents(x.unitCost!).mul(x.quantity)), zero());
     const traceable = realizedAllocations.some((x) => x.unitCost !== null);

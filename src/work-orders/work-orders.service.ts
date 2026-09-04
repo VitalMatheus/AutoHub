@@ -430,7 +430,9 @@ export class WorkOrdersService {
     const byId = new Map(entries.map((entry) => [entry.id, entry]));
     for (const [entryId, quantity] of entryTotals) {
       const entry = byId.get(entryId);
-      if (!entry || entry.status !== 'AVAILABLE' || entry.purchase.status !== 'CONFIRMED' || entry.quantity - entry.consumedQuantity < quantity) throw new ConflictException('Stock entry is cancelled or has insufficient stock');
+      const allocationItem = requested.find((allocation) => allocation.stockEntryId === entryId);
+      const item = allocationItem ? itemMap.get(allocationItem.workOrderItemId) : undefined;
+      if (!entry || !item || entry.productId !== item.productId || entry.status !== 'AVAILABLE' || entry.purchase.status !== 'CONFIRMED' || entry.quantity - entry.consumedQuantity < quantity) throw new ConflictException('Stock entry is cancelled, belongs to another Product, or has insufficient stock');
     }
     const productOpening = new Map<string, number>();
     for (const item of items.filter((candidate) => candidate.type === 'PRODUCT' && candidate.productId)) {
