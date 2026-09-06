@@ -5,7 +5,6 @@ import { PlatformLayout } from '../layouts/platform-layout';
 import { ProtectedRoute } from '@/features/auth/components/protected-route';
 import { LoginPage } from '@/features/auth/pages/login-page';
 import { PlatformHomePage } from '../pages/platform-home-page';
-import { useAuth, getHomePath } from '@/features/auth/auth-context';
 import { NewQuotePage, QuoteDetailPage, QuotesListPage } from '@/features/quotes/pages/quote-pages';
 import { NewWorkOrderPage, WorkOrderDetailPage, WorkOrdersListPage } from '@/features/work-orders/pages/work-order-pages';
 import { CustomerDetailPage, CustomersListPage, EditCustomerPage, NewCustomerPage } from '@/features/customers/pages/customer-pages';
@@ -25,17 +24,18 @@ import { FinanceExpensePage, FinanceIndexPage, FinancePage } from '@/features/fi
 import { NewSupplierPage, SupplierDetailPage, SuppliersListPage } from '@/features/suppliers/pages/supplier-pages';
 import { NewPurchasePage, PurchaseDetailPage, PurchasesListPage } from '@/features/purchases/pages/purchase-pages';
 import { DirectSaleDetailPage, DirectSalesListPage, NewDirectSalePage } from '@/features/direct-sales/pages/direct-sale-pages';
-
-function HomeRedirect() {
-  const { principal, isAuthenticated, isRestoring } = useAuth();
-  if (isRestoring) return <div role="status" className="p-8 text-sm text-slate-600">Restaurando sessão…</div>;
-  return <Navigate to={isAuthenticated && principal ? getHomePath(principal.role) : '/login'} replace />;
-}
+import { PublicPage } from '@/features/public/public-pages';
 
 export function AppRouter() {
   return (
     <Routes>
       <Route path="/login" element={<LoginPage />} />
+      <Route path="/" element={<PublicPage />} />
+      <Route path="/precos" element={<PublicPage />} />
+      <Route path="/termos" element={<PublicPage />} />
+      <Route path="/privacidade" element={<PublicPage />} />
+      <Route path="/contato" element={<PublicPage />} />
+      <Route path="/teste-gratis" element={<PublicPage />} />
       <Route element={<ProtectedRoute allowedRoles={['ADMIN']} />}>
         <Route path="/app" element={<AppLayout />}>
           <Route index element={<Navigate to="dashboard" replace />} />
@@ -96,7 +96,7 @@ export function AppRouter() {
           <Route path="audit-events" element={<AuditEventsPage />} />
         </Route>
       </Route>
-      <Route path="*" element={<HomeRedirect />} />
+      <Route path="*" element={<PublicPage />} />
     </Routes>
   );
 }
