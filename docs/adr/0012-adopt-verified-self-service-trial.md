@@ -1,0 +1,3 @@
+# Adopt a verified self-service trial
+
+New Vekar customers create one Commercial Account, one Organization, and its first Organization Admin through a public self-service flow instead of requiring Super Admin provisioning. The 14-day Trial Period begins only after e-mail confirmation, requires no payment method, and is limited to one use per CPF/CNPJ and e-mail; this favors low-friction acquisition while containing abandoned and repeated trials. Trial Expiry preserves read and export access but blocks mutations until the customer explicitly contracts a Plan, while existing commercial agreements remain unchanged.

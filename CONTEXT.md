@@ -17,19 +17,23 @@ Uma oficina mecânica que opera como unidade independente dentro da plataforma e
 _Avoid_: Tenant, conta da oficina
 
 **Commercial Account**:
-Cliente contratante do AutoHub. No MVP corresponde a exatamente uma Organization, embora permaneça separado internamente para preservar a fronteira comercial.
+Cliente contratante do Vekar. No MVP corresponde a exatamente uma Organization, embora permaneça separado internamente para preservar a fronteira comercial.
 _Avoid_: Organization, Tenant, oficina
 
 **Plan**:
-Oferta comercial interna do AutoHub. O MVP expõe somente o AutoHub Básico e não oferece administração de Plans ao usuário.
+Oferta comercial do Vekar. O MVP oferece somente o Plano Básico por R$ 79,00 mensais, preservando a possibilidade de novos Plans no futuro.
 _Avoid_: pacote, assinatura
+
+**Basic Plan**:
+Plan mensal de R$ 79,00 para uma Organization e até três Organization Admins, incluindo todas as capacidades atuais sem limites artificiais de clientes, veículos, Quotes ou Work Orders.
+_Avoid_: plano gratuito, Trial Period, licença por usuário
 
 **Plan Version**:
 Conjunto imutável das condições padrão de um Plan usado para originar uma contratação, sem aparecer como conceito de navegação no MVP.
 _Avoid_: edição do plano, Subscription
 
 **Subscription**:
-Relação comercial entre a Commercial Account de uma única Organization e o produto AutoHub Básico, preservando preço, vencimento e vigência contratados.
+Relação comercial entre a Commercial Account de uma única Organization e um Plan do Vekar, preservando preço, vencimento e vigência contratados.
 _Avoid_: plano, oficina, cobrança
 
 **Contracted Price**:
@@ -73,20 +77,40 @@ Condição derivada da Subscription e de sua única Subscription Charge aberta q
 _Avoid_: Organization operational status, suspensão administrativa
 
 **Payment Block**:
-Bloqueio comercial automático aplicado após cinco dias civis completos de atraso e removido pela quitação integral da mensalidade aberta, sem alterar o Organization operational status.
+Restrição comercial automática aplicada após cinco dias civis completos de atraso e removida pela quitação integral da mensalidade aberta; preserva consulta, exportação e contratação, mas impede mutações operacionais sem alterar o Organization operational status.
 _Avoid_: suspensão administrativa, cancelamento, exclusão
 
 **Effective Access**:
-Permissão resultante da combinação entre o Organization operational status e a Commercial Access Restriction, sem alterar nenhum dos dois estados de origem.
+Nível de acesso resultante da combinação entre o Organization operational status e a Commercial Access Restriction: operação completa ou consulta, exportação e regularização em modo somente leitura.
 _Avoid_: status da assinatura, papel do usuário
 
 **Effective Cancellation**:
-Encerramento da vigência comercial depois do período já pago; impede novas mensalidades sem apagar a Organization ou perdoar uma mensalidade aberta.
+Encerramento da vigência comercial depois do período já pago; impede novas mensalidades e mutações operacionais, preservando consulta e exportação durante o período de retenção sem apagar a Organization ou perdoar uma mensalidade aberta.
 _Avoid_: pedido de cancelamento, exclusão da oficina
 
+**Data Retention Period**:
+Intervalo de 90 dias após o fim do acesso contratado durante o qual os dados da Organization permanecem disponíveis para consulta e exportação antes de poderem ser excluídos definitivamente, ressalvadas obrigações legais de preservação.
+_Avoid_: vigência paga, backup permanente, Trial Period
+
 **Trial Period**:
-Conceito fora do MVP. O intervalo até o primeiro vencimento é configurado diretamente e não constitui um Trial Period separado.
-_Avoid_: período até o primeiro vencimento, cortesia
+Período gratuito de 14 dias concedido uma única vez por CPF/CNPJ e e-mail, iniciado quando o primeiro Organization Admin confirma o e-mail e ativa a Organization, sem exigir meio de pagamento.
+_Avoid_: período até o primeiro vencimento, Overdue Tolerance, cortesia sem prazo, desconto
+
+**Trial Expiry**:
+Fim do Trial Period sem contratação, que mantém os dados e permite consulta e exportação, mas impede novas operações ou alterações até a contratação de um Plan.
+_Avoid_: exclusão da oficina, Payment Block, suspensão administrativa
+
+**Trial Eligibility**:
+Condição de um novo cadastro cujo CPF/CNPJ e e-mail ainda não receberam um Trial Period; exceções exigem concessão manual e auditada pelo Super Admin.
+_Avoid_: cupom, desconto, novo convite
+
+**Self-Service Registration**:
+Cadastro público em que o responsável informa seus dados e os da oficina, confirma o e-mail e origina uma Commercial Account, uma Organization, seu primeiro Organization Admin e um Trial Period sem intervenção ordinária do Super Admin.
+_Avoid_: provisionamento administrativo, convite de usuário, lead
+
+**Consent Record**:
+Registro imutável da versão dos Termos de Uso ou Política de Privacidade aceita por um User, com momento e contexto do aceite; consentimento promocional permanece separado e opcional.
+_Avoid_: Audit Event genérico, preferência de notificação, aceite implícito
 
 **Awaiting First Payment**:
 Termo legado fora da superfície do MVP; a primeira mensalidade segue o mesmo ciclo de Due Soon, vencimento, Overdue Tolerance e Payment Block das demais.
