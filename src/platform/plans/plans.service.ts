@@ -34,7 +34,7 @@ export class PlansService {
   async create(principal: AuthenticatedPrincipal, dto: CreatePlanDto) {
     try { return await this.prisma.$transaction(async (tx) => {
       const plan = await tx.plan.create({ data: { name: dto.name.trim(), ...(dto.code ? { code: dto.code.trim() } : {}) }, include: { versions: true } });
-      await this.auditEvents.record(tx, principal, { action: AuditAction.PLAN_CREATED, targetType: AuditTargetType.PLAN, targetId: plan.id, after: { name: plan.name, archivedAt: null } });
+      await this.auditEvents.record(tx, principal, { action: AuditAction.PLAN_CREATED, targetType: AuditTargetType.PLAN, targetId: plan.id, after: { code: plan.code, name: plan.name, archivedAt: null } });
       return plan;
     }); } catch (e) { if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === 'P2002') throw new ConflictException('Plan name already exists'); throw e; }
   }
@@ -45,7 +45,7 @@ export class PlansService {
       if (before.archivedAt) throw new ConflictException('Archived Plan cannot be edited');
       if (dto.code?.trim() && before.code && dto.code.trim() !== before.code) throw new ConflictException('Plan code cannot be changed');
       const plan = await tx.plan.update({ where: { id }, data: { name: dto.name.trim(), ...(dto.code ? { code: dto.code.trim() } : {}) } });
-      await this.auditEvents.record(tx, principal, { action: AuditAction.PLAN_UPDATED, targetType: AuditTargetType.PLAN, targetId: id, before: { name: before.name }, after: { name: plan.name } }); return plan;
+      await this.auditEvents.record(tx, principal, { action: AuditAction.PLAN_UPDATED, targetType: AuditTargetType.PLAN, targetId: id, before: { code: before.code, name: before.name }, after: { code: plan.code, name: plan.name } }); return plan;
     }); } catch (e) { if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === 'P2002') throw new ConflictException('Plan name already exists'); throw e; }
   }
 

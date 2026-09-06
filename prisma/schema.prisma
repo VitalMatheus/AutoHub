@@ -279,7 +279,7 @@ model ConsentRecord {
   context        String?     @db.VarChar(80)
   createdAt      DateTime    @default(now()) @db.Timestamptz(3)
 
-  user         User?         @relation(fields: [userId], references: [id], onDelete: SetNull)
+  user         User?         @relation(fields: [organizationId, userId], references: [organizationId, id], onDelete: SetNull)
   organization Organization? @relation(fields: [organizationId], references: [id], onDelete: SetNull)
 
   @@index([userId, type, acceptedAt])
