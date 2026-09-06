@@ -15,10 +15,11 @@ describe('Organization Admin frontend shell', () => {
     setAccessToken(null);
     localStorage.clear();
     sessionStorage.clear();
-    window.history.pushState({}, '', '/');
+    window.history.pushState({}, '', '/login');
   });
 
   it('restores the browser session before rendering protected content', async () => {
+    window.history.pushState({}, '', '/app');
     const post = vi.spyOn(httpClient, 'post').mockResolvedValue({ data: { accessToken: 'restored-token', expiresIn: 900, tokenType: 'Bearer' } } as never);
     vi.spyOn(httpClient, 'get').mockImplementation((url) => {
       if (url === '/auth/me') return Promise.resolve({ data: principal }) as never;
@@ -161,6 +162,7 @@ describe('Organization Admin frontend shell', () => {
   });
 
   it('sends a restored Super Admin to the separate platform shell', async () => {
+    window.history.pushState({}, '', '/platform');
     vi.spyOn(httpClient, 'post').mockResolvedValue({ data: { accessToken: 'restored-token', expiresIn: 900, tokenType: 'Bearer' } } as never);
     vi.spyOn(httpClient, 'get').mockImplementation((url) => {
       if (/customers|vehicles|quotes|work-orders|payments/.test(url)) return Promise.reject(new Error('Operational API must not be requested')) as never;
@@ -198,6 +200,7 @@ describe('Organization Admin frontend shell', () => {
 
   it('lets a Super Admin sign out from the platform shell', async () => {
     const user = userEvent.setup();
+    window.history.pushState({}, '', '/platform');
     vi.spyOn(httpClient, 'post').mockResolvedValue({ data: { accessToken: 'restored-token', expiresIn: 900, tokenType: 'Bearer' } } as never);
     vi.spyOn(httpClient, 'get').mockImplementation((url) => platformGet(url) as never);
 
@@ -230,6 +233,7 @@ describe('Organization Admin frontend shell', () => {
 
   it('keeps the layout and module navigation persistent while marking the active route', async () => {
     const user = userEvent.setup();
+    window.history.pushState({}, '', '/app');
     vi.spyOn(httpClient, 'post').mockResolvedValue({ data: { accessToken: 'restored-token', expiresIn: 900, tokenType: 'Bearer' } } as never);
     vi.spyOn(httpClient, 'get').mockImplementation((url) => {
       if (url === '/auth/me') return Promise.resolve({ data: principal }) as never;
@@ -275,6 +279,7 @@ describe('Organization Admin frontend shell', () => {
 
   it('opens and closes the mobile drawer with its close button, backdrop, and Escape', async () => {
     const user = userEvent.setup();
+    window.history.pushState({}, '', '/app');
     vi.spyOn(httpClient, 'post').mockResolvedValue({ data: { accessToken: 'restored-token', expiresIn: 900, tokenType: 'Bearer' } } as never);
     vi.spyOn(httpClient, 'get').mockResolvedValue({ data: principal } as never);
 
@@ -295,6 +300,7 @@ describe('Organization Admin frontend shell', () => {
 
   it('shows the role returned by the backend in the user menu', async () => {
     const user = userEvent.setup();
+    window.history.pushState({}, '', '/app');
     vi.spyOn(httpClient, 'post').mockResolvedValue({ data: { accessToken: 'restored-token', expiresIn: 900, tokenType: 'Bearer' } } as never);
     vi.spyOn(httpClient, 'get').mockResolvedValue({ data: principal } as never);
 
@@ -307,6 +313,7 @@ describe('Organization Admin frontend shell', () => {
 
   it('logs out from the user menu and returns to the public login route', async () => {
     const user = userEvent.setup();
+    window.history.pushState({}, '', '/app');
     const post = vi.spyOn(httpClient, 'post').mockResolvedValue({ data: { accessToken: 'restored-token', expiresIn: 900, tokenType: 'Bearer' } } as never);
     vi.spyOn(httpClient, 'get').mockResolvedValue({ data: principal } as never);
 
