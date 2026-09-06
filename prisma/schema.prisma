@@ -136,8 +136,15 @@ enum AdministrativeSettlementMethod {
   OTHER
 }
 
+enum ConsentType {
+  TERMS_OF_USE
+  PRIVACY_POLICY
+  PROMOTIONAL
+}
+
 model Plan {
   id         String    @id @default(uuid()) @db.Uuid
+  code       String?   @unique
   name       String    @unique
   archivedAt DateTime? @db.Timestamptz(3)
   createdAt  DateTime  @default(now()) @db.Timestamptz(3)
@@ -252,9 +259,41 @@ model User {
   actionTokens           ActionToken[]
   auditEvents            AuditEvent[]
   primaryContactAccounts CommercialAccount[] @relation("CommercialAccountPrimaryContact")
+  consentRecords          ConsentRecord[]
 
   @@unique([organizationId, id])
   @@index([organizationId, status])
+}
+
+// Immutable acceptance evidence. The optional relations let future signup
+// flows record context without putting raw request payloads in AuditEvent.
+model ConsentRecord {
+  id             String      @id @default(uuid()) @db.Uuid
+  userId         String?     @db.Uuid
+  organizationId String?     @db.Uuid
+  type           ConsentType
+  policyVersion  String      @db.VarChar(80)
+  acceptedAt     DateTime    @default(now()) @db.Timestamptz(3)
+  requestIp      String?     @db.VarChar(64)
+  userAgent      String?
+  context        String?     @db.VarChar(80)
+  createdAt      DateTime    @default(now()) @db.Timestamptz(3)
+
+  user         User?         @relation(fields: [userId], references: [id], onDelete: SetNull)
+  organization Organization? @relation(fields: [organizationId], references: [id], onDelete: SetNull)
+
+  @@index([userId, type, acceptedAt])
+  @@index([organizationId, acceptedAt])
+}
+
+// Purpose-specific pseudonymous evidence used to prevent routine repeated
+// trials. It deliberately stores keyed fingerprints, never CPF/CNPJ/e-mail.
+model TrialEligibilityRecord {
+  id                String   @id @default(uuid()) @db.Uuid
+  documentFingerprint String @unique @db.VarChar(128)
+  emailFingerprint    String @unique @db.VarChar(128)
+  trialStartedAt     DateTime @db.Timestamptz(3)
+  createdAt          DateTime @default(now()) @db.Timestamptz(3)
 }
 
 model AuditEvent {
@@ -340,6 +379,7 @@ model Organization {
   salePayments              SalePayment[]
   commercialAccount         CommercialAccount?         @relation(fields: [commercialAccountId], references: [id], onDelete: Restrict)
   primaryContactAccounts    CommercialAccount[]        @relation("CommercialAccountPrimaryContactOrganization")
+  consentRecords            ConsentRecord[]
   subscriptionCharges       SubscriptionCharge[]
 
   @@unique([commercialAccountId, id])

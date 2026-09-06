@@ -47,6 +47,19 @@ describe('OrganizationsService commercial onboarding', () => {
     expect(tx.actionToken.create.mock.calls[0][0].data.tokenHash).not.toBe(result.activationSecret);
   });
 
+  it('selects the Basic Plan by stable code instead of its display name', async () => {
+    const { service, tx } = setup();
+
+    await service.create(principal, {
+      name: 'Oficina', phone: '81999999999', admin: { name: 'Admin', email: 'admin@example.com' },
+      firstDueDate: '2026-10-10', billingDay: 10,
+    });
+
+    expect(tx.planVersion.findFirst).toHaveBeenCalledWith(expect.objectContaining({
+      where: { plan: { code: 'BASIC', archivedAt: null }, status: 'PUBLISHED' },
+    }));
+  });
+
   it('uses the explicitly contracted price and preserves optional registration data', async () => {
     const { service, tx } = setup();
 

@@ -16,6 +16,7 @@ import { deriveSubscriptionConditions } from '../subscriptions/subscriptions.ser
 import { ListOrganizationsDto, OrganizationCommercialAccessFilter, OrganizationLifecycleFilter, OrganizationSort } from './dto/list-organizations.dto';
 import { deriveFinancialStanding } from '../billing/financial-standing';
 import { RegularizeCommercialSetupDto } from './dto/regularize-commercial-setup.dto';
+import { BASIC_PLAN_CODE } from '../plans/basic-plan';
 
 const organizationSelect = {
   id: true, name: true, document: true, phone: true, email: true, addressLine1: true, addressLine2: true,
@@ -62,7 +63,7 @@ export class OrganizationsService {
     const expiresDays = this.config.get<number>('ACTIVATION_TOKEN_TTL_DAYS') ?? 3;
     try {
       const result = await this.prisma.$transaction(async (tx) => {
-        const version = await tx.planVersion.findFirst({ where: { plan: { name: 'AutoHub Básico', archivedAt: null }, status: 'PUBLISHED' }, orderBy: [{ publishedAt: 'desc' }, { version: 'desc' }], select: { id: true, status: true, price: true, currency: true, interval: true, organizationLimit: true, userLimit: true, workOrderLimit: true, gracePeriodDays: true, plan: { select: { archivedAt: true } } } });
+        const version = await tx.planVersion.findFirst({ where: { plan: { code: BASIC_PLAN_CODE, archivedAt: null }, status: 'PUBLISHED' }, orderBy: [{ publishedAt: 'desc' }, { version: 'desc' }], select: { id: true, status: true, price: true, currency: true, interval: true, organizationLimit: true, userLimit: true, workOrderLimit: true, gracePeriodDays: true, plan: { select: { archivedAt: true } } } });
         if (!version) throw new BadRequestException('Basic Plan is not available');
         if (version.status !== 'PUBLISHED' || version.plan.archivedAt) throw new ConflictException('Only published Plan Versions from an active Plan can be contracted');
         const commercialAccount = await tx.commercialAccount.create({ data: { name: dto.name.trim(), billingEmail: dto.email ? this.normalizeEmail(dto.email) : undefined, billingDocument: dto.document ? this.normalizeDocument(dto.document) : undefined } });

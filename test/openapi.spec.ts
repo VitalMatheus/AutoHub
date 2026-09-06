@@ -97,6 +97,7 @@ describe('OpenAPI structure', () => {
       }),
     }));
     expect(paths['/api/v1/platform/plans']?.get).toBeDefined();
+    expect(schemas.CreatePlanDto).toEqual(expect.objectContaining({ properties: expect.objectContaining({ code: expect.objectContaining({ type: 'string', pattern: '^[A-Z][A-Z0-9_]*$' }) }) }));
     const dashboardGet = paths['/api/v1/dashboard']?.get;
     expect(dashboardGet).toBeDefined();
     expect(dashboardGet?.parameters?.flatMap((parameter) => 'name' in parameter ? [parameter.name] : [])).toEqual(['asOf']);

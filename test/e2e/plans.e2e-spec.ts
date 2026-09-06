@@ -57,8 +57,8 @@ describe('Platform Plans (e2e)', () => {
 
   it('exposes the seeded Basic Plan with its published commercial conditions', async () => {
     const response = await request(app.getHttpServer()).get('/api/v1/platform/plans').set('Authorization', `Bearer ${superToken}`).expect(200);
-    const basic = response.body.data.find((plan: { name: string }) => plan.name === 'AutoHub Básico');
-    expect(basic).toEqual(expect.objectContaining({ name: 'AutoHub Básico', archivedAt: null }));
+    const basic = response.body.data.find((plan: { code?: string }) => plan.code === 'BASIC');
+    expect(basic).toEqual(expect.objectContaining({ code: 'BASIC', name: 'AutoHub Básico', archivedAt: null }));
     expect(basic.versions).toEqual(expect.arrayContaining([
       expect.objectContaining({ status: 'PUBLISHED', price: '79.00', currency: 'BRL', interval: 'MONTHLY', organizationLimit: 1, userLimit: 3, workOrderLimit: null }),
     ]));
