@@ -190,11 +190,11 @@ export class OrganizationsService {
     // Legacy charges remain persisted, but Pending Commercial Setup must not
     // manufacture debt, delinquency, or a commercial block before the Super
     // Admin confirms the schedule.
-    const commerciallyActiveCharges = conditions.pendingCommercialSetup ? [] : charges;
+    const commerciallyActiveCharges = conditions.pendingCommercialSetup ? [] : charges.filter((charge) => charge.nature === 'FIRST_PAYMENT' || charge.nature === 'RENEWAL');
     const openCharges = commerciallyActiveCharges.filter((charge) => chargeBalance(charge).gt(0));
     const nextCharge = [...openCharges].sort((a, b) => a.dueDate.getTime() - b.dueDate.getTime())[0];
     const financialStanding = deriveFinancialStanding(nextCharge?.dueDate ?? null, asOf);
-    const blockDate = nextCharge ? recifeMidnight(addCivilDays(recifeCivilDate(nextCharge.dueDate), nextCharge.nature === 'RENEWAL' ? 6 : 1)) : null;
+    const blockDate = nextCharge ? recifeMidnight(addCivilDays(recifeCivilDate(nextCharge.dueDate), 6)) : null;
     const paidAmount = commerciallyActiveCharges.reduce((sum, charge) => sum.add(charge.amount.sub(chargeBalance(charge))), new Prisma.Decimal(0));
     const outstandingAmount = openCharges.reduce((sum, charge) => sum.add(chargeBalance(charge)), new Prisma.Decimal(0));
     const lifecycle: OrganizationLifecycleFilter[] = [];

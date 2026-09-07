@@ -54,4 +54,12 @@ describe('deriveFinancialStanding', () => {
     expect(deriveCommercialAccess([charge], new Date('2026-09-21T02:59:59.999Z')).commercialAccess).toBe('ACCESS_ALLOWED');
     expect(deriveCommercialAccess([charge], new Date('2026-09-21T03:00:00.000Z')).commercialAccess).toBe('PAYMENT_BLOCKED');
   });
+
+  it('does not let non-monthly charges create a payment block', () => {
+    const charge = {
+      nature: 'EXTRAORDINARY', dueDate: new Date('2026-01-01T00:00:00.000Z'), amount: new Prisma.Decimal('100.00'),
+      cancelledAt: null, settlements: [],
+    };
+    expect(deriveCommercialAccess([charge], new Date('2026-09-21T03:00:00.000Z')).commercialAccess).toBe('ACCESS_ALLOWED');
+  });
 });

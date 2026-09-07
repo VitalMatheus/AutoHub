@@ -26,6 +26,7 @@ export function deriveCommercialAccess(charges: AccessCharge[], asOf = new Date(
   let delinquent = false;
 
   for (const charge of charges) {
+    if (charge.nature !== 'FIRST_PAYMENT' && charge.nature !== 'RENEWAL') continue;
     if (!chargeBalance(charge).gt(0)) continue;
     const due = charge.dueDate.toISOString().slice(0, 10);
     const overdue = today > due;

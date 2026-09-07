@@ -39,6 +39,43 @@ describe('JwtAuthGuard commercial access', () => {
     expect(auth).not.toHaveProperty('revokeAllSessions');
   });
 
+  it.each(['/api/v1/customers', '/api/v1/exports/customers.csv'])('keeps blocked tenant reads and exports available: %s', async (path) => {
+    const auth = {
+      resolvePrincipal: jest.fn().mockResolvedValue({ id: 'user-1', role: 'ADMIN', organizationId: 'org-1' }),
+      assertOperationalAccess: jest.fn().mockResolvedValue(undefined),
+      hasCommercialAccess: jest.fn().mockResolvedValue(false),
+    };
+    const guard = new JwtAuthGuard(jwt, auth as any);
+
+    await expect(guard.canActivate(methodContext(path, 'GET').execution)).resolves.toBe(true);
+    expect(auth.hasCommercialAccess).not.toHaveBeenCalled();
+  });
+
+  it.each(['/api/v1/account/checkout', '/api/v1/account/checkout/pix', '/api/v1/account/checkout/card/renewal'])('keeps blocked payment flows available: %s', async (path) => {
+    const auth = {
+      resolvePrincipal: jest.fn().mockResolvedValue({ id: 'user-1', role: 'ADMIN', organizationId: 'org-1' }),
+      assertOperationalAccess: jest.fn().mockResolvedValue(undefined),
+      hasCommercialAccess: jest.fn().mockResolvedValue(false),
+    };
+    const guard = new JwtAuthGuard(jwt, auth as any);
+
+    await expect(guard.canActivate(methodContext(path, 'POST').execution)).resolves.toBe(true);
+    expect(auth.hasCommercialAccess).not.toHaveBeenCalled();
+  });
+
+  it('keeps payment checkout available after Trial expiry', async () => {
+    const auth = {
+      resolvePrincipal: jest.fn().mockResolvedValue({ id: 'user-1', role: 'ADMIN', organizationId: 'org-1' }),
+      assertOperationalAccess: jest.fn().mockResolvedValue(undefined),
+      isTrialExpired: jest.fn().mockResolvedValue(true),
+      hasCommercialAccess: jest.fn(),
+    };
+    const guard = new JwtAuthGuard(jwt, auth as any);
+
+    await expect(guard.canActivate(methodContext('/api/v1/account/checkout/pix', 'POST').execution)).resolves.toBe(true);
+    expect(auth.hasCommercialAccess).not.toHaveBeenCalled();
+  });
+
   it('does not apply tenant commercial blocking to Super Admin', async () => {
     const auth = {
       resolvePrincipal: jest.fn().mockResolvedValue({ id: 'super-1', role: 'SUPER_ADMIN', organizationId: null }),

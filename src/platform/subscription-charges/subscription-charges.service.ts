@@ -179,6 +179,17 @@ export class SubscriptionChargesService {
         if (offset > 0) {
           try {
             await this.prisma.$transaction(async (tx) => {
+              // A delayed reconciliation may walk through more than one
+              // period. The current open monthly Charge is the debt boundary;
+              // do not manufacture another Charge until it is fully settled.
+              const open = tx.subscriptionCharge?.findFirst
+                ? await tx.subscriptionCharge.findFirst({
+                  where: { subscriptionId: subscription.id, cancelledAt: null, nature: { in: [SubscriptionChargeNature.FIRST_PAYMENT, SubscriptionChargeNature.RENEWAL] } },
+                  select: { amount: true, cancelledAt: true, settlements: { select: { amount: true } } },
+                })
+                : null;
+              if (open && chargeBalance(open).gt(0)) return;
+
               const effective = await this.applyScheduledChanges(tx, subscription.id, recifeMidnight(periodStart));
               const charge = await tx.subscriptionCharge.create({
                 data: {

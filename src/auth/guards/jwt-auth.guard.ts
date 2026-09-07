@@ -29,19 +29,18 @@ export class JwtAuthGuard implements CanActivate {
       const payload = await this.jwt.verifyAsync<AccessTokenPayload>(token);
       if (!payload.sub || !payload.sid) throw new UnauthorizedException('Authentication required');
       const principal = await this.auth.resolvePrincipal(payload.sub, payload.sid, true);
-      // Keep this allowlist explicit and endpoint-specific. Commercial access
-      // must not be bypassed by a broad path prefix, while status and session
-      // management remain available so a blocked workshop can recover.
-      const commercialAccessExempt = new Set(['/api/v1/auth/me', '/api/v1/auth/logout', '/api/v1/account/access-status', '/api/v1/account/subscription-charge', '/api/v1/account/dashboard']);
+      // Commercial restriction is a read-only boundary. Every authenticated
+      // read remains available, while only security, support, and payment
+      // flows may mutate state during the restriction.
       const operationalAccessExempt = new Set(['/api/v1/auth/logout', '/api/v1/account/access-status']);
       if (principal.role === 'ADMIN' && principal.organizationId && !operationalAccessExempt.has(request.path)) {
         await this.auth.assertOperationalAccess(principal.organizationId);
       }
-      if (principal.role === 'ADMIN' && principal.organizationId && !commercialAccessExempt.has(request.path)) {
+      if (principal.role === 'ADMIN' && principal.organizationId && !this.isCommerciallyAllowed(request)) {
         const trialExpired = this.auth.isTrialExpired
           ? await this.auth.isTrialExpired(principal.organizationId)
           : false;
-        if (trialExpired && ['GET', 'HEAD', 'OPTIONS'].includes(request.method)) {
+        if (trialExpired && this.isCommerciallyAllowed(request)) {
           request.user = principal;
           request.sessionId = payload.sid;
           return true;
@@ -57,6 +56,21 @@ export class JwtAuthGuard implements CanActivate {
       if (error instanceof UnauthorizedException || error instanceof HttpException) throw error;
       throw new UnauthorizedException('Authentication required');
     }
+  }
+
+  private isCommerciallyAllowed(request: Request): boolean {
+    if (['GET', 'HEAD', 'OPTIONS'].includes(request.method)) return true;
+
+    const path = request.path.replace(/\/$/, '');
+    return new Set([
+      '/api/v1/auth/me',
+      '/api/v1/auth/logout',
+      '/api/v1/account/access-status',
+      '/api/v1/account/subscription-charge',
+    ]).has(path)
+      || path === '/api/v1/account/checkout'
+      || path.startsWith('/api/v1/account/checkout/')
+      || path.startsWith('/api/v1/support/');
   }
 
   private bearerToken(request: Request): string | undefined {
