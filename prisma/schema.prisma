@@ -111,6 +111,13 @@ enum SubscriptionStatus {
   ENDED
 }
 
+enum TrialReminderKind {
+  SEVEN_DAYS_REMAINING
+  THREE_DAYS_REMAINING
+  ONE_DAY_REMAINING
+  EXPIRED
+}
+
 enum SubscriptionChargeNature {
   FIRST_PAYMENT
   RENEWAL
@@ -218,7 +225,9 @@ model Subscription {
   planVersion          PlanVersion          @relation(fields: [planVersionId], references: [id], onDelete: Restrict)
   scheduledPlanVersion PlanVersion?         @relation("ScheduledSubscriptionPlan", fields: [scheduledPlanVersionId], references: [id], onDelete: Restrict)
   charges              SubscriptionCharge[]
+  trialReminders       TrialReminder[]
 
+  @@unique([id, commercialAccountId])
   @@index([planVersionId, status])
   @@index([commercialAccountId, status])
   @@index([scheduledPlanVersionId, scheduledPlanEffectiveAt])
@@ -260,7 +269,8 @@ model User {
   actionTokens           ActionToken[]
   auditEvents            AuditEvent[]
   primaryContactAccounts CommercialAccount[] @relation("CommercialAccountPrimaryContact")
-  consentRecords          ConsentRecord[]
+  consentRecords         ConsentRecord[]
+  trialReminders         TrialReminder[]     @relation("TrialReminderRecipient")
 
   @@unique([organizationId, id])
   @@index([organizationId, status])
@@ -290,11 +300,32 @@ model ConsentRecord {
 // Purpose-specific pseudonymous evidence used to prevent routine repeated
 // trials. It deliberately stores keyed fingerprints, never CPF/CNPJ/e-mail.
 model TrialEligibilityRecord {
-  id                String   @id @default(uuid()) @db.Uuid
-  documentFingerprint String @unique @db.VarChar(128)
-  emailFingerprint    String @unique @db.VarChar(128)
-  trialStartedAt     DateTime @db.Timestamptz(3)
-  createdAt          DateTime @default(now()) @db.Timestamptz(3)
+  id                  String   @id @default(uuid()) @db.Uuid
+  documentFingerprint String   @unique @db.VarChar(128)
+  emailFingerprint    String   @unique @db.VarChar(128)
+  trialStartedAt      DateTime @db.Timestamptz(3)
+  createdAt           DateTime @default(now()) @db.Timestamptz(3)
+}
+
+model TrialReminder {
+  id                  String            @id @default(uuid()) @db.Uuid
+  subscriptionId      String            @db.Uuid
+  commercialAccountId String            @db.Uuid
+  organizationId      String            @db.Uuid
+  recipientUserId     String            @db.Uuid
+  kind                TrialReminderKind
+  scheduledAt         DateTime          @db.Timestamptz(3)
+  claimedAt           DateTime?         @db.Timestamptz(3)
+  sentAt              DateTime?         @db.Timestamptz(3)
+  createdAt           DateTime          @default(now()) @db.Timestamptz(3)
+
+  subscription  Subscription @relation(fields: [subscriptionId, commercialAccountId], references: [id, commercialAccountId], onDelete: Restrict)
+  organization  Organization @relation("TrialReminderOrganization", fields: [commercialAccountId, organizationId], references: [commercialAccountId, id], onDelete: Restrict)
+  recipientUser User         @relation("TrialReminderRecipient", fields: [organizationId, recipientUserId], references: [organizationId, id], onDelete: Restrict)
+
+  @@unique([subscriptionId, kind])
+  @@index([scheduledAt, sentAt, claimedAt])
+  @@index([organizationId, scheduledAt])
 }
 
 model AuditEvent {
@@ -336,52 +367,53 @@ model ActionToken {
 }
 
 model Organization {
-  id                  String                        @id @default(uuid()) @db.Uuid
-  commercialAccountId String?                       @unique @db.Uuid
-  name                String
-  document            String?                       @unique
-  phone               String?
-  email               String?
-  addressLine1        String?
-  addressLine2        String?
-  city                String?
-  state               String?
-  postalCode          String?
-  notes               String?
-  operationalStatus   OrganizationOperationalStatus @default(ACTIVE)
-  nextQuoteNumber     Int                           @default(1)
-  nextWorkOrderNumber Int                           @default(1)
-  nextDirectSaleNumber Int                          @default(1)
-  createdAt           DateTime                      @default(now()) @db.Timestamptz(3)
-  updatedAt           DateTime                      @updatedAt @db.Timestamptz(3)
+  id                   String                        @id @default(uuid()) @db.Uuid
+  commercialAccountId  String?                       @unique @db.Uuid
+  name                 String
+  document             String?                       @unique
+  phone                String?
+  email                String?
+  addressLine1         String?
+  addressLine2         String?
+  city                 String?
+  state                String?
+  postalCode           String?
+  notes                String?
+  operationalStatus    OrganizationOperationalStatus @default(ACTIVE)
+  nextQuoteNumber      Int                           @default(1)
+  nextWorkOrderNumber  Int                           @default(1)
+  nextDirectSaleNumber Int                           @default(1)
+  createdAt            DateTime                      @default(now()) @db.Timestamptz(3)
+  updatedAt            DateTime                      @updatedAt @db.Timestamptz(3)
 
-  users                     User[]
-  customers                 Customer[]
-  vehicles                  Vehicle[]
-  services                  Service[]
-  products                  Product[]
-  suppliers                 Supplier[]
-  productSuppliers          ProductSupplier[]
-  quotes                    Quote[]
-  quoteItems                QuoteItem[]
-  workOrders                WorkOrder[]
-  workOrderStockAllocations WorkOrderStockAllocation[]
-  workOrderItems            WorkOrderItem[]
-  payments                  Payment[]
-  expenses                  Expense[]
-  expensePayments           ExpensePayment[]
-  stockMovements            StockMovement[]
-  purchases                 Purchase[]
-  purchaseItems             PurchaseItem[]
-  stockEntries              StockEntry[]
-  directSales               DirectSale[]
-  directSaleItems           DirectSaleItem[]
+  users                      User[]
+  customers                  Customer[]
+  vehicles                   Vehicle[]
+  services                   Service[]
+  products                   Product[]
+  suppliers                  Supplier[]
+  productSuppliers           ProductSupplier[]
+  quotes                     Quote[]
+  quoteItems                 QuoteItem[]
+  workOrders                 WorkOrder[]
+  workOrderStockAllocations  WorkOrderStockAllocation[]
+  workOrderItems             WorkOrderItem[]
+  payments                   Payment[]
+  expenses                   Expense[]
+  expensePayments            ExpensePayment[]
+  stockMovements             StockMovement[]
+  purchases                  Purchase[]
+  purchaseItems              PurchaseItem[]
+  stockEntries               StockEntry[]
+  directSales                DirectSale[]
+  directSaleItems            DirectSaleItem[]
   directSaleStockAllocations DirectSaleStockAllocation[]
-  salePayments              SalePayment[]
-  commercialAccount         CommercialAccount?         @relation(fields: [commercialAccountId], references: [id], onDelete: Restrict)
-  primaryContactAccounts    CommercialAccount[]        @relation("CommercialAccountPrimaryContactOrganization")
-  consentRecords            ConsentRecord[]
-  subscriptionCharges       SubscriptionCharge[]
+  salePayments               SalePayment[]
+  commercialAccount          CommercialAccount?          @relation(fields: [commercialAccountId], references: [id], onDelete: Restrict)
+  primaryContactAccounts     CommercialAccount[]         @relation("CommercialAccountPrimaryContactOrganization")
+  consentRecords             ConsentRecord[]
+  subscriptionCharges        SubscriptionCharge[]
+  trialReminders             TrialReminder[]             @relation("TrialReminderOrganization")
 
   @@unique([commercialAccountId, id])
   @@index([operationalStatus])
@@ -535,14 +567,14 @@ model Product {
   createdAt      DateTime @default(now()) @db.Timestamptz(3)
   updatedAt      DateTime @updatedAt @db.Timestamptz(3)
 
-  organization     Organization               @relation(fields: [organizationId], references: [id], onDelete: Restrict)
-  quoteItems       QuoteItem[]
-  workOrderItems   WorkOrderItem[]
-  stockMovements   StockMovement[]
-  purchaseItems    PurchaseItem[]
-  stockEntries     StockEntry[]
-  suppliers        ProductSupplier[]
-  directSaleItems  DirectSaleItem[]
+  organization    Organization      @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  quoteItems      QuoteItem[]
+  workOrderItems  WorkOrderItem[]
+  stockMovements  StockMovement[]
+  purchaseItems   PurchaseItem[]
+  stockEntries    StockEntry[]
+  suppliers       ProductSupplier[]
+  directSaleItems DirectSaleItem[]
 
   @@unique([organizationId, id])
   @@unique([organizationId, sku])
@@ -583,9 +615,10 @@ model ProductSupplier {
   createdAt      DateTime @default(now()) @db.Timestamptz(3)
   updatedAt      DateTime @updatedAt @db.Timestamptz(3)
 
-  organization Organization               @relation(fields: [organizationId], references: [id], onDelete: Restrict)
-  product      Product                    @relation(fields: [organizationId, productId], references: [organizationId, id], onDelete: Restrict)
-  supplier     Supplier                   @relation(fields: [organizationId, supplierId], references: [organizationId, id], onDelete: Restrict)
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  product      Product      @relation(fields: [organizationId, productId], references: [organizationId, id], onDelete: Restrict)
+  supplier     Supplier     @relation(fields: [organizationId, supplierId], references: [organizationId, id], onDelete: Restrict)
+
   @@unique([organizationId, id])
   @@unique([organizationId, productId, supplierId])
   @@index([organizationId, supplierId])
@@ -647,10 +680,11 @@ model WorkOrderStockAllocation {
   unitCost        Decimal? @db.Decimal(12, 2)
   createdAt       DateTime @default(now()) @db.Timestamptz(3)
 
-  organization      Organization     @relation(fields: [organizationId], references: [id], onDelete: Restrict)
-  workOrder         WorkOrder        @relation(fields: [organizationId, workOrderId], references: [organizationId, id], onDelete: Restrict)
-  workOrderItem     WorkOrderItem    @relation(fields: [organizationId, workOrderItemId], references: [organizationId, id], onDelete: Restrict)
-  stockEntry        StockEntry?      @relation(fields: [organizationId, stockEntryId], references: [organizationId, id], onDelete: Restrict)
+  organization  Organization  @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  workOrder     WorkOrder     @relation(fields: [organizationId, workOrderId], references: [organizationId, id], onDelete: Restrict)
+  workOrderItem WorkOrderItem @relation(fields: [organizationId, workOrderItemId], references: [organizationId, id], onDelete: Restrict)
+  stockEntry    StockEntry?   @relation(fields: [organizationId, stockEntryId], references: [organizationId, id], onDelete: Restrict)
+
   @@unique([organizationId, id])
   @@index([organizationId, workOrderId])
   @@index([organizationId, workOrderItemId])
@@ -832,12 +866,12 @@ model StockEntry {
   status           StockEntryStatus @default(AVAILABLE)
   createdAt        DateTime         @default(now()) @db.Timestamptz(3)
 
-  organization              Organization               @relation(fields: [organizationId], references: [id], onDelete: Restrict)
-  purchase                  Purchase                   @relation(fields: [organizationId, purchaseId], references: [organizationId, id], onDelete: Restrict)
-  purchaseItem              PurchaseItem               @relation(fields: [organizationId, purchaseItemId], references: [organizationId, id], onDelete: Restrict)
-  product                   Product                    @relation(fields: [organizationId, productId], references: [organizationId, id], onDelete: Restrict)
-  supplier                  Supplier                   @relation(fields: [organizationId, supplierId], references: [organizationId, id], onDelete: Restrict)
-  workOrderStockAllocations WorkOrderStockAllocation[]
+  organization               Organization                @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  purchase                   Purchase                    @relation(fields: [organizationId, purchaseId], references: [organizationId, id], onDelete: Restrict)
+  purchaseItem               PurchaseItem                @relation(fields: [organizationId, purchaseItemId], references: [organizationId, id], onDelete: Restrict)
+  product                    Product                     @relation(fields: [organizationId, productId], references: [organizationId, id], onDelete: Restrict)
+  supplier                   Supplier                    @relation(fields: [organizationId, supplierId], references: [organizationId, id], onDelete: Restrict)
+  workOrderStockAllocations  WorkOrderStockAllocation[]
   directSaleStockAllocations DirectSaleStockAllocation[]
 
   @@unique([organizationId, id])
@@ -892,12 +926,12 @@ model DirectSale {
   createdAt      DateTime         @default(now()) @db.Timestamptz(3)
   updatedAt      DateTime         @updatedAt @db.Timestamptz(3)
 
-  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Restrict)
-  customer     Customer?    @relation(fields: [organizationId, customerId], references: [organizationId, id], onDelete: Restrict)
-  items        DirectSaleItem[]
-  payments     SalePayment[]
+  organization     Organization                @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  customer         Customer?                   @relation(fields: [organizationId, customerId], references: [organizationId, id], onDelete: Restrict)
+  items            DirectSaleItem[]
+  payments         SalePayment[]
   stockAllocations DirectSaleStockAllocation[]
-  stockMovements StockMovement[]
+  stockMovements   StockMovement[]
 
   @@unique([organizationId, id])
   @@unique([organizationId, number])
@@ -917,9 +951,9 @@ model DirectSaleItem {
   discount       Decimal  @default(0) @db.Decimal(12, 2)
   createdAt      DateTime @default(now()) @db.Timestamptz(3)
 
-  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Restrict)
-  directSale   DirectSale @relation(fields: [organizationId, directSaleId], references: [organizationId, id], onDelete: Cascade)
-  product      Product @relation(fields: [organizationId, productId], references: [organizationId, id], onDelete: Restrict)
+  organization     Organization                @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  directSale       DirectSale                  @relation(fields: [organizationId, directSaleId], references: [organizationId, id], onDelete: Cascade)
+  product          Product                     @relation(fields: [organizationId, productId], references: [organizationId, id], onDelete: Restrict)
   stockAllocations DirectSaleStockAllocation[]
 
   @@unique([organizationId, id])
@@ -927,19 +961,19 @@ model DirectSaleItem {
 }
 
 model DirectSaleStockAllocation {
-  id             String   @id @default(uuid()) @db.Uuid
-  organizationId String   @db.Uuid
-  directSaleId   String   @db.Uuid
-  directSaleItemId String  @db.Uuid
-  stockEntryId   String?  @db.Uuid
-  quantity       Int
-  unitCost       Decimal? @db.Decimal(12, 2)
-  createdAt      DateTime @default(now()) @db.Timestamptz(3)
+  id               String   @id @default(uuid()) @db.Uuid
+  organizationId   String   @db.Uuid
+  directSaleId     String   @db.Uuid
+  directSaleItemId String   @db.Uuid
+  stockEntryId     String?  @db.Uuid
+  quantity         Int
+  unitCost         Decimal? @db.Decimal(12, 2)
+  createdAt        DateTime @default(now()) @db.Timestamptz(3)
 
-  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Restrict)
-  directSale DirectSale @relation(fields: [organizationId, directSaleId], references: [organizationId, id], onDelete: Restrict)
+  organization   Organization   @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  directSale     DirectSale     @relation(fields: [organizationId, directSaleId], references: [organizationId, id], onDelete: Restrict)
   directSaleItem DirectSaleItem @relation(fields: [organizationId, directSaleItemId], references: [organizationId, id], onDelete: Restrict)
-  stockEntry StockEntry? @relation(fields: [organizationId, stockEntryId], references: [organizationId, id], onDelete: Restrict)
+  stockEntry     StockEntry?    @relation(fields: [organizationId, stockEntryId], references: [organizationId, id], onDelete: Restrict)
 
   @@unique([organizationId, id])
   @@index([organizationId, directSaleId])
@@ -948,18 +982,18 @@ model DirectSaleStockAllocation {
 }
 
 model SalePayment {
-  id             String        @id @default(uuid()) @db.Uuid
-  organizationId String        @db.Uuid
-  directSaleId   String        @db.Uuid
-  amount         Decimal       @db.Decimal(12, 2)
-  method         PaymentMethod
-  status         PaymentStatus @default(CONFIRMED)
-  paidAt         DateTime?     @db.Timestamptz(3)
-  installmentDueDate DateTime? @db.Date
-  createdAt      DateTime      @default(now()) @db.Timestamptz(3)
+  id                 String        @id @default(uuid()) @db.Uuid
+  organizationId     String        @db.Uuid
+  directSaleId       String        @db.Uuid
+  amount             Decimal       @db.Decimal(12, 2)
+  method             PaymentMethod
+  status             PaymentStatus @default(CONFIRMED)
+  paidAt             DateTime?     @db.Timestamptz(3)
+  installmentDueDate DateTime?     @db.Date
+  createdAt          DateTime      @default(now()) @db.Timestamptz(3)
 
   organization Organization @relation(fields: [organizationId], references: [id], onDelete: Restrict)
-  directSale DirectSale @relation(fields: [organizationId, directSaleId], references: [organizationId, id], onDelete: Restrict)
+  directSale   DirectSale   @relation(fields: [organizationId, directSaleId], references: [organizationId, id], onDelete: Restrict)
 
   @@index([organizationId, directSaleId, status])
   @@index([organizationId, paidAt])

@@ -9,6 +9,7 @@ import { TurnstileService } from '../common/turnstile.service';
 import { CreateRegistrationDto } from './dto/create-registration.dto';
 import { normalizeCpfCnpj } from './cpf-cnpj.validator';
 import { BASIC_PLAN_CODE } from '../platform/plans/basic-plan';
+import { TrialRemindersService } from '../trial/trial-reminders.service';
 
 export const REGISTRATION_NEUTRAL_MESSAGE = 'Se os dados puderem iniciar um cadastro, enviaremos instruções para o e-mail informado.';
 export const RECOVERY_NEUTRAL_MESSAGE = 'Se houver uma conta compatível, enviaremos instruções para o e-mail informado.';
@@ -21,6 +22,7 @@ export class PublicRegistrationService {
     private readonly config: ConfigService,
     private readonly email: TransactionalEmailService,
     private readonly turnstile: TurnstileService,
+    private readonly trialReminders: TrialRemindersService,
   ) {}
 
   private normalizeEmail(email: string): string { return email.trim().toLowerCase(); }
@@ -108,6 +110,7 @@ export class PublicRegistrationService {
         const activated = await tx.user.updateMany({ where: { id: user.id, status: 'PENDING_ACTIVATION' }, data: { status: 'ACTIVE' } });
         if (activated.count !== 1) throw new UnauthorizedException('Account cannot be activated');
         await tx.subscription.update({ where: { id: subscription.id }, data: { status: 'CURRENT', trialStartsAt: now, trialEndsAt, commercialStartAt: now } });
+        await this.trialReminders.scheduleForConfirmation(tx, { subscriptionId: subscription.id, commercialAccountId: user.organization.commercialAccountId, organizationId: user.organizationId!, recipientUserId: user.id, trialEndsAt });
         await tx.auditEvent.create({ data: { actorType: 'SYSTEM', action: 'self_service.registration_confirmed', targetType: 'SELF_SERVICE_REGISTRATION', targetId: user.organizationId!, organizationId: user.organizationId, commercialAccountId: user.organization.commercialAccountId, after: { trialStartsAt: now.toISOString(), trialEndsAt: trialEndsAt.toISOString() } } });
         result = { trialStartsAt: now, trialEndsAt };
       }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable, maxWait: 5000, timeout: 10000 });

@@ -21,7 +21,8 @@ describe('PublicRegistrationService', () => {
     const config = new ConfigService({ JWT_ACCESS_SECRET: 'a'.repeat(32), PUBLIC_APP_URL: 'http://localhost:5173', ARGON2_MEMORY_COST: 8192, ARGON2_TIME_COST: 1, ARGON2_PARALLELISM: 1, EMAIL_DELIVERY_MODE: 'capture' });
     const email = { send: jest.fn().mockResolvedValue(undefined) } as unknown as TransactionalEmailService;
     const turnstile = { assertAllowed: jest.fn().mockResolvedValue(undefined) } as unknown as TurnstileService;
-    return { service: new PublicRegistrationService(prisma, config, email, turnstile), tx, prisma, email };
+    const trialReminders = { scheduleForConfirmation: jest.fn() };
+    return { service: new PublicRegistrationService(prisma, config, email, turnstile, trialReminders as never), tx, prisma, email };
   }
 
   it('normalizes identifiers, stores a pending account atomically, and sends no secret in the response', async () => {

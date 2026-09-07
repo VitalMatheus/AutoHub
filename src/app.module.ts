@@ -28,6 +28,7 @@ import { DirectSalesModule } from './direct-sales/direct-sales.module';
 import { ReportsModule } from './reports/reports.module';
 import { CommonModule } from './common/common.module';
 import { PublicRegistrationModule } from './public-registration/public-registration.module';
+import { TrialModule } from './trial/trial.module';
 
 @Module({
   imports: [
@@ -62,6 +63,7 @@ import { PublicRegistrationModule } from './public-registration/public-registrat
     ReportsModule,
     CommonModule,
     PublicRegistrationModule,
+    TrialModule,
   ],
   providers: [SecurityLogger],
   exports: [SecurityLogger],

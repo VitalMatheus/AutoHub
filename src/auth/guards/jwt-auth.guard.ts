@@ -32,7 +32,7 @@ export class JwtAuthGuard implements CanActivate {
       // Keep this allowlist explicit and endpoint-specific. Commercial access
       // must not be bypassed by a broad path prefix, while status and session
       // management remain available so a blocked workshop can recover.
-      const commercialAccessExempt = new Set(['/api/v1/auth/me', '/api/v1/auth/logout', '/api/v1/account/access-status', '/api/v1/account/subscription-charge']);
+      const commercialAccessExempt = new Set(['/api/v1/auth/me', '/api/v1/auth/logout', '/api/v1/account/access-status', '/api/v1/account/subscription-charge', '/api/v1/account/dashboard']);
       const operationalAccessExempt = new Set(['/api/v1/auth/logout', '/api/v1/account/access-status']);
       if (principal.role === 'ADMIN' && principal.organizationId && !operationalAccessExempt.has(request.path)) {
         await this.auth.assertOperationalAccess(principal.organizationId);

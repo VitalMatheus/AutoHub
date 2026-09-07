@@ -1,4 +1,4 @@
-import { BadRequestException, ForbiddenException, Injectable } from '@nestjs/common';
+import { BadRequestException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import type { AuthenticatedPrincipal } from '../auth/authenticated-principal';
 import { PrismaService } from '../prisma/prisma.service';
@@ -36,6 +36,57 @@ function jsonValue(value: Prisma.JsonValue | null | undefined, key: string) {
 @Injectable()
 export class DashboardService {
   constructor(private readonly prisma: PrismaService) {}
+
+  async workshopSummary(principal: AuthenticatedPrincipal, asOf = new Date()) {
+    if (principal.role !== 'ADMIN' || !principal.organizationId) throw new ForbiddenException('Organization Admin access required');
+    const organizationId = principal.organizationId;
+    const result = await this.prisma.$transaction(async (tx) => {
+      const [organization, customers, vehicles, quotes, workOrders, payments, expenses, directSales, subscription] = await Promise.all([
+        tx.organization.findFirst({ where: { id: organizationId }, select: { id: true, name: true, phone: true, email: true, document: true } }),
+        tx.customer.count({ where: { organizationId, active: true } }),
+        tx.vehicle.count({ where: { organizationId, active: true } }),
+        tx.quote.count({ where: { organizationId, status: { not: 'CANCELLED' } } }),
+        tx.workOrder.count({ where: { organizationId, status: { not: 'CANCELLED' } } }),
+        tx.payment.count({ where: { organizationId, status: 'CONFIRMED' } }),
+        tx.expense.count({ where: { organizationId, status: { not: 'CANCELLED' } } }),
+        tx.directSale.count({ where: { organizationId, status: 'CONFIRMED' } }),
+        tx.subscription.findFirst({
+          where: { commercialAccount: { organizations: { some: { id: organizationId } } }, status: { not: 'ENDED' } },
+          orderBy: { createdAt: 'desc' },
+          select: { trialEnabled: true, trialStartsAt: true, trialEndsAt: true },
+        }),
+      ]);
+      if (!organization) throw new NotFoundException('Organization not found');
+      return { organization, customers, vehicles, quotes, workOrders, payments, expenses, directSales, subscription };
+    });
+    const trial = this.trialStatus(result.subscription, asOf);
+    return {
+      referenceAt: asOf.toISOString(),
+      timezone: 'America/Recife',
+      organization: { id: result.organization.id, name: result.organization.name },
+      trial,
+      checklist: [
+        { key: 'WORKSHOP_DETAILS', label: 'Complete os dados da oficina', completed: Boolean(result.organization.name.trim() && result.organization.phone?.trim() && result.organization.email?.trim()), href: '/app/settings' },
+        { key: 'FIRST_CUSTOMER', label: 'Cadastre seu primeiro Customer', completed: result.customers > 0, href: '/app/customers/new' },
+        { key: 'FIRST_VEHICLE', label: 'Cadastre seu primeiro Vehicle', completed: result.vehicles > 0, href: '/app/vehicles/new' },
+        { key: 'FIRST_QUOTE', label: 'Crie seu primeiro Quote', completed: result.quotes > 0, href: '/app/quotes/new' },
+        { key: 'FIRST_WORK_ORDER', label: 'Registre seu primeiro Work Order', completed: result.workOrders > 0, href: '/app/work-orders/new' },
+        { key: 'FIRST_FINANCE_RECORD', label: 'Registre sua primeira movimentação financeira', completed: result.payments > 0 || result.expenses > 0 || result.directSales > 0, href: '/app/finance' },
+      ],
+    };
+  }
+
+  private trialStatus(subscription: { trialEnabled: boolean; trialStartsAt: Date | null; trialEndsAt: Date | null } | null, asOf: Date) {
+    if (!subscription?.trialEnabled || !subscription.trialStartsAt || !subscription.trialEndsAt) return null;
+    const active = asOf >= subscription.trialStartsAt && asOf < subscription.trialEndsAt;
+    const remainingDays = active ? Math.max(0, Math.ceil((subscription.trialEndsAt.getTime() - asOf.getTime()) / 86400000)) : 0;
+    return {
+      status: active ? 'ACTIVE' : 'EXPIRED',
+      endsAt: subscription.trialEndsAt.toISOString(),
+      remainingDays,
+      message: active ? `Trial Period ativo; ${remainingDays} ${remainingDays === 1 ? 'dia' : 'dias'} restantes.` : 'Trial Period encerrado; seus dados continuam disponíveis para consulta e exportação.',
+    };
+  }
 
   private buildSeries(input: {
     from: string; to: string; currentMonth: string; referenceAt: Date;
