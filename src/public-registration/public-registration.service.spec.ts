@@ -3,6 +3,7 @@ import { Prisma } from '@prisma/client';
 import { TransactionalEmailService } from '../common/transactional-email.service';
 import { TurnstileService } from '../common/turnstile.service';
 import { PublicRegistrationService, REGISTRATION_NEUTRAL_MESSAGE } from './public-registration.service';
+import { AcquisitionFunnelStage } from '@prisma/client';
 
 const dto = { workshopName: ' Oficina Teste ', document: '529.982.247-25', phone: '(81) 99999-9999', responsibleName: ' Ana ', email: ' ANA@EXAMPLE.COM ', password: 'a-secure-password', termsAccepted: true, privacyAccepted: true, marketingConsent: false };
 
@@ -22,16 +23,18 @@ describe('PublicRegistrationService', () => {
     const email = { send: jest.fn().mockResolvedValue(undefined) } as unknown as TransactionalEmailService;
     const turnstile = { assertAllowed: jest.fn().mockResolvedValue(undefined) } as unknown as TurnstileService;
     const trialReminders = { scheduleForConfirmation: jest.fn() };
-    return { service: new PublicRegistrationService(prisma, config, email, turnstile, trialReminders as never), tx, prisma, email };
+    const acquisitionFunnel = { record: jest.fn() };
+    return { service: new PublicRegistrationService(prisma, config, email, turnstile, trialReminders as never, acquisitionFunnel as never), tx, prisma, email, acquisitionFunnel };
   }
 
   it('normalizes identifiers, stores a pending account atomically, and sends no secret in the response', async () => {
-    const { service, tx, email } = setup();
+    const { service, tx, email, acquisitionFunnel } = setup();
     await expect(service.submit(dto, '127.0.0.1')).resolves.toEqual({ message: REGISTRATION_NEUTRAL_MESSAGE });
     expect(tx.organization.create).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ document: '52998224725', email: 'ana@example.com' }) }));
     expect(tx.user.create).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ email: 'ana@example.com', status: 'PENDING_ACTIVATION', role: 'ADMIN' }) }));
     expect(tx.actionToken.create).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ tokenHash: expect.not.stringMatching('a-secure-password') }) }));
     expect(email.send).toHaveBeenCalledWith(expect.objectContaining({ to: 'ana@example.com' }));
+    expect(acquisitionFunnel.record).toHaveBeenCalledWith(expect.anything(), AcquisitionFunnelStage.REGISTRATION_STARTED, 'account-1');
   });
 
   it('returns the same neutral result for an existing identifier without creating or sending', async () => {
@@ -46,7 +49,7 @@ describe('PublicRegistrationService', () => {
     const actionToken = { create: jest.fn(), findFirst: jest.fn().mockResolvedValue({ id: 'token-1', userId: 'user-1' }), updateMany: jest.fn().mockResolvedValue({ count: 1 }) };
     const user = { findUnique: jest.fn().mockResolvedValue({ id: 'user-1', email: 'ana@example.com', status: 'PENDING_ACTIVATION', organizationId: 'org-1', organization: { document: '52998224725', operationalStatus: 'ACTIVE', commercialAccountId: 'account-1' } }), updateMany: jest.fn().mockResolvedValue({ count: 1 }) };
     const subscription = { create: jest.fn(), findFirst: jest.fn().mockResolvedValue({ id: 'subscription-1', trialStartsAt: null, trialEndsAt: null }), update: jest.fn() };
-    const { service, tx } = setup({ actionToken, user, subscription });
+    const { service, tx, acquisitionFunnel } = setup({ actionToken, user, subscription });
 
     const result = await service.confirm('a'.repeat(43));
 
@@ -54,6 +57,8 @@ describe('PublicRegistrationService', () => {
     expect(new Date(result.trialEndsAt).getTime() - new Date(result.trialStartsAt).getTime()).toBe(14 * 24 * 60 * 60 * 1000);
     expect(tx.trialEligibilityRecord.create).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ trialStartedAt: expect.any(Date) }) }));
     expect(user.updateMany).toHaveBeenCalledWith(expect.objectContaining({ data: { status: 'ACTIVE' } }));
+    expect(acquisitionFunnel.record).toHaveBeenCalledWith(expect.anything(), AcquisitionFunnelStage.EMAIL_CONFIRMED, 'account-1', expect.any(Date));
+    expect(acquisitionFunnel.record).toHaveBeenCalledWith(expect.anything(), AcquisitionFunnelStage.TRIAL_ACTIVE, 'account-1', expect.any(Date));
   });
 
   it('rejects an already consumed or unknown confirmation token', async () => {

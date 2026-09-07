@@ -101,3 +101,24 @@ describe('subscription cancellation lifecycle', () => {
     await expect(service.undoCancellation({} as never, 's', 'too late')).rejects.toThrow('cannot be undone');
   });
 });
+
+describe('trial exceptions', () => {
+  it('requires an explicit non-blank reason before creating a new trial', async () => {
+    const service = new SubscriptionsService({ subscription: { findFirst: jest.fn() } } as never, {} as never);
+    await expect(service.grantTrialException({} as never, {
+      commercialAccountId: 'account', planVersionId: 'version', trialStartsAt: '2026-10-01T12:00:00Z', reason: '   ',
+    })).rejects.toThrow('explicit reason');
+  });
+
+  it('only delegates an exception for an ended subscription and preserves the reason', async () => {
+    const prisma = { subscription: { findFirst: jest.fn().mockResolvedValue({ id: 'old', status: 'ENDED' }) } };
+    const service = new SubscriptionsService(prisma as never, {} as never);
+    const created = { id: 'new-subscription' };
+    jest.spyOn(service, 'create').mockResolvedValue(created as never);
+
+    await expect(service.grantTrialException({} as never, {
+      commercialAccountId: 'account', planVersionId: 'version', trialStartsAt: '2026-10-01T12:00:00Z', reason: 'Customer was incorrectly denied the original Trial',
+    })).resolves.toBe(created);
+    expect(service.create).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({ trialExceptionReason: 'Customer was incorrectly denied the original Trial', trialEnabled: true }));
+  });
+});

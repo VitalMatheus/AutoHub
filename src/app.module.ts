@@ -32,6 +32,7 @@ import { TrialModule } from './trial/trial.module';
 import { ExportsModule } from './exports/exports.module';
 import { PixCheckoutModule } from './platform/pix-checkout/pix-checkout.module';
 import { AccountCancellationModule } from './platform/account-cancellation/account-cancellation.module';
+import { AcquisitionFunnelModule } from './platform/acquisition-funnel/acquisition-funnel.module';
 
 @Module({
   imports: [
@@ -70,6 +71,7 @@ import { AccountCancellationModule } from './platform/account-cancellation/accou
     ExportsModule,
     PixCheckoutModule,
     AccountCancellationModule,
+    AcquisitionFunnelModule,
   ],
   providers: [SecurityLogger],
   exports: [SecurityLogger],

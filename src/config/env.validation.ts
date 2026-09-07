@@ -37,6 +37,7 @@ export const environmentValidationSchema = Joi.object({
   TURNSTILE_REQUIRED: Joi.boolean().truthy('true').falsy('false').default(false),
   TURNSTILE_SECRET_KEY: Joi.string().when('TURNSTILE_REQUIRED', { is: true, then: Joi.required(), otherwise: Joi.optional() }),
   TRIAL_ELIGIBILITY_PEPPER: Joi.string().min(16).optional(),
+  ACQUISITION_FUNNEL_PEPPER: Joi.string().min(16).optional(),
   ASAAS_MODE: Joi.string().valid('capture', 'sandbox', 'production').default('capture'),
   ASAAS_API_KEY: Joi.string().when('ASAAS_MODE', { is: Joi.valid('sandbox', 'production'), then: Joi.required(), otherwise: Joi.optional() }),
   ASAAS_WEBHOOK_SECRET: Joi.string().min(16).default('local-asaas-webhook-secret'),

@@ -9,6 +9,7 @@ import { ListSubscriptionsDto } from './dto/list-subscriptions.dto';
 import { RegularizeSubscriptionDto } from './dto/regularize-subscription.dto';
 import { SchedulePlanChangeDto } from './dto/schedule-plan-change.dto';
 import { ScheduleRecurringAdjustmentDto } from './dto/schedule-recurring-adjustment.dto';
+import { GrantTrialExceptionDto } from './dto/grant-trial-exception.dto';
 import { addAnchoredCivilMonths, addCivilDays, recifeCivilDate, recifeMidnight } from '../billing/civil-dates';
 import { deriveCommercialAccess, AccessCharge } from '../billing/commercial-access';
 
@@ -117,6 +118,25 @@ export class SubscriptionsService {
       if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002') throw new ConflictException('Commercial Account already has an open Subscription');
       throw error;
     }
+  }
+
+  async grantTrialException(principal: AuthenticatedPrincipal, dto: GrantTrialExceptionDto) {
+    const reason = dto.reason.trim();
+    if (!reason) throw new BadRequestException('A Trial exception requires an explicit reason');
+    const previous = await this.prisma.subscription.findFirst({
+      where: { commercialAccountId: dto.commercialAccountId },
+      orderBy: { createdAt: 'desc' },
+      select: { id: true, status: true },
+    });
+    if (!previous) throw new NotFoundException('Commercial Account has no previous Subscription');
+    if (previous.status !== 'ENDED') throw new ConflictException('A Trial exception requires the previous Subscription to be ended');
+    return this.create(principal, {
+      commercialAccountId: dto.commercialAccountId,
+      planVersionId: dto.planVersionId,
+      trialEnabled: true,
+      trialStartsAt: dto.trialStartsAt,
+      trialExceptionReason: reason,
+    });
   }
 
   private async endDueCancellation(tx: Prisma.TransactionClient, commercialAccountId: string, principal: AuthenticatedPrincipal | null, now = new Date()) {

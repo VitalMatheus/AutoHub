@@ -10,6 +10,8 @@ import { CreateRegistrationDto } from './dto/create-registration.dto';
 import { normalizeCpfCnpj } from './cpf-cnpj.validator';
 import { BASIC_PLAN_CODE } from '../platform/plans/basic-plan';
 import { TrialRemindersService } from '../trial/trial-reminders.service';
+import { AcquisitionFunnelService } from '../platform/acquisition-funnel/acquisition-funnel.service';
+import { AcquisitionFunnelStage } from '@prisma/client';
 
 export const REGISTRATION_NEUTRAL_MESSAGE = 'Se os dados puderem iniciar um cadastro, enviaremos instruções para o e-mail informado.';
 export const RECOVERY_NEUTRAL_MESSAGE = 'Se houver uma conta compatível, enviaremos instruções para o e-mail informado.';
@@ -23,6 +25,7 @@ export class PublicRegistrationService {
     private readonly email: TransactionalEmailService,
     private readonly turnstile: TurnstileService,
     private readonly trialReminders: TrialRemindersService,
+    private readonly acquisitionFunnel: AcquisitionFunnelService,
   ) {}
 
   private normalizeEmail(email: string): string { return email.trim().toLowerCase(); }
@@ -64,6 +67,7 @@ export class PublicRegistrationService {
         await tx.actionToken.create({ data: { userId: user.id, purpose: 'ACTIVATE_ACCOUNT', tokenHash: this.hashToken(activationSecret), expiresAt: new Date(Date.now() + (this.config.get<number>('ACTIVATION_TOKEN_TTL_DAYS') ?? 3) * 86400000) } });
         await tx.commercialAccount.update({ where: { id: account.id }, data: { primaryContactOrganizationId: organization.id, primaryContactUserId: user.id } });
         await tx.subscription.create({ data: { commercialAccountId: account.id, planVersionId: version.id, status: 'SCHEDULED', contractedPrice: version.price, contractedCurrency: version.currency, contractedInterval: version.interval, contractedOrganizationLimit: version.organizationLimit, contractedUserLimit: version.userLimit, contractedWorkOrderLimit: version.workOrderLimit, contractedGracePeriodDays: version.gracePeriodDays, trialEnabled: true } });
+        await this.acquisitionFunnel.record(tx, AcquisitionFunnelStage.REGISTRATION_STARTED, account.id);
         const requestContext = { requestIp: remoteIp?.slice(0, 64), context: 'SELF_SERVICE_REGISTRATION' };
         await tx.consentRecord.createMany({ data: [
           { userId: user.id, organizationId: organization.id, type: 'TERMS_OF_USE', policyVersion: '0.1', ...requestContext },
@@ -110,6 +114,8 @@ export class PublicRegistrationService {
         const activated = await tx.user.updateMany({ where: { id: user.id, status: 'PENDING_ACTIVATION' }, data: { status: 'ACTIVE' } });
         if (activated.count !== 1) throw new UnauthorizedException('Account cannot be activated');
         await tx.subscription.update({ where: { id: subscription.id }, data: { status: 'CURRENT', trialStartsAt: now, trialEndsAt, commercialStartAt: now } });
+        await this.acquisitionFunnel.record(tx, AcquisitionFunnelStage.EMAIL_CONFIRMED, user.organization.commercialAccountId, now);
+        await this.acquisitionFunnel.record(tx, AcquisitionFunnelStage.TRIAL_ACTIVE, user.organization.commercialAccountId, now);
         await this.trialReminders.scheduleForConfirmation(tx, { subscriptionId: subscription.id, commercialAccountId: user.organization.commercialAccountId, organizationId: user.organizationId!, recipientUserId: user.id, trialEndsAt });
         await tx.auditEvent.create({ data: { actorType: 'SYSTEM', action: 'self_service.registration_confirmed', targetType: 'SELF_SERVICE_REGISTRATION', targetId: user.organizationId!, organizationId: user.organizationId, commercialAccountId: user.organization.commercialAccountId, after: { trialStartsAt: now.toISOString(), trialEndsAt: trialEndsAt.toISOString() } } });
         result = { trialStartsAt: now, trialEndsAt };

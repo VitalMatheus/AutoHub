@@ -178,6 +178,28 @@ enum ConsentType {
   PROMOTIONAL
 }
 
+enum AcquisitionFunnelStage {
+  REGISTRATION_STARTED
+  EMAIL_CONFIRMED
+  TRIAL_ACTIVE
+  TRIAL_EXPIRED
+  SUBSCRIBED
+}
+
+// Deliberately detached from tenant and operational aggregates. The subjectKey
+// is a keyed pseudonym, so funnel reporting cannot expose CPF/CNPJ, e-mail,
+// tokens, payment data, or operational payloads.
+model AcquisitionFunnelEvent {
+  id         String                 @id @default(uuid()) @db.Uuid
+  stage      AcquisitionFunnelStage
+  subjectKey String                 @db.VarChar(64)
+  occurredAt DateTime               @db.Timestamptz(3)
+  createdAt  DateTime               @default(now()) @db.Timestamptz(3)
+
+  @@unique([stage, subjectKey])
+  @@index([stage, occurredAt])
+}
+
 model Plan {
   id         String    @id @default(uuid()) @db.Uuid
   code       String?   @unique

@@ -10,6 +10,7 @@ import { ListSubscriptionsDto } from './dto/list-subscriptions.dto';
 import { RegularizeSubscriptionDto } from './dto/regularize-subscription.dto';
 import { SchedulePlanChangeDto } from './dto/schedule-plan-change.dto';
 import { ScheduleRecurringAdjustmentDto } from './dto/schedule-recurring-adjustment.dto';
+import { GrantTrialExceptionDto } from './dto/grant-trial-exception.dto';
 import { SubscriptionsService } from './subscriptions.service';
 
 type AuthenticatedRequest = Request & { user?: AuthenticatedPrincipal };
@@ -23,6 +24,12 @@ export class SubscriptionsController {
   detail(@Param('id') id: string) { return this.subscriptions.detail(id); }
   @Post() @ApiOperation({ summary: 'Create a Subscription from a published Plan Version' }) @ApiResponse({ status: 201, description: 'Subscription created with a contract snapshot.' }) @ApiUnauthorizedResponse({ description: 'Authentication required.' }) @ApiForbiddenResponse({ description: 'Super Admin access required.' })
   create(@Req() req: AuthenticatedRequest, @Body() dto: CreateSubscriptionDto) { return this.subscriptions.create(req.user!, dto); }
+  @Post('trial-exceptions')
+  @ApiOperation({ summary: 'Grant one explicitly justified Trial exception for an ended Commercial Account' })
+  @ApiResponse({ status: 201, description: 'A new Trial Subscription was created and the reason was recorded in an immutable Audit Event.' })
+  @ApiResponse({ status: 400, description: 'An explicit reason and valid Trial start are required.' })
+  @ApiForbiddenResponse({ description: 'Super Admin access required.' })
+  grantTrialException(@Req() req: AuthenticatedRequest, @Body() dto: GrantTrialExceptionDto) { return this.subscriptions.grantTrialException(req.user!, dto); }
   @Post(':id/regularize') @ApiOperation({ summary: 'Explicitly regularize a migrated Subscription' }) @ApiResponse({ status: 201, description: 'Migrated Subscription regularized with an audit event.' }) @ApiUnauthorizedResponse({ description: 'Authentication required.' }) @ApiForbiddenResponse({ description: 'Super Admin access required.' }) @ApiNotFoundResponse({ description: 'Subscription not found.' })
   regularize(@Req() req: AuthenticatedRequest, @Param('id') id: string, @Body() dto: RegularizeSubscriptionDto) { return this.subscriptions.regularize(req.user!, id, dto); }
   @Post(':id/plan-change') @ApiOperation({ summary: 'Schedule a future Plan Version change' }) @ApiResponse({ status: 201, description: 'Plan change scheduled and audited.' }) @ApiNotFoundResponse() @ApiForbiddenResponse({ description: 'Super Admin access required.' })
