@@ -29,6 +29,9 @@ export class JwtAuthGuard implements CanActivate {
       const payload = await this.jwt.verifyAsync<AccessTokenPayload>(token);
       if (!payload.sub || !payload.sid) throw new UnauthorizedException('Authentication required');
       const principal = await this.auth.resolvePrincipal(payload.sub, payload.sid, true);
+      if (principal.role === 'ADMIN' && principal.organizationId && await this.auth.isDataRetentionExpired(principal.organizationId)) {
+        throw new ForbiddenException({ code: 'DATA_RETENTION_EXPIRED', detail: 'The retained-data period has ended.' });
+      }
       // Commercial restriction is a read-only boundary. Every authenticated
       // read remains available, while only security, support, and payment
       // flows may mutate state during the restriction.
@@ -70,6 +73,7 @@ export class JwtAuthGuard implements CanActivate {
     ]).has(path)
       || path === '/api/v1/account/checkout'
       || path.startsWith('/api/v1/account/checkout/')
+      || path.startsWith('/api/v1/account/cancellation/')
       || path.startsWith('/api/v1/support/');
   }
 

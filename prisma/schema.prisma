@@ -27,6 +27,7 @@ enum OrganizationOperationalStatus {
 enum ActionTokenPurpose {
   ACTIVATE_ACCOUNT
   RESET_PASSWORD
+  CONFIRM_SUBSCRIPTION_CANCELLATION
 }
 
 enum QuoteStatus {
@@ -242,6 +243,8 @@ model Subscription {
   currentPeriodEnd               DateTime?          @db.Timestamptz(3)
   cancellationRequestedAt        DateTime?          @db.Timestamptz(3)
   effectiveCancellationAt        DateTime?          @db.Timestamptz(3)
+  dataRetentionEndsAt             DateTime?          @db.Timestamptz(3)
+  dataFinalizedAt                 DateTime?          @db.Timestamptz(3)
   scheduledPlanVersionId         String?            @db.Uuid
   scheduledPlanEffectiveAt       DateTime?          @db.Timestamptz(3)
   scheduledPlanReason            String?
@@ -417,6 +420,7 @@ model ActionToken {
   id        String             @id @default(uuid()) @db.Uuid
   userId    String             @db.Uuid
   purpose   ActionTokenPurpose
+  targetSubscriptionId String?  @db.Uuid
   tokenHash String             @unique
   expiresAt DateTime           @db.Timestamptz(3)
   usedAt    DateTime?          @db.Timestamptz(3)
@@ -425,6 +429,7 @@ model ActionToken {
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId, purpose, usedAt])
+  @@index([targetSubscriptionId, purpose, usedAt])
 }
 
 model Organization {

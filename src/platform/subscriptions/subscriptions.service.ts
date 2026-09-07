@@ -18,7 +18,7 @@ const subscriptionSelect = {
   contractedGracePeriodDays: true, migratedAt: true, regularizedAt: true, regularizationReason: true, commercialStartAt: true,
   firstDueDate: true, billingDay: true,
   firstPaymentReceivedAt: true, firstPaidPeriodStartedAt: true, trialEnabled: true, trialStartsAt: true, trialEndsAt: true, currentPeriodStart: true,
-  currentPeriodEnd: true, cancellationRequestedAt: true, effectiveCancellationAt: true, createdAt: true,
+  currentPeriodEnd: true, cancellationRequestedAt: true, effectiveCancellationAt: true, dataRetentionEndsAt: true, dataFinalizedAt: true, createdAt: true,
   scheduledPlanVersionId: true, scheduledPlanEffectiveAt: true, scheduledPlanReason: true,
   scheduledRecurringAdjustment: true, scheduledAdjustmentEffectiveAt: true, scheduledAdjustmentReason: true,
   planVersion: { select: { id: true, version: true, plan: { select: { id: true, name: true } } } },
@@ -54,6 +54,10 @@ export function deriveSubscriptionConditions(subscription: {
 function present(subscription: Prisma.SubscriptionGetPayload<{ select: typeof subscriptionSelect }>, asOf = new Date()) {
   const { contractedPrice, charges: _charges, ...rest } = subscription;
   return { ...rest, contractedPrice: contractedPrice.toFixed(2), scheduledRecurringAdjustment: rest.scheduledRecurringAdjustment?.toFixed(2) ?? null, conditions: deriveSubscriptionConditions(subscription, asOf) };
+}
+
+export function retentionDeadline(effectiveAt: Date): Date {
+  return recifeMidnight(addCivilDays(recifeCivilDate(effectiveAt), 90));
 }
 
 @Injectable()
@@ -135,7 +139,7 @@ export class SubscriptionsService {
           ? recifeMidnight(addAnchoredCivilMonths(recifeCivilDate(before.firstPaidPeriodStartedAt), 1))
           : null);
       if (!effectiveAt || effectiveAt <= new Date()) throw new ConflictException('Subscription has no future period end for scheduled cancellation');
-      const updated = await tx.subscription.update({ where: { id }, data: { cancellationRequestedAt: new Date(), effectiveCancellationAt: effectiveAt }, select: subscriptionSelect });
+      const updated = await tx.subscription.update({ where: { id }, data: { cancellationRequestedAt: new Date(), effectiveCancellationAt: effectiveAt, dataRetentionEndsAt: retentionDeadline(effectiveAt), dataFinalizedAt: null }, select: subscriptionSelect });
       await this.auditEvents.record(tx, principal, { action: AuditAction.SUBSCRIPTION_CANCELLATION_REQUESTED, targetType: AuditTargetType.SUBSCRIPTION, targetId: id, commercialAccountId: updated.commercialAccountId ?? undefined, reason: reason.trim(), before: present(before), after: present(updated) });
       return present(updated);
     });
@@ -146,7 +150,7 @@ export class SubscriptionsService {
       const before = await tx.subscription.findUnique({ where: { id }, select: subscriptionSelect });
       if (!before) throw new NotFoundException('Subscription not found');
       if (!before.cancellationRequestedAt || !before.effectiveCancellationAt || before.effectiveCancellationAt <= new Date() || before.status === 'ENDED') throw new ConflictException('Cancellation cannot be undone');
-      const updated = await tx.subscription.update({ where: { id }, data: { cancellationRequestedAt: null, effectiveCancellationAt: null }, select: subscriptionSelect });
+      const updated = await tx.subscription.update({ where: { id }, data: { cancellationRequestedAt: null, effectiveCancellationAt: null, dataRetentionEndsAt: null }, select: subscriptionSelect });
       await this.auditEvents.record(tx, principal, { action: AuditAction.SUBSCRIPTION_CANCELLATION_UNDONE, targetType: AuditTargetType.SUBSCRIPTION, targetId: id, commercialAccountId: updated.commercialAccountId ?? undefined, reason: reason.trim(), before: present(before), after: present(updated) });
       return present(updated);
     });
@@ -158,7 +162,7 @@ export class SubscriptionsService {
       if (!before) throw new NotFoundException('Subscription not found');
       if (before.status === 'ENDED') return present(before);
       const now = new Date();
-      const updated = await tx.subscription.update({ where: { id }, data: { status: 'ENDED', cancellationRequestedAt: before.cancellationRequestedAt ?? now, effectiveCancellationAt: now }, select: subscriptionSelect });
+      const updated = await tx.subscription.update({ where: { id }, data: { status: 'ENDED', cancellationRequestedAt: before.cancellationRequestedAt ?? now, effectiveCancellationAt: now, dataRetentionEndsAt: retentionDeadline(now), dataFinalizedAt: null }, select: subscriptionSelect });
       await this.auditEvents.record(tx, principal, { action: AuditAction.SUBSCRIPTION_CANCELLED, targetType: AuditTargetType.SUBSCRIPTION, targetId: id, commercialAccountId: updated.commercialAccountId ?? undefined, reason: reason.trim(), before: present(before), after: present(updated) });
       return present(updated);
     });

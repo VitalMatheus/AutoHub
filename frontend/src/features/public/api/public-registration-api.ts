@@ -31,3 +31,7 @@ export function requestPasswordReset(email: string) {
 export function resetPassword(token: string, password: string) {
   return httpClient.post<{ success: true }>('/auth/password-reset/confirm', { token, password });
 }
+
+export function confirmAccountCancellation(token: string) {
+  return httpClient.post<{ success: true; effectiveCancellationAt: string; dataRetentionEndsAt: string; exportPath: string }>('/account/cancellation/confirm', { token });
+}

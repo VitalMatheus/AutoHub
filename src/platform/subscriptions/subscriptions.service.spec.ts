@@ -65,7 +65,7 @@ describe('subscription cancellation lifecycle', () => {
     contractedCurrency: 'BRL', contractedInterval: 'MONTHLY', contractedOrganizationLimit: 1, contractedUserLimit: 1, contractedWorkOrderLimit: null,
     contractedGracePeriodDays: 5, migratedAt: null, regularizedAt: null, regularizationReason: null, commercialStartAt: new Date('2026-01-01'),
     firstPaymentReceivedAt: new Date('2026-01-01'), firstPaidPeriodStartedAt: new Date('2026-01-01'), trialEnabled: false, trialStartsAt: null, trialEndsAt: null,
-    currentPeriodStart: new Date('2026-01-01'), currentPeriodEnd: new Date('2099-02-01'), cancellationRequestedAt: null, effectiveCancellationAt: null,
+    currentPeriodStart: new Date('2026-01-01'), currentPeriodEnd: new Date('2099-02-01'), cancellationRequestedAt: null, effectiveCancellationAt: null, dataRetentionEndsAt: null, dataFinalizedAt: null,
     createdAt: new Date('2026-01-01'), scheduledPlanVersionId: null, scheduledPlanEffectiveAt: null, scheduledPlanReason: null,
     scheduledRecurringAdjustment: null, scheduledAdjustmentEffectiveAt: null, scheduledAdjustmentReason: null,
     planVersion: { id: 'plan', version: 1, plan: { id: 'p', name: 'Basic' } }, commercialAccount: { id: 'account', name: 'Account' }, charges: [], ...overrides,
@@ -80,7 +80,7 @@ describe('subscription cancellation lifecycle', () => {
     expect(scheduled.conditions.scheduledCancellation).toBe(true);
     expect(tx.subscription.update).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ effectiveCancellationAt: initial.currentPeriodEnd }) }));
     await service.undoCancellation({} as never, 's', 'retained account');
-    expect(tx.subscription.update).toHaveBeenLastCalledWith(expect.objectContaining({ data: { cancellationRequestedAt: null, effectiveCancellationAt: null } }));
+    expect(tx.subscription.update).toHaveBeenLastCalledWith(expect.objectContaining({ data: { cancellationRequestedAt: null, effectiveCancellationAt: null, dataRetentionEndsAt: null } }));
     expect(audit.record).toHaveBeenCalledTimes(2);
   });
 

@@ -31,6 +31,7 @@ import { PublicRegistrationModule } from './public-registration/public-registrat
 import { TrialModule } from './trial/trial.module';
 import { ExportsModule } from './exports/exports.module';
 import { PixCheckoutModule } from './platform/pix-checkout/pix-checkout.module';
+import { AccountCancellationModule } from './platform/account-cancellation/account-cancellation.module';
 
 @Module({
   imports: [
@@ -68,6 +69,7 @@ import { PixCheckoutModule } from './platform/pix-checkout/pix-checkout.module';
     TrialModule,
     ExportsModule,
     PixCheckoutModule,
+    AccountCancellationModule,
   ],
   providers: [SecurityLogger],
   exports: [SecurityLogger],

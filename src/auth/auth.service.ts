@@ -176,17 +176,18 @@ export class AuthService {
       where: { commercialAccount: { organizations: { some: { id: organizationId } } } },
       orderBy: { createdAt: 'desc' },
       select: { status: true, trialEnabled: true, trialStartsAt: true, trialEndsAt: true, firstPaymentReceivedAt: true,
-        migratedAt: true, regularizedAt: true, effectiveCancellationAt: true,
+        migratedAt: true, regularizedAt: true, effectiveCancellationAt: true, dataRetentionEndsAt: true, dataFinalizedAt: true,
         charges: { select: { nature: true, dueDate: true, amount: true, cancelledAt: true, settlements: { select: { amount: true } } } } },
     });
     if (!subscription) {
-      return { commercialAccess: 'ACCESS_ALLOWED', nextDueDate: null, blockDate: null, remainingDays: null, instruction: 'Your account is available.' };
+      return { commercialAccess: 'ACCESS_ALLOWED', nextDueDate: null, blockDate: null, remainingDays: null, instruction: 'Your account is available.', cancellation: null };
     }
-    if (subscription.status === 'ENDED') return { commercialAccess: 'PAYMENT_BLOCKED', nextDueDate: null, blockDate: null, remainingDays: 0, instruction: 'Your account has no active Subscription.' };
+    const cancellation = subscription.effectiveCancellationAt ? { effectiveAt: subscription.effectiveCancellationAt.toISOString(), retentionEndsAt: subscription.dataRetentionEndsAt?.toISOString() ?? null, finalizedAt: subscription.dataFinalizedAt?.toISOString() ?? null } : null;
+    if (subscription.status === 'ENDED') return { commercialAccess: 'PAYMENT_BLOCKED', nextDueDate: null, blockDate: null, remainingDays: 0, instruction: 'Your account has no active Subscription.', cancellation };
     const now = new Date();
     const cancellationEffective = !!subscription.effectiveCancellationAt && now >= subscription.effectiveCancellationAt;
-    if (cancellationEffective) return { commercialAccess: 'PAYMENT_BLOCKED', nextDueDate: null, blockDate: subscription.effectiveCancellationAt!.toISOString().slice(0, 10), remainingDays: 0, instruction: 'Your Subscription has been cancelled.' };
-    if (subscription.migratedAt && !subscription.regularizedAt) return { commercialAccess: 'ACCESS_ALLOWED', nextDueDate: null, blockDate: null, remainingDays: null, instruction: 'Your account is available.' };
+    if (cancellationEffective) return { commercialAccess: 'PAYMENT_BLOCKED', nextDueDate: null, blockDate: subscription.effectiveCancellationAt!.toISOString().slice(0, 10), remainingDays: 0, instruction: 'Your Subscription has been cancelled.', cancellation };
+    if (subscription.migratedAt && !subscription.regularizedAt) return { commercialAccess: 'ACCESS_ALLOWED', nextDueDate: null, blockDate: null, remainingDays: null, instruction: 'Your account is available.', cancellation };
     const trial = subscription.trialEnabled && !!subscription.trialStartsAt && !!subscription.trialEndsAt && now >= subscription.trialStartsAt && now < subscription.trialEndsAt;
     const derivedAccess = deriveCommercialAccess(subscription.charges as AccessCharge[], now);
     const access = trial && !cancellationEffective ? 'ACCESS_ALLOWED' : !subscription.firstPaymentReceivedAt || cancellationEffective ? 'PAYMENT_BLOCKED' : derivedAccess.commercialAccess;
@@ -195,7 +196,7 @@ export class AuthService {
     const block = due ? addCivilDays(due.dueDate.toISOString().slice(0, 10), 6) : null;
     const today = recifeCivilDate(now);
     const remainingDays = block && block > today ? Math.round((Date.parse(`${block}T12:00:00Z`) - Date.parse(`${today}T12:00:00Z`)) / 86400000) : 0;
-    return { commercialAccess: access, nextDueDate: due ? due.dueDate.toISOString().slice(0, 10) : null, blockDate: block, remainingDays, instruction: access === 'PAYMENT_BLOCKED' ? 'Settle the outstanding Subscription Charge to restore access.' : 'Your account is available.' };
+    return { commercialAccess: access, nextDueDate: due ? due.dueDate.toISOString().slice(0, 10) : null, blockDate: block, remainingDays, instruction: access === 'PAYMENT_BLOCKED' ? 'Settle the outstanding Subscription Charge to restore access.' : 'Your account is available.', cancellation };
   }
 
   async logout(sessionId: string): Promise<void> {
@@ -204,6 +205,22 @@ export class AuthService {
 
   async revokeAllSessions(userId: string): Promise<void> {
     await this.prisma.session.updateMany({ where: { userId, revokedAt: null }, data: { revokedAt: new Date() } });
+  }
+
+  async verifyCurrentPassword(principal: AuthenticatedPrincipal, password: string): Promise<void> {
+    if (principal.role !== 'ADMIN' || !principal.organizationId) throw new UnauthorizedException(INVALID_CREDENTIALS);
+    const user = await this.prisma.user.findFirst({ where: { id: principal.id, organizationId: principal.organizationId, role: 'ADMIN', status: 'ACTIVE' }, select: { passwordHash: true } });
+    const valid = user?.passwordHash ? await argon2.verify(user.passwordHash, password).catch(() => false) : false;
+    if (!valid) throw new UnauthorizedException(INVALID_CREDENTIALS);
+  }
+
+  async isDataRetentionExpired(organizationId: string, asOf = new Date()): Promise<boolean> {
+    const subscription = await this.prisma.subscription.findFirst({
+      where: { commercialAccount: { organizations: { some: { id: organizationId } } } },
+      orderBy: { createdAt: 'desc' },
+      select: { dataRetentionEndsAt: true, dataFinalizedAt: true },
+    });
+    return Boolean(subscription?.dataRetentionEndsAt && asOf >= subscription.dataRetentionEndsAt);
   }
 
   async activate(token: string, password: string) {

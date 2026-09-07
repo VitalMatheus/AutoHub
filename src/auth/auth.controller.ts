@@ -17,11 +17,12 @@ import { RequestPasswordResetDto, ResetPasswordDto } from './dto/password-recove
 type AuthenticatedRequest = Request & { user?: AuthenticatedPrincipal; sessionId?: string };
 
 class AccountAccessStatusDto {
-  @ApiProperty({ enum: ['ACCESS_ALLOWED', 'PAYMENT_GRACE_PERIOD', 'PAYMENT_BLOCKED'] }) commercialAccess!: string;
+  @ApiProperty({ enum: ['ACCESS_ALLOWED', 'PAYMENT_GRACE_PERIOD', 'PAYMENT_BLOCKED', 'DATA_RETENTION_EXPIRED'] }) commercialAccess!: string;
   @ApiPropertyOptional({ nullable: true }) nextDueDate!: string | null;
   @ApiPropertyOptional({ nullable: true }) blockDate!: string | null;
   @ApiPropertyOptional({ nullable: true }) remainingDays!: number | null;
   @ApiProperty() instruction!: string;
+  @ApiPropertyOptional({ nullable: true }) cancellation!: { effectiveAt: string; retentionEndsAt: string | null; finalizedAt: string | null } | null;
 }
 
 @Controller('auth')

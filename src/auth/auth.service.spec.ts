@@ -139,7 +139,7 @@ describe('AuthService session rules', () => {
 
     const result = await service.accessStatus('org-1');
     expect(result).toEqual({
-      commercialAccess: 'ACCESS_ALLOWED', nextDueDate: null, blockDate: null,
+      commercialAccess: 'ACCESS_ALLOWED', nextDueDate: null, blockDate: null, cancellation: null,
       remainingDays: 0, instruction: 'Your account is available.',
     });
     expect(result).not.toHaveProperty('price');
