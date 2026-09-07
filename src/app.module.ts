@@ -30,6 +30,7 @@ import { CommonModule } from './common/common.module';
 import { PublicRegistrationModule } from './public-registration/public-registration.module';
 import { TrialModule } from './trial/trial.module';
 import { ExportsModule } from './exports/exports.module';
+import { PixCheckoutModule } from './platform/pix-checkout/pix-checkout.module';
 
 @Module({
   imports: [
@@ -66,6 +67,7 @@ import { ExportsModule } from './exports/exports.module';
     PublicRegistrationModule,
     TrialModule,
     ExportsModule,
+    PixCheckoutModule,
   ],
   providers: [SecurityLogger],
   exports: [SecurityLogger],
