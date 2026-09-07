@@ -14,6 +14,8 @@ export const DECIMAL_STRING_SCHEMA = {
   example: '149.90',
 };
 
+export const PRODUCT_NAME = 'Vekar';
+
 /**
  * Performs the small set of contract invariants that the frontend relies on.
  * This is intentionally independent from Nest's implementation details, so it
@@ -71,8 +73,8 @@ function publishCommonResponses(document: OpenAPIObject): void {
 
 export function createOpenApiDocument(app: INestApplication): OpenAPIObject {
   const swaggerConfig = new DocumentBuilder()
-    .setTitle('AutoHub API')
-    .setDescription('REST API for the AutoHub workshop-management SaaS')
+    .setTitle(`${PRODUCT_NAME} API`)
+    .setDescription('REST API for the Vekar workshop-management SaaS')
     .setVersion('1.0')
     .addBearerAuth()
     .build();

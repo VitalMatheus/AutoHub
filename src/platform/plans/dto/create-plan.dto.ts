@@ -6,7 +6,7 @@ export class CreatePlanDto {
   @IsOptional() @IsString() @IsNotEmpty() @Length(1, 80) @Matches(/^[A-Z][A-Z0-9_]*$/)
   code?: string;
 
-  @ApiProperty({ example: 'AutoHub Básico' })
+  @ApiProperty({ example: 'Vekar Básico' })
   @IsString() @IsNotEmpty() @Length(1, 120)
   name!: string;
 }

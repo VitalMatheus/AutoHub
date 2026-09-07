@@ -21,6 +21,9 @@ export const environmentValidationSchema = Joi.object({
   JWT_ACCESS_SECRET: Joi.string().min(32).required(),
   JWT_ACCESS_TTL: Joi.string().default('15m'),
   REFRESH_TOKEN_TTL_DAYS: Joi.number().integer().positive().default(30),
+  // Optional shared parent domain for an approved hostname migration. It is
+  // intentionally unset by default so local cookies remain host-only.
+  REFRESH_COOKIE_DOMAIN: Joi.string().pattern(/^[A-Za-z0-9.-]+$/).optional(),
   ACTIVATION_TOKEN_TTL_DAYS: Joi.number().integer().positive().default(3),
   ARGON2_MEMORY_COST: Joi.number().integer().positive().default(65536),
   ARGON2_TIME_COST: Joi.number().integer().positive().default(3),

@@ -16,6 +16,8 @@ describe('OpenAPI structure', () => {
     const paths = document.paths;
 
     expect(document.openapi).toMatch(/^3\./);
+    expect(document.info.title).toBe('Vekar API');
+    expect(document.info.description).toContain('Vekar');
     expect(document.components?.securitySchemes?.bearer).toBeDefined();
     expect(paths['/api/v1/health']).toBeDefined();
     const login = paths['/api/v1/auth/login']?.post;

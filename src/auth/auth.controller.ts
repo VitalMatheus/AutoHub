@@ -114,6 +114,7 @@ export class AuthController {
       sameSite: 'lax',
       secure: this.config.getOrThrow<string>('NODE_ENV') === 'production',
       path: `/${prefix}/auth`,
+      ...(this.config.get<string>('REFRESH_COOKIE_DOMAIN') ? { domain: this.config.get<string>('REFRESH_COOKIE_DOMAIN') } : {}),
       maxAge: ttlDays * 24 * 60 * 60 * 1000,
     };
   }

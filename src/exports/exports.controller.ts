@@ -19,7 +19,7 @@ export class ExportsController {
   @ApiOperation({ summary: 'Export tenant-owned tabular records as CSV.' })
   async csv(@Req() request: AuthenticatedRequest, @Param('resource') resource: string, @Res() response: Response) {
     response.setHeader('Content-Type', 'text/csv; charset=utf-8');
-    response.setHeader('Content-Disposition', `attachment; filename="autohub-${resource}.csv"`);
+    response.setHeader('Content-Disposition', `attachment; filename="vekar-${resource}.csv"`);
     return response.send(await this.exports.csv(request.user!, resource));
   }
 
@@ -28,7 +28,7 @@ export class ExportsController {
   @ApiOperation({ summary: 'Export a Quote belonging to the authenticated Organization as PDF.' })
   async quote(@Req() request: AuthenticatedRequest, @Param('id') id: string, @Res() response: Response) {
     response.setHeader('Content-Type', 'application/pdf');
-    response.setHeader('Content-Disposition', `attachment; filename="autohub-quote-${id}.pdf"`);
+    response.setHeader('Content-Disposition', `attachment; filename="vekar-quote-${id}.pdf"`);
     return response.send(await this.exports.quotePdf(request.user!, id));
   }
 
@@ -37,7 +37,7 @@ export class ExportsController {
   @ApiOperation({ summary: 'Export a Work Order belonging to the authenticated Organization as PDF.' })
   async workOrder(@Req() request: AuthenticatedRequest, @Param('id') id: string, @Res() response: Response) {
     response.setHeader('Content-Type', 'application/pdf');
-    response.setHeader('Content-Disposition', `attachment; filename="autohub-work-order-${id}.pdf"`);
+    response.setHeader('Content-Disposition', `attachment; filename="vekar-work-order-${id}.pdf"`);
     return response.send(await this.exports.workOrderPdf(request.user!, id));
   }
 }

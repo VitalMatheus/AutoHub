@@ -29,7 +29,8 @@ export class JwtAuthGuard implements CanActivate {
       const payload = await this.jwt.verifyAsync<AccessTokenPayload>(token);
       if (!payload.sub || !payload.sid) throw new UnauthorizedException('Authentication required');
       const principal = await this.auth.resolvePrincipal(payload.sub, payload.sid, true);
-      if (principal.role === 'ADMIN' && principal.organizationId && await this.auth.isDataRetentionExpired(principal.organizationId)) {
+      if (principal.role === 'ADMIN' && principal.organizationId && this.auth.isDataRetentionExpired
+        && await this.auth.isDataRetentionExpired(principal.organizationId)) {
         throw new ForbiddenException({ code: 'DATA_RETENTION_EXPIRED', detail: 'The retained-data period has ended.' });
       }
       // Commercial restriction is a read-only boundary. Every authenticated
@@ -62,16 +63,17 @@ export class JwtAuthGuard implements CanActivate {
   }
 
   private isCommerciallyAllowed(request: Request): boolean {
-    if (['GET', 'HEAD', 'OPTIONS'].includes(request.method)) return true;
-
     const path = request.path.replace(/\/$/, '');
-    return new Set([
+    const routeExemptions = new Set([
       '/api/v1/auth/me',
       '/api/v1/auth/logout',
       '/api/v1/account/access-status',
       '/api/v1/account/subscription-charge',
-    ]).has(path)
-      || path === '/api/v1/account/checkout'
+    ]);
+    if (routeExemptions.has(path)) return true;
+    if (['GET', 'HEAD', 'OPTIONS'].includes(request.method)) return true;
+
+    return path === '/api/v1/account/checkout'
       || path.startsWith('/api/v1/account/checkout/')
       || path.startsWith('/api/v1/account/cancellation/')
       || path.startsWith('/api/v1/support/');

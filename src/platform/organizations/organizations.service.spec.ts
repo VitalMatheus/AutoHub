@@ -96,6 +96,7 @@ describe('OrganizationsService commercial onboarding', () => {
   });
 
   it('returns commercial and derived access data without operational records', async () => {
+    jest.useFakeTimers().setSystemTime(new Date('2026-09-03T02:30:00.000Z'));
     const { service, prisma } = setup();
     const dueDate = new Date('2026-09-01T00:00:00.000Z');
     prisma.organization.findMany = jest.fn().mockResolvedValue([{

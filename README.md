@@ -1,6 +1,6 @@
-# AutoHub
+# Vekar
 
-Initial bootstrap for the AutoHub workshop-management SaaS.
+Initial bootstrap for the Vekar workshop-management SaaS.
 
 ## Local development
 

@@ -1,9 +1,25 @@
--- Resolve the legacy Basic Plan by its durable business name when installations
--- did not retain the canonical seed UUID.
+-- The canonical legacy Plan UUID is the durable migration identifier. Never
+-- infer commercial identity from the mutable display name: an installation
+-- with a different identifier must be reviewed instead of silently assigning
+-- BASIC to an unrelated Plan.
 UPDATE "Plan"
 SET "code" = 'BASIC'
-WHERE "code" IS NULL
-  AND "name" = 'AutoHub Básico';
+WHERE "id" = '00000000-0000-4000-8000-000000000037'
+  AND "code" IS NULL;
+
+DO $$
+DECLARE
+  canonical_basic_id uuid := '00000000-0000-4000-8000-000000000037';
+  existing_basic_id uuid;
+BEGIN
+  SELECT "id" INTO existing_basic_id FROM "Plan" WHERE "code" = 'BASIC';
+  IF existing_basic_id IS NULL THEN
+    RAISE EXCEPTION 'Vekar Basic Plan identifier could not be verified; review the legacy Plan UUID before release';
+  END IF;
+  IF existing_basic_id <> canonical_basic_id THEN
+    RAISE EXCEPTION 'Vekar Basic Plan code belongs to an unexpected identifier; review the legacy Plan UUID before release';
+  END IF;
+END $$;
 
 -- A consent linked to a user must link that user in the same organization.
 ALTER TABLE "ConsentRecord"

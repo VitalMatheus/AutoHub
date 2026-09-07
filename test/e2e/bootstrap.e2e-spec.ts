@@ -36,6 +36,7 @@ describe('Bootstrap (e2e)', () => {
       .expect(200)
       .expect(({ body }) => {
         expect(body.openapi).toMatch(/^3\./);
+        expect(body.info).toEqual(expect.objectContaining({ title: 'Vekar API', description: expect.stringContaining('Vekar') }));
         expect(body.paths['/api/v1/health']).toBeDefined();
         expect(body.components.securitySchemes.bearer).toBeDefined();
         expect(body.components.securitySchemes.refreshCookie).toEqual(expect.objectContaining({ type: 'apiKey', in: 'cookie', name: 'autohub_refresh' }));
