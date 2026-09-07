@@ -25,6 +25,7 @@ import { NewSupplierPage, SupplierDetailPage, SuppliersListPage } from '@/featur
 import { NewPurchasePage, PurchaseDetailPage, PurchasesListPage } from '@/features/purchases/pages/purchase-pages';
 import { DirectSaleDetailPage, DirectSalesListPage, NewDirectSalePage } from '@/features/direct-sales/pages/direct-sale-pages';
 import { PublicPage } from '@/features/public/public-pages';
+import { RegistrationPage } from '@/features/public/registration-page';
 
 export function AppRouter() {
   return (
@@ -35,7 +36,7 @@ export function AppRouter() {
       <Route path="/termos" element={<PublicPage />} />
       <Route path="/privacidade" element={<PublicPage />} />
       <Route path="/contato" element={<PublicPage />} />
-      <Route path="/teste-gratis" element={<PublicPage />} />
+      <Route path="/teste-gratis" element={<RegistrationPage />} />
       <Route element={<ProtectedRoute allowedRoles={['ADMIN']} />}>
         <Route path="/app" element={<AppLayout />}>
           <Route index element={<Navigate to="dashboard" replace />} />

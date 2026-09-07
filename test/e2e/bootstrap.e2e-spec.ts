@@ -48,6 +48,9 @@ describe('Bootstrap (e2e)', () => {
         expect(body.paths['/api/v1/quotes/{id}/approve']).toBeDefined();
         expect(body.paths['/api/v1/work-orders/{quoteId}']).toBeUndefined();
         expect(Object.keys(body.paths).some((path) => path.includes('/payments'))).toBe(true);
+        expect(body.paths['/api/v1/public/registrations'].post.security).toBeUndefined();
+        expect(body.paths['/api/v1/public/registrations'].post.requestBody.content['application/json'].schema.$ref).toContain('CreateRegistrationDto');
+        expect(body.paths['/api/v1/public/registrations'].post.requestBody.content['application/json'].schema.$ref).not.toMatch(/Organization|Plan|Subscription/);
       });
   });
 

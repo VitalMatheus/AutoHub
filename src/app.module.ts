@@ -26,6 +26,8 @@ import { SuppliersModule } from './suppliers/suppliers.module';
 import { PurchasesModule } from './purchases/purchases.module';
 import { DirectSalesModule } from './direct-sales/direct-sales.module';
 import { ReportsModule } from './reports/reports.module';
+import { CommonModule } from './common/common.module';
+import { PublicRegistrationModule } from './public-registration/public-registration.module';
 
 @Module({
   imports: [
@@ -58,6 +60,8 @@ import { ReportsModule } from './reports/reports.module';
     PurchasesModule,
     DirectSalesModule,
     ReportsModule,
+    CommonModule,
+    PublicRegistrationModule,
   ],
   providers: [SecurityLogger],
   exports: [SecurityLogger],

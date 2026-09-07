@@ -30,4 +30,11 @@ export const environmentValidationSchema = Joi.object({
   SUPER_ADMIN_NAME: Joi.string().min(1).max(120).optional(),
   THROTTLE_TTL: Joi.number().integer().positive().default(60000),
   THROTTLE_LIMIT: Joi.number().integer().positive().default(100),
+  EMAIL_DELIVERY_MODE: Joi.string().valid('capture', 'resend').default('capture'),
+  RESEND_API_KEY: Joi.string().when('EMAIL_DELIVERY_MODE', { is: 'resend', then: Joi.required(), otherwise: Joi.optional() }),
+  RESEND_FROM: Joi.string().default('Vekar <noreply@example.com>'),
+  PUBLIC_APP_URL: Joi.string().uri({ scheme: ['http', 'https'] }).default('http://localhost:5173'),
+  TURNSTILE_REQUIRED: Joi.boolean().truthy('true').falsy('false').default(false),
+  TURNSTILE_SECRET_KEY: Joi.string().when('TURNSTILE_REQUIRED', { is: true, then: Joi.required(), otherwise: Joi.optional() }),
+  TRIAL_ELIGIBILITY_PEPPER: Joi.string().min(16).optional(),
 });
