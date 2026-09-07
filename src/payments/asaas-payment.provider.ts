@@ -10,10 +10,20 @@ export type PixPayment = {
 
 export type VerifiedPayment = {
   externalId: string;
-  status: 'RECEIVED' | 'REFUNDED' | 'CHARGEBACK' | 'PENDING';
+  status: 'RECEIVED' | 'REFUNDED' | 'CHARGEBACK' | 'PENDING' | 'FAILED' | 'EXPIRED';
   amount: string;
   currency: string;
   reference: string;
+  customerReference?: string;
+  paymentMethodReference?: string;
+};
+
+export type HostedCardCheckout = {
+  externalId: string;
+  checkoutUrl: string;
+  expiresAt: Date;
+  customerReference?: string;
+  paymentMethodReference?: string;
 };
 
 export interface PixPaymentProvider {
@@ -21,8 +31,13 @@ export interface PixPaymentProvider {
   verifyPayment(externalId: string): Promise<VerifiedPayment>;
 }
 
+export interface CardPaymentProvider extends PixPaymentProvider {
+  createHostedCardCheckout(input: { amount: string; currency: string; reference: string; idempotencyKey: string; authorizeRenewal: boolean }): Promise<HostedCardCheckout>;
+  createAuthorizedRenewal(input: { amount: string; currency: string; reference: string; idempotencyKey: string; customerReference: string; paymentMethodReference: string }): Promise<{ externalId: string; expiresAt: Date }>;
+}
+
 @Injectable()
-export class AsaasPaymentProvider implements PixPaymentProvider {
+export class AsaasPaymentProvider implements CardPaymentProvider {
   private readonly captured = new Map<string, VerifiedPayment>();
 
   constructor(private readonly config: ConfigService) {}
@@ -41,6 +56,24 @@ export class AsaasPaymentProvider implements PixPaymentProvider {
     const payment = this.captured.get(externalId);
     if (payment) return payment;
     throw new ServiceUnavailableException('Unable to verify Asaas payment');
+  }
+
+  async createHostedCardCheckout(input: { amount: string; currency: string; reference: string; idempotencyKey: string; authorizeRenewal: boolean }): Promise<HostedCardCheckout> {
+    const mode = this.config.get<string>('ASAAS_MODE') ?? 'capture';
+    if (mode !== 'capture') throw new ServiceUnavailableException('Asaas card provider is not configured');
+    const externalId = `capture_card_${input.idempotencyKey}`;
+    const customerReference = `capture_customer_${input.reference}`;
+    const paymentMethodReference = input.authorizeRenewal ? `capture_card_token_${input.reference}` : undefined;
+    this.captured.set(externalId, { externalId, status: 'PENDING', amount: input.amount, currency: input.currency, reference: input.reference, customerReference, paymentMethodReference });
+    return { externalId, checkoutUrl: `https://sandbox.asaas.example/checkout/${externalId}`, expiresAt: new Date(Date.now() + 30 * 60 * 1000), customerReference, paymentMethodReference };
+  }
+
+  async createAuthorizedRenewal(input: { amount: string; currency: string; reference: string; idempotencyKey: string; customerReference: string; paymentMethodReference: string }): Promise<{ externalId: string; expiresAt: Date }> {
+    const mode = this.config.get<string>('ASAAS_MODE') ?? 'capture';
+    if (mode !== 'capture') throw new ServiceUnavailableException('Asaas card provider is not configured');
+    const externalId = `capture_renewal_${input.idempotencyKey}`;
+    this.captured.set(externalId, { externalId, status: 'PENDING', amount: input.amount, currency: input.currency, reference: input.reference, customerReference: input.customerReference, paymentMethodReference: input.paymentMethodReference });
+    return { externalId, expiresAt: new Date(Date.now() + 30 * 60 * 1000) };
   }
 
   /** Capture-only test seam; production webhook tests can use the public webhook contract. */

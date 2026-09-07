@@ -13,6 +13,6 @@ export class AsaasWebhookPaymentDto {
 
 export class AsaasWebhookDto {
   @ApiProperty() @IsString() id!: string;
-  @ApiProperty() @IsString() @IsIn(['PAYMENT_RECEIVED', 'PAYMENT_CONFIRMED', 'PAYMENT_REFUNDED', 'PAYMENT_CHARGEBACK']) event!: string;
+  @ApiProperty() @IsString() @IsIn(['PAYMENT_RECEIVED', 'PAYMENT_CONFIRMED', 'PAYMENT_FAILED', 'PAYMENT_EXPIRED', 'PAYMENT_REFUNDED', 'PAYMENT_CHARGEBACK']) event!: string;
   @ApiProperty({ type: AsaasWebhookPaymentDto }) @ValidateNested() @Type(() => AsaasWebhookPaymentDto) payment!: AsaasWebhookPaymentDto;
 }

@@ -21,7 +21,7 @@ export enum AuditAction {
   PLAN_CREATED = 'plan.created', PLAN_UPDATED = 'plan.updated', PLAN_ARCHIVED = 'plan.archived',
   PLAN_VERSION_CREATED = 'plan_version.created', PLAN_VERSION_UPDATED = 'plan_version.updated', PLAN_VERSION_PUBLISHED = 'plan_version.published',
   SUBSCRIPTION_CREATED = 'subscription.created', SUBSCRIPTION_MIGRATED_REGULARIZED = 'subscription.migrated_regularized', SUBSCRIPTION_PLAN_CHANGE_SCHEDULED = 'subscription.plan_change_scheduled', SUBSCRIPTION_RECURRING_ADJUSTMENT_SCHEDULED = 'subscription.recurring_adjustment_scheduled', SUBSCRIPTION_PLAN_CHANGE_APPLIED = 'subscription.plan_change_applied', SUBSCRIPTION_RECURRING_ADJUSTMENT_APPLIED = 'subscription.recurring_adjustment_applied', SUBSCRIPTION_CANCELLATION_REQUESTED = 'subscription.cancellation_requested', SUBSCRIPTION_CANCELLATION_UNDONE = 'subscription.cancellation_undone', SUBSCRIPTION_CANCELLED = 'subscription.cancelled', SUBSCRIPTION_TRIAL_EXCEPTION_GRANTED = 'subscription.trial_exception_granted',
-  SUBSCRIPTION_CHARGE_CREATED = 'subscription_charge.created', SUBSCRIPTION_CHARGE_UPDATED = 'subscription_charge.updated', SUBSCRIPTION_CHARGE_CANCELLED = 'subscription_charge.cancelled',
+  SUBSCRIPTION_CHARGE_CREATED = 'subscription_charge.created', SUBSCRIPTION_CHARGE_UPDATED = 'subscription_charge.updated', SUBSCRIPTION_CHARGE_CANCELLED = 'subscription_charge.cancelled', SUBSCRIPTION_CARD_RENEWAL_REVOKED = 'subscription.card_renewal_revoked',
   CHARGE_SETTLEMENT_CREATED = 'charge_settlement.created', CHARGE_ADMINISTRATIVELY_SETTLED = 'charge_settlement.administratively_settled', CHARGE_SETTLEMENT_REVERSED = 'charge_settlement.reversed',
 }
 
