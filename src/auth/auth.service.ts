@@ -3,13 +3,15 @@ import { ConfigService } from '@nestjs/config';
 import { JwtService } from '@nestjs/jwt';
 import { PrismaService } from '../prisma/prisma.service';
 import * as argon2 from 'argon2';
-import { createHash, randomBytes } from 'node:crypto';
+import { createHash, createHmac, randomBytes } from 'node:crypto';
 import type { AccessTokenPayload, AuthenticatedPrincipal } from './authenticated-principal';
 import { PRINCIPAL_SELECT } from './authenticated-principal';
 import { addCivilDays, recifeCivilDate, recifeMidnight } from '../platform/billing/civil-dates';
 import { deriveCommercialAccess, AccessCharge, chargeBalance } from '../platform/billing/commercial-access';
+import { TransactionalEmailService } from '../common/transactional-email.service';
 
 export const INVALID_CREDENTIALS = 'Invalid email or password';
+export const RECOVERY_NEUTRAL_MESSAGE = 'Se houver uma conta compatível, enviaremos instruções para o e-mail informado.';
 const AUTHENTICATION_REQUIRED = 'Authentication required';
 
 @Injectable()
@@ -18,12 +20,24 @@ export class AuthService {
     private readonly prisma: PrismaService,
     private readonly jwt: JwtService,
     private readonly config: ConfigService,
+    private readonly email?: TransactionalEmailService,
   ) {}
 
   normalizeEmail(email: string): string { return email.trim().toLowerCase(); }
 
   private hashRefreshToken(token: string): string {
     return createHash('sha256').update(token).digest('hex');
+  }
+
+  private hashActionToken(token: string): string { return createHash('sha256').update(token).digest('hex'); }
+
+  private passwordHash(password: string): Promise<string> {
+    return argon2.hash(password, {
+      type: argon2.argon2id,
+      memoryCost: this.config.get<number>('ARGON2_MEMORY_COST') ?? 65536,
+      timeCost: this.config.get<number>('ARGON2_TIME_COST') ?? 3,
+      parallelism: this.config.get<number>('ARGON2_PARALLELISM') ?? 1,
+    });
   }
 
   async login(email: string, password: string) {
@@ -193,22 +207,62 @@ export class AuthService {
       if (claimed.count !== 1) throw new UnauthorizedException('Activation token is invalid or expired');
       const activated = await tx.user.updateMany({ where: { id: action.userId, status: 'PENDING_ACTIVATION', organization: { operationalStatus: 'ACTIVE' } }, data: { passwordHash, status: 'ACTIVE' } });
       if (activated.count !== 1) throw new UnauthorizedException('Account cannot be activated');
-      const user = await tx.user.findUnique({ where: { id: action.userId }, select: { id: true, organizationId: true, organization: { select: { commercialAccountId: true } } } });
+      const user = await tx.user.findUnique({ where: { id: action.userId }, select: { id: true, email: true, organizationId: true, organization: { select: { commercialAccountId: true } } } });
       if (user?.organization?.commercialAccountId) {
         const subscription = await tx.subscription.findFirst({
           where: { commercialAccountId: user.organization.commercialAccountId, status: { not: 'ENDED' } },
           orderBy: { createdAt: 'desc' },
-          select: { id: true, trialEnabled: true, trialStartsAt: true, trialEndsAt: true },
+          select: { id: true, trialEnabled: true, trialStartsAt: true, trialEndsAt: true, planVersionId: true },
         });
         if (subscription) {
-          const trialEndsAt = subscription.trialEndsAt ?? recifeMidnight(addCivilDays(recifeCivilDate(now), 14));
+          const trialEndsAt = subscription.trialEndsAt ?? new Date(now.getTime() + 14 * 24 * 60 * 60 * 1000);
           const startsInFuture = !!subscription.trialStartsAt && now < subscription.trialStartsAt;
+          if (subscription.trialEnabled && !subscription.trialStartsAt) {
+            const document = await tx.organization.findUnique({ where: { id: user.organizationId! }, select: { document: true } });
+            if (!document?.document) throw new UnauthorizedException('Account cannot be activated');
+            const pepper = this.config.get<string>('TRIAL_ELIGIBILITY_PEPPER') ?? this.config.getOrThrow<string>('JWT_ACCESS_SECRET');
+            const fingerprint = (value: string) => createHmac('sha256', pepper).update(value).digest('hex');
+            await tx.trialEligibilityRecord.create({ data: { documentFingerprint: fingerprint(document.document), emailFingerprint: fingerprint(user.email), trialStartedAt: now } });
+          }
           await tx.subscription.update({ where: { id: subscription.id }, data: {
             status: startsInFuture ? 'SCHEDULED' : 'CURRENT',
             ...(subscription.trialEnabled && !subscription.trialStartsAt ? { trialStartsAt: now, trialEndsAt, commercialStartAt: now } : {}),
           } });
         }
       }
+    });
+    return { success: true };
+  }
+
+  async requestPasswordReset(emailInput: string): Promise<{ message: string }> {
+    const email = this.normalizeEmail(emailInput);
+    const token = randomBytes(32).toString('base64url');
+    const user = await this.prisma.user.findUnique({ where: { email }, select: { id: true, email: true, status: true } });
+    if (user?.status === 'ACTIVE') {
+      await this.prisma.$transaction(async (tx) => {
+        await tx.actionToken.updateMany({ where: { userId: user.id, purpose: 'RESET_PASSWORD', usedAt: null }, data: { expiresAt: new Date() } });
+        await tx.actionToken.create({ data: { userId: user.id, purpose: 'RESET_PASSWORD', tokenHash: this.hashActionToken(token), expiresAt: new Date(Date.now() + 60 * 60 * 1000) } });
+      });
+      try {
+        const link = `${this.config.getOrThrow<string>('PUBLIC_APP_URL')}/redefinir-senha?token=${encodeURIComponent(token)}`;
+        await this.email?.send({ to: user.email, subject: 'Redefina sua senha no Vekar', text: `Use este link para redefinir sua senha: ${link}` });
+      } catch { /* neutral and retryable */ }
+    }
+    return { message: RECOVERY_NEUTRAL_MESSAGE };
+  }
+
+  async resetPassword(token: string, password: string): Promise<{ success: true }> {
+    const passwordHash = await this.passwordHash(password);
+    const tokenHash = this.hashActionToken(token);
+    const now = new Date();
+    await this.prisma.$transaction(async (tx) => {
+      const action = await tx.actionToken.findFirst({ where: { tokenHash, purpose: 'RESET_PASSWORD', usedAt: null, expiresAt: { gt: now } }, select: { id: true, userId: true } });
+      if (!action) throw new UnauthorizedException('Password reset token is invalid or expired');
+      const claimed = await tx.actionToken.updateMany({ where: { id: action.id, usedAt: null, expiresAt: { gt: now } }, data: { usedAt: now } });
+      if (claimed.count !== 1) throw new UnauthorizedException('Password reset token is invalid or expired');
+      const updated = await tx.user.updateMany({ where: { id: action.userId, status: 'ACTIVE' }, data: { passwordHash } });
+      if (updated.count !== 1) throw new UnauthorizedException('Password reset token is invalid or expired');
+      await tx.session.updateMany({ where: { userId: action.userId, revokedAt: null }, data: { revokedAt: now } });
     });
     return { success: true };
   }

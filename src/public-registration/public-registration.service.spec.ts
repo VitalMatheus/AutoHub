@@ -11,10 +11,10 @@ describe('PublicRegistrationService', () => {
     const tx = {
       $executeRaw: jest.fn(), user: { findUnique: jest.fn().mockResolvedValue(null), create: jest.fn().mockResolvedValue({ id: 'user-1' }) },
       organization: { findUnique: jest.fn().mockResolvedValue(null), create: jest.fn().mockResolvedValue({ id: 'org-1' }) },
-      trialEligibilityRecord: { findUnique: jest.fn().mockResolvedValue(null) },
+      trialEligibilityRecord: { findUnique: jest.fn().mockResolvedValue(null), create: jest.fn() },
       planVersion: { findFirst: jest.fn().mockResolvedValue({ id: 'version-1', price: new Prisma.Decimal('79.00'), currency: 'BRL', interval: 'MONTHLY', organizationLimit: 1, userLimit: 3, workOrderLimit: null, gracePeriodDays: 5 }) },
       commercialAccount: { create: jest.fn().mockResolvedValue({ id: 'account-1' }), update: jest.fn() },
-      actionToken: { create: jest.fn() }, subscription: { create: jest.fn() }, consentRecord: { createMany: jest.fn() }, auditEvent: { create: jest.fn() },
+      actionToken: { create: jest.fn(), findFirst: jest.fn(), updateMany: jest.fn().mockResolvedValue({ count: 1 }) }, subscription: { create: jest.fn(), findFirst: jest.fn(), update: jest.fn() }, consentRecord: { createMany: jest.fn() }, auditEvent: { create: jest.fn() },
       ...overrides,
     };
     const prisma = { $transaction: jest.fn(async (callback: (value: typeof tx) => Promise<unknown>) => callback(tx)) } as any;
@@ -39,5 +39,26 @@ describe('PublicRegistrationService', () => {
     await expect(service.submit(dto)).resolves.toEqual({ message: REGISTRATION_NEUTRAL_MESSAGE });
     expect(tx.organization.create).not.toHaveBeenCalled();
     expect(email.send).not.toHaveBeenCalled();
+  });
+
+  it('confirms a valid token once and starts an exact fourteen-day trial', async () => {
+    const actionToken = { create: jest.fn(), findFirst: jest.fn().mockResolvedValue({ id: 'token-1', userId: 'user-1' }), updateMany: jest.fn().mockResolvedValue({ count: 1 }) };
+    const user = { findUnique: jest.fn().mockResolvedValue({ id: 'user-1', email: 'ana@example.com', status: 'PENDING_ACTIVATION', organizationId: 'org-1', organization: { document: '52998224725', operationalStatus: 'ACTIVE', commercialAccountId: 'account-1' } }), updateMany: jest.fn().mockResolvedValue({ count: 1 }) };
+    const subscription = { create: jest.fn(), findFirst: jest.fn().mockResolvedValue({ id: 'subscription-1', trialStartsAt: null, trialEndsAt: null }), update: jest.fn() };
+    const { service, tx } = setup({ actionToken, user, subscription });
+
+    const result = await service.confirm('a'.repeat(43));
+
+    expect(result.success).toBe(true);
+    expect(new Date(result.trialEndsAt).getTime() - new Date(result.trialStartsAt).getTime()).toBe(14 * 24 * 60 * 60 * 1000);
+    expect(tx.trialEligibilityRecord.create).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ trialStartedAt: expect.any(Date) }) }));
+    expect(user.updateMany).toHaveBeenCalledWith(expect.objectContaining({ data: { status: 'ACTIVE' } }));
+  });
+
+  it('rejects an already consumed or unknown confirmation token', async () => {
+    const actionToken = { create: jest.fn(), findFirst: jest.fn().mockResolvedValue(null), updateMany: jest.fn() };
+    const { service } = setup({ actionToken });
+
+    await expect(service.confirm('a'.repeat(43))).rejects.toThrow('Activation token is invalid or expired');
   });
 });

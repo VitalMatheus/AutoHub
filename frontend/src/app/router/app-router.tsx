@@ -26,6 +26,7 @@ import { NewPurchasePage, PurchaseDetailPage, PurchasesListPage } from '@/featur
 import { DirectSaleDetailPage, DirectSalesListPage, NewDirectSalePage } from '@/features/direct-sales/pages/direct-sale-pages';
 import { PublicPage } from '@/features/public/public-pages';
 import { RegistrationPage } from '@/features/public/registration-page';
+import { ConfirmRegistrationPage, PasswordRecoveryPage, ResendConfirmationPage, ResetPasswordPage } from '@/features/public/confirmation-pages';
 
 export function AppRouter() {
   return (
@@ -37,6 +38,10 @@ export function AppRouter() {
       <Route path="/privacidade" element={<PublicPage />} />
       <Route path="/contato" element={<PublicPage />} />
       <Route path="/teste-gratis" element={<RegistrationPage />} />
+      <Route path="/confirmar-email" element={<ConfirmRegistrationPage />} />
+      <Route path="/reenvio-confirmacao" element={<ResendConfirmationPage />} />
+      <Route path="/recuperar-senha" element={<PasswordRecoveryPage />} />
+      <Route path="/redefinir-senha" element={<ResetPasswordPage />} />
       <Route element={<ProtectedRoute allowedRoles={['ADMIN']} />}>
         <Route path="/app" element={<AppLayout />}>
           <Route index element={<Navigate to="dashboard" replace />} />

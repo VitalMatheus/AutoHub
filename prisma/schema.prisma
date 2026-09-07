@@ -26,6 +26,7 @@ enum OrganizationOperationalStatus {
 
 enum ActionTokenPurpose {
   ACTIVATE_ACCOUNT
+  RESET_PASSWORD
 }
 
 enum QuoteStatus {

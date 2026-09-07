@@ -1,4 +1,4 @@
-import { Injectable, ServiceUnavailableException } from '@nestjs/common';
+import { Injectable, UnauthorizedException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { Prisma, UserStatus } from '@prisma/client';
 import * as argon2 from 'argon2';
@@ -11,6 +11,8 @@ import { normalizeCpfCnpj } from './cpf-cnpj.validator';
 import { BASIC_PLAN_CODE } from '../platform/plans/basic-plan';
 
 export const REGISTRATION_NEUTRAL_MESSAGE = 'Se os dados puderem iniciar um cadastro, enviaremos instruções para o e-mail informado.';
+export const RECOVERY_NEUTRAL_MESSAGE = 'Se houver uma conta compatível, enviaremos instruções para o e-mail informado.';
+const TRIAL_DURATION_MS = 14 * 24 * 60 * 60 * 1000;
 
 @Injectable()
 export class PublicRegistrationService {
@@ -27,6 +29,8 @@ export class PublicRegistrationService {
     return createHmac('sha256', pepper).update(value).digest('hex');
   }
   private hashToken(token: string): string { return createHash('sha256').update(token).digest('hex'); }
+  private tokenTtlDays(): number { return this.config.get<number>('ACTIVATION_TOKEN_TTL_DAYS') ?? 3; }
+  private confirmationLink(token: string): string { return `${this.config.getOrThrow<string>('PUBLIC_APP_URL')}/confirmar-email?token=${encodeURIComponent(token)}`; }
   private passwordOptions() { return { type: argon2.argon2id, memoryCost: this.config.get<number>('ARGON2_MEMORY_COST') ?? 65536, timeCost: this.config.get<number>('ARGON2_TIME_COST') ?? 3, parallelism: this.config.get<number>('ARGON2_PARALLELISM') ?? 1 } as const; }
 
   async submit(dto: CreateRegistrationDto, remoteIp?: string): Promise<{ message: string }> {
@@ -73,8 +77,62 @@ export class PublicRegistrationService {
     }
 
     if (messageToSend) {
-      const link = `${this.config.getOrThrow<string>('PUBLIC_APP_URL')}/confirmar-email?token=${encodeURIComponent(messageToSend.token)}`;
+      const link = this.confirmationLink(messageToSend.token);
       try { await this.email.send({ to: messageToSend.to, subject: 'Confirme seu cadastro no Vekar', text: `Confirme seu e-mail para iniciar seu cadastro: ${link}` }); } catch { /* Delivery is retriable and must not reveal registration state. */ }
+    }
+    return { message: REGISTRATION_NEUTRAL_MESSAGE };
+  }
+
+  async confirm(token: string): Promise<{ success: true; trialStartsAt: string; trialEndsAt: string }> {
+    if (typeof token !== 'string' || token.length < 32 || token.length > 512) throw new UnauthorizedException('Activation token is invalid or expired');
+    const tokenHash = this.hashToken(token);
+    const now = new Date();
+    const trialEndsAt = new Date(now.getTime() + TRIAL_DURATION_MS);
+    let result: { trialStartsAt: Date; trialEndsAt: Date } | undefined;
+    try {
+      await this.prisma.$transaction(async (tx) => {
+        const action = await tx.actionToken.findFirst({
+          where: { tokenHash, purpose: 'ACTIVATE_ACCOUNT', usedAt: null, expiresAt: { gt: now } },
+          select: { id: true, userId: true },
+        });
+        if (!action) throw new UnauthorizedException('Activation token is invalid or expired');
+        const claimed = await tx.actionToken.updateMany({ where: { id: action.id, usedAt: null, expiresAt: { gt: now } }, data: { usedAt: now } });
+        if (claimed.count !== 1) throw new UnauthorizedException('Activation token is invalid or expired');
+        const user = await tx.user.findUnique({ where: { id: action.userId }, select: { id: true, email: true, status: true, organizationId: true, organization: { select: { document: true, operationalStatus: true, commercialAccountId: true } } } });
+        if (!user || user.status !== 'PENDING_ACTIVATION' || !user.organization?.commercialAccountId || user.organization.operationalStatus !== 'ACTIVE') throw new UnauthorizedException('Account cannot be activated');
+        const subscription = await tx.subscription.findFirst({ where: { commercialAccountId: user.organization.commercialAccountId, status: { not: 'ENDED' }, trialEnabled: true }, orderBy: { createdAt: 'desc' }, select: { id: true, trialStartsAt: true, trialEndsAt: true } });
+        if (!subscription || subscription.trialStartsAt || subscription.trialEndsAt || !user.organization.document) throw new UnauthorizedException('Account cannot be activated');
+        const documentFingerprint = this.fingerprint(user.organization.document);
+        const emailFingerprint = this.fingerprint(user.email);
+        await tx.trialEligibilityRecord.create({ data: { documentFingerprint, emailFingerprint, trialStartedAt: now } });
+        const activated = await tx.user.updateMany({ where: { id: user.id, status: 'PENDING_ACTIVATION' }, data: { status: 'ACTIVE' } });
+        if (activated.count !== 1) throw new UnauthorizedException('Account cannot be activated');
+        await tx.subscription.update({ where: { id: subscription.id }, data: { status: 'CURRENT', trialStartsAt: now, trialEndsAt, commercialStartAt: now } });
+        await tx.auditEvent.create({ data: { actorType: 'SYSTEM', action: 'self_service.registration_confirmed', targetType: 'SELF_SERVICE_REGISTRATION', targetId: user.organizationId!, organizationId: user.organizationId, commercialAccountId: user.organization.commercialAccountId, after: { trialStartsAt: now.toISOString(), trialEndsAt: trialEndsAt.toISOString() } } });
+        result = { trialStartsAt: now, trialEndsAt };
+      }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable, maxWait: 5000, timeout: 10000 });
+    } catch (error) {
+      if (error instanceof Prisma.PrismaClientKnownRequestError && ['P2002', 'P2034'].includes(error.code)) throw new UnauthorizedException('Activation token is invalid or expired');
+      throw error;
+    }
+    if (!result) throw new UnauthorizedException('Activation token is invalid or expired');
+    return { success: true, trialStartsAt: result.trialStartsAt.toISOString(), trialEndsAt: result.trialEndsAt.toISOString() };
+  }
+
+  async resendConfirmation(emailInput: string, remoteIp?: string, turnstileToken?: string): Promise<{ message: string }> {
+    const email = this.normalizeEmail(emailInput);
+    let messageToSend: { to: string; token: string } | undefined;
+    await this.turnstile.assertAllowed(turnstileToken, remoteIp);
+    const token = randomBytes(32).toString('base64url');
+    await this.prisma.$transaction(async (tx) => {
+      const user = await tx.user.findUnique({ where: { email }, select: { id: true, email: true, status: true, organization: { select: { operationalStatus: true } } } });
+      if (!user || user.status !== 'PENDING_ACTIVATION' || user.organization?.operationalStatus !== 'ACTIVE') return;
+      await tx.actionToken.updateMany({ where: { userId: user.id, purpose: 'ACTIVATE_ACCOUNT', usedAt: null }, data: { expiresAt: new Date() } });
+      await tx.actionToken.create({ data: { userId: user.id, purpose: 'ACTIVATE_ACCOUNT', tokenHash: this.hashToken(token), expiresAt: new Date(Date.now() + this.tokenTtlDays() * 86400000) } });
+      messageToSend = { to: user.email, token };
+    });
+    if (messageToSend) {
+      try { await this.email.send({ to: messageToSend.to, subject: 'Confirme seu cadastro no Vekar', text: `Confirme seu e-mail para iniciar seu cadastro: ${this.confirmationLink(messageToSend.token)}` }); } catch { /* neutral and retryable */ }
     }
     return { message: REGISTRATION_NEUTRAL_MESSAGE };
   }

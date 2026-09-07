@@ -1,4 +1,4 @@
-import { Body, Controller, ForbiddenException, Get, Post, Req, Res, UnauthorizedException, UseGuards } from '@nestjs/common';
+import { Body, Controller, ForbiddenException, Get, HttpCode, Post, Req, Res, UnauthorizedException, UseGuards } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { ThrottlerGuard, Throttle } from '@nestjs/throttler';
 import type { CookieOptions } from 'express';
@@ -12,6 +12,7 @@ import { ApiBearerAuth, ApiCookieAuth, ApiOperation, ApiResponse, ApiTags } from
 import { REFRESH_COOKIE_NAME } from './refresh-cookie';
 import { AuthenticatedPrincipalResponseDto, AuthTokensResponseDto, SuccessResponseDto } from './dto/auth-response.dto';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
+import { RequestPasswordResetDto, ResetPasswordDto } from './dto/password-recovery.dto';
 
 type AuthenticatedRequest = Request & { user?: AuthenticatedPrincipal; sessionId?: string };
 
@@ -70,6 +71,20 @@ export class AuthController {
   @ApiResponse({ status: 401, description: 'Invalid or expired activation token.', content: { 'application/problem+json': { schema: { $ref: '#/components/schemas/ProblemDetails' } } } })
   @ApiResponse({ status: 429, description: 'Too many requests.', content: { 'application/problem+json': { schema: { $ref: '#/components/schemas/ProblemDetails' } } } })
   activate(@Body() dto: ActivateDto) { return this.auth.activate(dto.token, dto.password); }
+
+  @Post('password-reset/request')
+  @HttpCode(202)
+  @Throttle({ default: { limit: 5, ttl: 60_000 } })
+  @ApiOperation({ summary: 'Request a neutral password recovery message.' })
+  @ApiResponse({ status: 202, description: 'The same response is returned whether or not the e-mail exists.' })
+  requestPasswordReset(@Body() dto: RequestPasswordResetDto) { return this.auth.requestPasswordReset(dto.email); }
+
+  @Post('password-reset/confirm')
+  @Throttle({ default: { limit: 5, ttl: 60_000 } })
+  @ApiOperation({ summary: 'Consume a single-use password recovery token.' })
+  @ApiResponse({ status: 201, type: SuccessResponseDto })
+  @ApiResponse({ status: 401, description: 'Invalid or expired password recovery token.' })
+  resetPassword(@Body() dto: ResetPasswordDto) { return this.auth.resetPassword(dto.token, dto.password); }
 
   @UseGuards(JwtAuthGuard)
   @ApiBearerAuth()
