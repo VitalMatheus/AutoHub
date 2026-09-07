@@ -38,6 +38,15 @@ export class JwtAuthGuard implements CanActivate {
         await this.auth.assertOperationalAccess(principal.organizationId);
       }
       if (principal.role === 'ADMIN' && principal.organizationId && !commercialAccessExempt.has(request.path)) {
+        const trialExpired = this.auth.isTrialExpired
+          ? await this.auth.isTrialExpired(principal.organizationId)
+          : false;
+        if (trialExpired && ['GET', 'HEAD', 'OPTIONS'].includes(request.method)) {
+          request.user = principal;
+          request.sessionId = payload.sid;
+          return true;
+        }
+        if (trialExpired) throw new ForbiddenException({ code: 'TRIAL_EXPIRED', detail: 'Trial access has expired; operational changes are unavailable until a Plan is contracted.' });
         const accessAllowed = await this.auth.hasCommercialAccess(principal.organizationId);
         if (!accessAllowed) throw new ForbiddenException({ code: 'COMMERCIAL_ACCESS_BLOCKED', detail: 'Commercial access is blocked until the first Subscription Charge is settled.' });
       }

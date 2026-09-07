@@ -65,6 +65,7 @@ const SAFE_CODES = new Set([
   'EXPENSE_PAYMENT_ALREADY_CANCELLED',
   'PAYMENT_ALREADY_CANCELLED',
   'COMMERCIAL_ACCESS_BLOCKED',
+  'TRIAL_EXPIRED',
   'ORGANIZATION_OPERATIONAL_BLOCKED',
   'INSUFFICIENT_STOCK',
   'ORGANIZATION_INVALID_TRANSITION',
@@ -85,6 +86,7 @@ const SAFE_CODE_DETAILS: Record<string, string> = {
   EXPENSE_PAYMENT_DATE_REQUIRED: 'Baixas confirmadas precisam informar a data do pagamento.',
   EXPENSE_PAYMENT_ALREADY_CANCELLED: 'A baixa da despesa já foi revertida.',
   COMMERCIAL_ACCESS_BLOCKED: 'O acesso comercial está bloqueado até a liquidação da primeira cobrança.',
+  TRIAL_EXPIRED: 'O Trial Period terminou; alterações operacionais estão indisponíveis até a contratação de um Plan.',
   ORGANIZATION_OPERATIONAL_BLOCKED: 'A operação desta oficina está suspensa administrativamente.',
   INSUFFICIENT_STOCK: 'Não há estoque suficiente para concluir a ordem de serviço.',
   ORGANIZATION_INVALID_TRANSITION: 'A transição operacional solicitada para a oficina não é permitida.',
@@ -167,6 +169,7 @@ export class ProblemDetailsFilter implements ExceptionFilter {
 
   private problemType(code: unknown, status: number): string {
     if (code === 'COMMERCIAL_ACCESS_BLOCKED') return 'https://api.autohub.local/problems/commercial-access-blocked';
+    if (code === 'TRIAL_EXPIRED') return 'https://api.autohub.local/problems/trial-expired';
     if (code === 'ORGANIZATION_OPERATIONAL_BLOCKED') return 'https://api.autohub.local/problems/organization-operational-blocked';
     return `https://api.autohub.local/problems/${status}`;
   }

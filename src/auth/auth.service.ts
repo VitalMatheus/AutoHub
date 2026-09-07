@@ -156,6 +156,21 @@ export class AuthService {
     return deriveCommercialAccess(subscription.charges as AccessCharge[], now).commercialAccess !== 'PAYMENT_BLOCKED';
   }
 
+  async isTrialExpired(organizationId: string, asOf = new Date()): Promise<boolean> {
+    const subscription = await this.prisma.subscription.findFirst({
+      where: { commercialAccount: { organizations: { some: { id: organizationId } } } },
+      orderBy: { createdAt: 'desc' },
+      select: { status: true, trialEnabled: true, trialEndsAt: true, firstPaymentReceivedAt: true },
+    });
+    return Boolean(
+      subscription?.status !== 'ENDED' &&
+      subscription?.trialEnabled &&
+      subscription.trialEndsAt &&
+      !subscription.firstPaymentReceivedAt &&
+      asOf >= subscription.trialEndsAt,
+    );
+  }
+
   async accessStatus(organizationId: string) {
     const subscription = await this.prisma.subscription.findFirst({
       where: { commercialAccount: { organizations: { some: { id: organizationId } } } },

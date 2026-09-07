@@ -29,6 +29,7 @@ import { ReportsModule } from './reports/reports.module';
 import { CommonModule } from './common/common.module';
 import { PublicRegistrationModule } from './public-registration/public-registration.module';
 import { TrialModule } from './trial/trial.module';
+import { ExportsModule } from './exports/exports.module';
 
 @Module({
   imports: [
@@ -64,6 +65,7 @@ import { TrialModule } from './trial/trial.module';
     CommonModule,
     PublicRegistrationModule,
     TrialModule,
+    ExportsModule,
   ],
   providers: [SecurityLogger],
   exports: [SecurityLogger],
