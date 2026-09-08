@@ -1,6 +1,6 @@
 import '@testing-library/jest-dom/vitest';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { render, screen, waitFor } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
@@ -24,11 +24,15 @@ describe('Finance payment registration', () => {
     const post = vi.spyOn(httpClient, 'post').mockResolvedValue({ data: { id: 'payment-1', amount: '35.10', method: 'PIX', status: 'CONFIRMED', paidAt: '2026-01-01T10:00:00.000Z', createdAt: '2026-01-01T10:00:00.000Z', financial: { total: '100.00', paid: '35.10', balance: '64.90', status: 'PARTIAL' } } } as never);
     renderPage();
 
+    expect(await screen.findByRole('heading', { name: 'Financeiro da OS #42' })).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: '← Voltar para Financeiro' })).toHaveAttribute('href', '/app/finance');
     await user.type(await screen.findByLabelText('Valor'), '35,10');
+    await user.clear(screen.getByLabelText('Desconto'));
+    await user.type(screen.getByLabelText('Desconto'), '5,00');
     await user.selectOptions(screen.getByLabelText('Método'), 'PIX');
     await user.click(screen.getByRole('button', { name: 'Registrar pagamento' }));
 
-    await waitFor(() => expect(post).toHaveBeenCalledWith('/work-orders/wo-1/payments', expect.objectContaining({ amount: '35.10', method: 'PIX', status: 'CONFIRMED', paidAt: expect.any(String) })));
+    await waitFor(() => expect(post).toHaveBeenCalledWith('/work-orders/wo-1/payments', expect.objectContaining({ amount: '35.10', discount: '5.00', method: 'PIX', status: 'CONFIRMED', paidAt: expect.any(String) })));
     expect(JSON.stringify(post.mock.calls)).not.toContain('organizationId');
     expect(await screen.findByRole('status')).toHaveTextContent('Pagamento registrado.');
   });
@@ -91,8 +95,20 @@ describe('Finance Work Order list', () => {
     expect(screen.getByText('R$ 100,00')).toBeInTheDocument();
     expect(screen.getByText('R$ 35,10')).toBeInTheDocument();
     expect(screen.getByText('R$ 64,90')).toBeInTheDocument();
-    expect(screen.getByText('Parcial')).toBeInTheDocument();
+    expect(screen.getAllByText('Parcial')).toHaveLength(2);
     expect(httpClient.get).toHaveBeenCalledWith('/work-orders/financial', { params: { page: 1, pageSize: 100 } });
+  });
+
+  it('filters Work Orders by financial status and customer, vehicle or number', async () => {
+    const user = userEvent.setup();
+    const get = vi.spyOn(httpClient, 'get').mockImplementation((url) => Promise.resolve({ data: url === '/expenses' ? { data: [], meta: { page: 1, pageSize: 100, total: 0, totalPages: 0 } } : { data: [], meta: { page: 1, pageSize: 100, total: 0, totalPages: 0 } } }) as never);
+    render(<QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}><MemoryRouter><FinanceIndexPage /></MemoryRouter></QueryClientProvider>);
+
+    const search = await screen.findByLabelText('Buscar por número, cliente ou veículo');
+    fireEvent.change(search, { target: { value: 'Maria' } });
+    await user.selectOptions(await screen.findByLabelText('Filtrar por situação financeira'), 'PARTIAL');
+
+    await waitFor(() => expect(get).toHaveBeenCalledWith('/work-orders/financial', { params: { page: 1, pageSize: 100, financialStatus: 'PARTIAL', search: 'Maria' } }));
   });
 
   it('creates an Expense from the Finance page without tenant data', async () => {

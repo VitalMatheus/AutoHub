@@ -143,4 +143,29 @@ describe('WorkOrdersService', () => {
     const prisma = { $transaction: jest.fn((cb: (value: unknown) => unknown) => cb(tx)) } as never;
     await expect(new WorkOrdersService(prisma).convertApprovedQuote(principal, 'quote')).rejects.toMatchObject({ status: 409, response: expect.objectContaining({ code: 'QUOTE_ALREADY_CONVERTED' }) });
   });
+
+  it('filters financial Work Orders by confirmed payment state before paginating', async () => {
+    const row = (id: string, amount: string, paymentAmount?: string) => ({
+      id,
+      organizationId: 'org',
+      number: Number(id.slice(-1)),
+      status: 'COMPLETED',
+      customer: { name: 'Customer' },
+      vehicle: { plate: 'ABC1D23', brand: 'Toyota', model: 'Corolla' },
+      items: [{ type: 'MANUAL', description: 'Service', quantity: '1.000', unitPrice: amount }],
+      payments: paymentAmount ? [{ amount: paymentAmount, status: 'CONFIRMED' }] : [],
+    });
+    const findMany = jest.fn().mockResolvedValue([row('wo-1', '100.00'), row('wo-2', '100.00', '35.00'), row('wo-3', '100.00', '100.00')]);
+    const prisma = { workOrder: { findMany } } as never;
+
+    const result = await new WorkOrdersService(prisma).listFinancial(principal, { financialStatus: 'PARTIAL', page: 1, pageSize: 1 });
+
+    expect(result.data).toHaveLength(1);
+    expect(result.data[0]).toMatchObject({ id: 'wo-2', financial: { status: 'PARTIAL', paid: '35.00' } });
+    expect(result.meta).toMatchObject({ total: 1, totalPages: 1 });
+    expect(findMany).toHaveBeenCalledWith(expect.objectContaining({ where: { organizationId: 'org' } }));
+
+    const defaultResult = await new WorkOrdersService(prisma).listFinancial(principal, { page: 1, pageSize: 10 });
+    expect(defaultResult.data.map((entry) => entry.id)).toEqual(['wo-1', 'wo-2']);
+  });
 });

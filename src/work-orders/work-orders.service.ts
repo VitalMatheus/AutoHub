@@ -234,20 +234,21 @@ export class WorkOrdersService {
         { vehicle: { model: { contains: search, mode: 'insensitive' } } },
       ] } : {}),
     };
-    const [data, total] = await this.prisma.$transaction([
-      this.prisma.workOrder.findMany({ where, include: { customer: { select: { name: true } }, vehicle: { select: { plate: true, brand: true, model: true } }, items: { orderBy: { createdAt: 'asc' } }, payments: { where: { organizationId }, select: { amount: true, status: true } } }, orderBy: [{ createdAt: 'desc' }, { id: 'desc' }], skip: (page - 1) * pageSize, take: pageSize }),
-      this.prisma.workOrder.count({ where }),
-    ]);
-    return {
-      data: data.map((entry) => {
-        const { payments, ...workOrder } = entry;
-        const formatted = this.format(workOrder);
-        const paid = payments.filter((payment) => payment.status === 'CONFIRMED').reduce((sum, payment) => sum + cents(payment.amount.toString()), 0n);
-        const totalAmount = cents(formatted.total);
-        return { ...formatted, financial: { total: money(totalAmount), paid: money(paid), balance: money(totalAmount - paid), status: paid === 0n ? 'UNPAID' : paid < totalAmount ? 'PARTIAL' : 'PAID' } };
-      }),
-      meta: { page, pageSize, total, totalPages: Math.ceil(total / pageSize) },
+    const formatFinancial = (entry: any) => {
+      const { payments, ...workOrder } = entry;
+      const formatted = this.format(workOrder);
+      const confirmed = payments.filter((payment: any) => payment.status === 'CONFIRMED');
+      const paid = confirmed.reduce((sum: bigint, payment: any) => sum + cents(payment.amount.toString()), 0n);
+      const discount = confirmed.reduce((sum: bigint, payment: any) => sum + cents(payment.discount?.toString() ?? '0.00'), 0n);
+      const totalAmount = cents(formatted.total);
+      const settled = paid + discount;
+      return { ...formatted, financial: { total: money(totalAmount), paid: money(paid), discount: money(discount), balance: money(totalAmount - settled), status: settled === 0n ? 'UNPAID' : settled < totalAmount ? 'PARTIAL' : 'PAID' } };
     };
+    const include = { customer: { select: { name: true } }, vehicle: { select: { plate: true, brand: true, model: true } }, items: { orderBy: { createdAt: 'asc' as const } }, payments: { where: { organizationId }, select: { amount: true, discount: true, status: true } } };
+    const all = await this.prisma.workOrder.findMany({ where, include, orderBy: [{ createdAt: 'desc' }, { id: 'desc' }] });
+    const filtered = all.map(formatFinancial).filter((entry) => query.financialStatus ? entry.financial.status === query.financialStatus : entry.financial.status !== 'PAID');
+    const start = (page - 1) * pageSize;
+    return { data: filtered.slice(start, start + pageSize), meta: { page, pageSize, total: filtered.length, totalPages: Math.ceil(filtered.length / pageSize) } };
   }
 
   async findOne(principal: AuthenticatedPrincipal, id: string) {
