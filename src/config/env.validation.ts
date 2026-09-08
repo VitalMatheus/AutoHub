@@ -34,14 +34,16 @@ export const environmentValidationSchema = Joi.object({
   THROTTLE_TTL: Joi.number().integer().positive().default(60000),
   THROTTLE_LIMIT: Joi.number().integer().positive().default(100),
   EMAIL_DELIVERY_MODE: Joi.string().valid('capture', 'resend').default('capture'),
-  RESEND_API_KEY: Joi.string().when('EMAIL_DELIVERY_MODE', { is: 'resend', then: Joi.required(), otherwise: Joi.optional() }),
+  // Empty assignments in a local .env (for example RESEND_API_KEY=) are
+  // treated as unset. The key remains mandatory when delivery is enabled.
+  RESEND_API_KEY: Joi.string().empty('').when('EMAIL_DELIVERY_MODE', { is: 'resend', then: Joi.required(), otherwise: Joi.optional() }),
   RESEND_FROM: Joi.string().default('Vekar <noreply@example.com>'),
   PUBLIC_APP_URL: Joi.string().uri({ scheme: ['http', 'https'] }).default('http://localhost:5173'),
   TURNSTILE_REQUIRED: Joi.boolean().truthy('true').falsy('false').default(false),
-  TURNSTILE_SECRET_KEY: Joi.string().when('TURNSTILE_REQUIRED', { is: true, then: Joi.required(), otherwise: Joi.optional() }),
+  TURNSTILE_SECRET_KEY: Joi.string().empty('').when('TURNSTILE_REQUIRED', { is: true, then: Joi.required(), otherwise: Joi.optional() }),
   TRIAL_ELIGIBILITY_PEPPER: Joi.string().min(16).optional(),
   ACQUISITION_FUNNEL_PEPPER: Joi.string().min(16).optional(),
   ASAAS_MODE: Joi.string().valid('capture', 'sandbox', 'production').default('capture'),
-  ASAAS_API_KEY: Joi.string().when('ASAAS_MODE', { is: Joi.valid('sandbox', 'production'), then: Joi.required(), otherwise: Joi.optional() }),
+  ASAAS_API_KEY: Joi.string().empty('').when('ASAAS_MODE', { is: Joi.valid('sandbox', 'production'), then: Joi.required(), otherwise: Joi.optional() }),
   ASAAS_WEBHOOK_SECRET: Joi.string().min(16).default('local-asaas-webhook-secret'),
 });
