@@ -11,7 +11,7 @@ import { ApiError, getUserFacingError } from '@/shared/api/http';
 
 const statuses = ['DRAFT', 'PENDING', 'APPROVED', 'REJECTED', 'CANCELLED'];
 type QuoteListParams = { page: number; pageSize: number; search?: string; status?: string };
-function quoteParams(search: URLSearchParams): QuoteListParams { const page = Number(search.get('page')); return { page: Number.isInteger(page) && page > 0 ? page : 1, pageSize: 20, search: search.get('search') || undefined, status: search.get('status') || undefined }; }
+function quoteParams(search: URLSearchParams): QuoteListParams { const page = Number(search.get('page')); return { page: Number.isInteger(page) && page > 0 ? page : 1, pageSize: 10, search: search.get('search') || undefined, status: search.get('status') || undefined }; }
 function writeQuoteParams(params: QuoteListParams, set: (next: URLSearchParams) => void) { const next = new URLSearchParams(); if (params.page > 1) next.set('page', String(params.page)); if (params.search) next.set('search', params.search); if (params.status) next.set('status', params.status); set(next); }
 function Options() { const customers = useQuery({ queryKey: ['customers', 'document-options'], queryFn: () => listCustomers({ page: 1, pageSize: 100, active: true, sort: 'name', direction: 'asc' }) }); const vehicles = useQuery({ queryKey: ['vehicles', 'document-options'], queryFn: () => listVehicles({ page: 1, pageSize: 100, active: true, sort: 'plate', direction: 'asc' }) }); return { customers: customers.data?.data ?? [], vehicles: vehicles.data?.data ?? [], loading: customers.isPending || vehicles.isPending, error: customers.isError || vehicles.isError }; }
 export function QuotesListPage() {

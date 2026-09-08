@@ -13,7 +13,7 @@ function WorkOrderStatus({ value }: { value: string }) { return <span className=
 function Options() { const customers = useQuery({ queryKey: ['customers', 'document-options'], queryFn: () => listCustomers({ page: 1, pageSize: 100, active: true, sort: 'name', direction: 'asc' }) }); const vehicles = useQuery({ queryKey: ['vehicles', 'document-options'], queryFn: () => listVehicles({ page: 1, pageSize: 100, active: true, sort: 'plate', direction: 'asc' }) }); return { customers: customers.data?.data ?? [], vehicles: vehicles.data?.data ?? [], loading: customers.isPending || vehicles.isPending, error: customers.isError || vehicles.isError }; }
 export function WorkOrdersListPage() {
   const [page, setPage] = useState(1); const [status, setStatus] = useState(''); const [search, setSearch] = useState('');
-  const pageSize = 20;
+  const pageSize = 10;
   const query = useQuery({ queryKey: ['work-orders', page, status, search], queryFn: () => listWorkOrders({ page, pageSize, ...(status ? { status } : {}), ...(search.trim() ? { search: search.trim() } : {}) }), placeholderData: (p) => p });
   const customers = useQuery({ queryKey: ['customers', 'work-orders-list'], queryFn: () => listCustomers({ page: 1, pageSize: 100, active: undefined, sort: 'name', direction: 'asc' }) });
   const vehicles = useQuery({ queryKey: ['vehicles', 'work-orders-list'], queryFn: () => listVehicles({ page: 1, pageSize: 100, active: undefined, sort: 'plate', direction: 'asc' }) });

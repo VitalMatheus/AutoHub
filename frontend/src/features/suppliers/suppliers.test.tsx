@@ -13,6 +13,6 @@ describe('Suppliers', () => {
     const get = vi.spyOn(httpClient, 'get').mockResolvedValue({ data: { data: [{ id: 'supplier-1', name: 'Distribuidora', document: '12345678000190', email: null, phone: '81999999999', notes: null, active: true, createdAt: '2026-01-01T00:00:00.000Z', updatedAt: '2026-01-01T00:00:00.000Z' }], meta: { page: 1, pageSize: 100, total: 1, totalPages: 1 } } } as never);
     render(<QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}><MemoryRouter><SuppliersListPage /></MemoryRouter></QueryClientProvider>);
     expect(await screen.findByText('Distribuidora')).toBeInTheDocument();
-    expect(get).toHaveBeenCalledWith('/suppliers', { params: { page: 1, pageSize: 100, search: undefined, active: true } });
+    expect(get).toHaveBeenCalledWith('/suppliers', { params: { page: 1, pageSize: 10, search: undefined, active: true } });
   });
 });

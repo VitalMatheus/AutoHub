@@ -60,7 +60,7 @@ describe('work orders operational list', () => {
     renderPage();
     await screen.findByText('#42');
     await user.selectOptions(screen.getByLabelText('Filtrar por status'), 'COMPLETED');
-    await waitFor(() => expect(get).toHaveBeenCalledWith('/work-orders', { params: { page: 1, pageSize: 20, status: 'COMPLETED' } }));
+    await waitFor(() => expect(get).toHaveBeenCalledWith('/work-orders', { params: { page: 1, pageSize: 10, status: 'COMPLETED' } }));
   });
 
   it('shows every supported status translated in the filter', async () => {
@@ -78,7 +78,7 @@ describe('work orders operational list', () => {
 
   it('paginates the filtered list locally', async () => {
     const user = userEvent.setup();
-    const orders = Array.from({ length: 21 }, (_, index) => ({ ...workOrder, id: `wo-${index}`, number: 42 + index }));
+    const orders = Array.from({ length: 32 }, (_, index) => ({ ...workOrder, id: `wo-${index}`, number: 42 + index }));
     vi.mocked(httpClient.get).mockImplementation((url, config) => {
       if (url === '/work-orders') return Promise.resolve({ data: { data: orders, meta: { page: 1, pageSize: 100, total: orders.length, totalPages: 1 } } }) as never;
       if (url === '/customers') return Promise.resolve({ data: { data: [customer], meta: { page: 1, pageSize: 100, total: 1, totalPages: 1 } } }) as never;
@@ -88,10 +88,16 @@ describe('work orders operational list', () => {
 
     renderPage();
     expect(await screen.findByText('#42')).toBeInTheDocument();
-    expect(screen.getByText('Página 1 de 2')).toBeInTheDocument();
+    expect(screen.getByText('Página 1 de 4')).toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: 'Próxima' }));
+    expect(screen.getByText('#52')).toBeInTheDocument();
+    expect(screen.getByText('Página 2 de 4')).toBeInTheDocument();
     await user.click(screen.getByRole('button', { name: 'Próxima' }));
     expect(screen.getByText('#62')).toBeInTheDocument();
-    expect(screen.getByText('Página 2 de 2')).toBeInTheDocument();
+    expect(screen.getByText('Página 3 de 4')).toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: 'Próxima' }));
+    expect(screen.getByText('#72')).toBeInTheDocument();
+    expect(screen.getByText('Página 4 de 4')).toBeInTheDocument();
   });
 
   it('shows the empty state when no order matches', async () => {
