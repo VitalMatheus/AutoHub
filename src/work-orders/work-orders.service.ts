@@ -441,7 +441,7 @@ export class WorkOrdersService {
     }
     for (const item of items.filter((candidate) => candidate.type === 'PRODUCT' && candidate.productId)) {
       const expected = Number(item.quantity.toString());
-      if (totals.get(item.id) !== expected) throw new ConflictException('Stock allocations must exactly match each Product quantity');
+      if (totals.has(item.id) && totals.get(item.id) !== expected) throw new ConflictException('Stock allocations must exactly match each Product quantity');
     }
     const entries = await tx.stockEntry.findMany({ where: { organizationId, id: { in: [...entryTotals.keys()] } }, include: { purchase: { select: { status: true } } } });
     const byId = new Map(entries.map((entry) => [entry.id, entry]));

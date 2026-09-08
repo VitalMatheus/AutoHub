@@ -67,6 +67,32 @@ describe('WorkOrdersService', () => {
     expect(tx.stockMovement.create).not.toHaveBeenCalled();
   });
 
+  it('completes explicit and automatic stock allocations together', async () => {
+    const tx = {
+      stockEntry: {
+        findMany: jest.fn()
+          .mockResolvedValueOnce([{ id: 'entry-b', productId: 'product-1', quantity: 1, consumedQuantity: 0, status: 'AVAILABLE', unitCost: '120.00', purchase: { status: 'CONFIRMED' } }])
+          .mockResolvedValueOnce([{ id: 'entry-a', productId: 'product-2', quantity: 1, consumedQuantity: 0, status: 'AVAILABLE', unitCost: '80.00', purchase: { status: 'CONFIRMED' } }]),
+      },
+    };
+    const service = new WorkOrdersService({} as never);
+    const resolveRequestedAllocations = (Reflect.get(service, 'resolveRequestedAllocations') as (...args: unknown[]) => Promise<Array<{ workOrderItemId: string; stockEntryId?: string }>>).bind(service);
+    const result = await resolveRequestedAllocations(
+      tx,
+      'org',
+      [
+        { id: 'item-1', type: 'PRODUCT', productId: 'product-1', quantity: { toString: () => '1' } },
+        { id: 'item-2', type: 'PRODUCT', productId: 'product-2', quantity: { toString: () => '1' } },
+      ],
+      [{ workOrderItemId: 'item-1', stockEntryId: 'entry-b', quantity: 1 }],
+      new Map([['product-1', 1], ['product-2', 1]]),
+    );
+    expect(result).toEqual(expect.arrayContaining([
+      expect.objectContaining({ workOrderItemId: 'item-1', stockEntryId: 'entry-b', quantity: 1 }),
+      expect.objectContaining({ workOrderItemId: 'item-2', stockEntryId: 'entry-a', quantity: 1 }),
+    ]));
+  });
+
   it('returns a stable conflict for invalid transitions', async () => {
     const tx = { $queryRaw: jest.fn().mockResolvedValue([{ id: 'wo' }]), workOrder: { findFirst: jest.fn().mockResolvedValue({ id: 'wo', organizationId: 'org', status: 'DELIVERED', items: [] }) } };
     const prisma = { $transaction: jest.fn((cb: (value: unknown) => unknown) => cb(tx)) } as never;
