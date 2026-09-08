@@ -8,6 +8,11 @@ ALTER TABLE "Subscription"
   ADD COLUMN "providerCustomerRef" TEXT,
   ADD COLUMN "providerPaymentMethodRef" TEXT;
 
+-- The composite foreign key below needs this exact referenced key to exist
+-- before PostgreSQL creates CardPaymentAttempt.
+ALTER TABLE "SubscriptionCharge"
+  ADD CONSTRAINT "SubscriptionCharge_commercialAccountId_id_key" UNIQUE ("commercialAccountId", "id");
+
 CREATE TABLE "CardPaymentAttempt" (
   "id" UUID NOT NULL DEFAULT uuid_generate_v4(),
   "organizationId" UUID NOT NULL,
@@ -41,7 +46,6 @@ CREATE TABLE "CardPaymentAttempt" (
   CONSTRAINT "CardPaymentAttempt_commercialAccountId_chargeId_fkey" FOREIGN KEY ("commercialAccountId", "chargeId") REFERENCES "SubscriptionCharge"("commercialAccountId", "id") ON DELETE RESTRICT ON UPDATE CASCADE,
   CONSTRAINT "CardPaymentAttempt_planVersionId_fkey" FOREIGN KEY ("planVersionId") REFERENCES "PlanVersion"("id") ON DELETE RESTRICT ON UPDATE CASCADE
 );
-ALTER TABLE "SubscriptionCharge" ADD CONSTRAINT "SubscriptionCharge_commercialAccountId_id_key" UNIQUE ("commercialAccountId", "id");
 CREATE UNIQUE INDEX "CardPaymentAttempt_idempotencyKey_key" ON "CardPaymentAttempt"("idempotencyKey");
 CREATE UNIQUE INDEX "CardPaymentAttempt_externalId_key" ON "CardPaymentAttempt"("externalId");
 CREATE INDEX "CardPaymentAttempt_organizationId_status_createdAt_idx" ON "CardPaymentAttempt"("organizationId", "status", "createdAt");
