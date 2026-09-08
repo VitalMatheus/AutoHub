@@ -5,7 +5,7 @@ import userEvent from '@testing-library/user-event';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { httpClient } from '@/shared/api/http';
-import { NewSupplierPage, SuppliersListPage } from './pages/supplier-pages';
+import { NewSupplierPage, SupplierDetailPage, SuppliersListPage } from './pages/supplier-pages';
 
 describe('Suppliers', () => {
   beforeEach(() => vi.restoreAllMocks());
@@ -30,5 +30,13 @@ describe('Suppliers', () => {
     await user.clear(fields[3]); await user.type(fields[3], 'fornecedor@example.com'); await user.click(screen.getByRole('button', { name: 'Salvar fornecedor' }));
     await waitFor(() => expect(post).toHaveBeenCalledWith('/suppliers', { name: 'Fornecedor Novo', document: '11222333000181', email: 'fornecedor@example.com', phone: '81988887777' }));
     expect(await screen.findByText('Lista atualizada')).toBeInTheDocument();
+  });
+
+  it('returns to the supplier list after editing', async () => {
+    const user = userEvent.setup(); const supplier = { id: 'supplier-1', name: 'Distribuidora', document: '12345678000190', email: null, phone: '81999999999', notes: null, active: true, createdAt: '2026-01-01T00:00:00.000Z', updatedAt: '2026-01-01T00:00:00.000Z' };
+    vi.spyOn(httpClient, 'get').mockResolvedValue({ data: supplier } as never); const patch = vi.spyOn(httpClient, 'patch').mockResolvedValue({ data: { ...supplier, name: 'Distribuidora Atualizada' } } as never);
+    render(<QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}><MemoryRouter initialEntries={['/app/suppliers/supplier-1']}><Routes><Route path="/app/suppliers/:id" element={<SupplierDetailPage />} /><Route path="/app/suppliers" element={<p>Lista de fornecedores</p>} /></Routes></MemoryRouter></QueryClientProvider>);
+    await screen.findByDisplayValue('Distribuidora'); const name = screen.getAllByRole('textbox')[0]; await user.clear(name); await user.type(name, 'Distribuidora Atualizada'); await user.click(screen.getByRole('button', { name: 'Salvar fornecedor' }));
+    await waitFor(() => expect(patch).toHaveBeenCalledWith('/suppliers/supplier-1', { name: 'Distribuidora Atualizada', document: '12345678000190', phone: '81999999999' })); expect(await screen.findByText('Lista de fornecedores')).toBeInTheDocument();
   });
 });
