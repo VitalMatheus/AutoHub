@@ -3,9 +3,9 @@ import { httpClient } from '@/shared/api/http';
 export type PaymentMethod = 'CASH' | 'PIX' | 'CREDIT_CARD' | 'DEBIT_CARD' | 'BANK_TRANSFER' | 'OTHER';
 export type PaymentStatus = 'PENDING' | 'CONFIRMED' | 'CANCELLED';
 export type FinancialStatus = 'UNPAID' | 'PARTIAL' | 'PAID';
-export type FinancialState = { total: string; paid: string; balance: string; status: FinancialStatus };
-export type Payment = { id: string; amount: string; method: PaymentMethod; status: PaymentStatus; paidAt: string | null; createdAt: string; financial: FinancialState };
-export type PaymentInput = { amount: string; method: PaymentMethod; status?: Exclude<PaymentStatus, 'CANCELLED'>; paidAt: string };
+export type FinancialState = { total: string; paid: string; discount: string; balance: string; status: FinancialStatus };
+export type Payment = { id: string; amount: string; discount: string; method: PaymentMethod; status: PaymentStatus; paidAt: string | null; createdAt: string; financial: FinancialState };
+export type PaymentInput = { amount: string; discount?: string; method: PaymentMethod; status?: Exclude<PaymentStatus, 'CANCELLED'>; paidAt: string };
 export type PaymentList = { data: Payment[]; financial: FinancialState };
 
 export type ExpenseCategory = 'PARTS_AND_SUPPLIES' | 'PERSONNEL' | 'RENT' | 'UTILITIES' | 'TAXES' | 'FINANCIAL_FEES' | 'MAINTENANCE' | 'MARKETING' | 'OTHER';

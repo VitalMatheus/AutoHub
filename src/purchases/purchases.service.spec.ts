@@ -13,12 +13,16 @@ describe('PurchasesService', () => {
   });
 
   it('confirms purchase atomically with payable and stock entries', async () => {
-    const tx: any = { purchase: { findFirst: jest.fn().mockResolvedValue({ id: 'p', supplierId: 's', purchaseDate: new Date('2026-01-01'), items: [{ id: 'i', productId: 'prod', quantity: 3, unitCost: '12.50', productName: 'Oil', sku: 'OIL' }] }), update: jest.fn().mockResolvedValue({ id: 'p', status: 'CONFIRMED', supplier: { id: 's', name: 'Supplier' }, items: [{ unitCost: '12.50', quantity: 3 }], stockEntries: [], purchaseDate: new Date('2026-01-01'), dueDate: new Date('2026-01-10') }) }, expense: { create: jest.fn().mockResolvedValue({ id: 'expense' }) }, product: { update: jest.fn() }, stockEntry: { create: jest.fn() } };
+    const tx: any = { purchase: { findFirst: jest.fn().mockResolvedValue({ id: 'p', supplierId: 's', purchaseDate: new Date('2026-01-01'), items: [{ id: 'i', productId: 'prod', quantity: 3, unitCost: '12.50', productName: 'Oil', sku: 'OIL' }] }), update: jest.fn().mockResolvedValue({ id: 'p', status: 'CONFIRMED', supplier: { id: 's', name: 'Supplier' }, items: [{ unitCost: '12.50', quantity: 3 }], stockEntries: [], purchaseDate: new Date('2026-01-01'), dueDate: new Date('2026-01-10') }) }, expense: { create: jest.fn().mockResolvedValue({ id: 'expense' }) }, expensePayment: { create: jest.fn() }, product: { update: jest.fn() }, stockEntry: { create: jest.fn() } };
     tx.purchase.findFirst.mockResolvedValueOnce({ id: 'p', supplierId: 's', status: 'DRAFT', purchaseDate: new Date('2026-01-01'), dueDate: new Date('2026-01-10'), items: [{ id: 'i', productId: 'prod', quantity: 3, unitCost: '12.50', productName: 'Oil', sku: 'OIL' }] });
     const prisma: any = { $transaction: jest.fn(async (fn: any) => fn(tx)) };
     const result = await new PurchasesService(prisma).confirm(principal, 'p');
     expect(tx.expense.create).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ category: 'PARTS_AND_SUPPLIES' }) }));
     expect(tx.expense.create.mock.calls[0][0].data.amount.toString()).toBe('37.5');
+    const expensePayment = tx.expensePayment.create.mock.calls[0][0].data;
+    expect(expensePayment).toMatchObject({ expenseId: 'expense', method: 'OTHER', status: 'CONFIRMED' });
+    expect(expensePayment.amount.toString()).toBe('37.5');
+    expect(expensePayment.paidAt).toEqual(new Date('2026-01-10'));
     expect(tx.product.update).toHaveBeenCalledWith(expect.objectContaining({ where: { organizationId_id: { organizationId: 'org-a', id: 'prod' } } }));
     expect(tx.stockEntry.create).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ organizationId: 'org-a', supplierId: 's', quantity: 3 }) }));
     expect(result.status).toBe('CONFIRMED');

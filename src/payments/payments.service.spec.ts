@@ -29,15 +29,15 @@ describe('PaymentsService', () => {
       workOrderItem: { findMany: jest.fn().mockResolvedValue([{ quantity: decimal('1.000'), unitPrice: decimal('100.00') }]) },
       payment: {
         findMany: jest.fn().mockResolvedValue([]),
-        create: jest.fn().mockResolvedValue({ id: 'payment', amount: decimal('35.10'), status: 'CONFIRMED', method: 'PIX', paidAt: new Date('2026-01-01T10:00:00.000Z'), createdAt: new Date('2026-01-01T10:00:00.000Z') }),
+        create: jest.fn().mockResolvedValue({ id: 'payment', amount: decimal('35.10'), discount: decimal('5.00'), status: 'CONFIRMED', method: 'PIX', paidAt: new Date('2026-01-01T10:00:00.000Z'), createdAt: new Date('2026-01-01T10:00:00.000Z') }),
       },
     };
-    tx.payment.findMany.mockResolvedValueOnce([]).mockResolvedValueOnce([{ amount: decimal('35.10') }]);
+    tx.payment.findMany.mockResolvedValueOnce([]).mockResolvedValueOnce([{ amount: decimal('35.10'), discount: decimal('5.00') }]);
 
-    const result = await new PaymentsService(prismaFor(tx)).create(principal, 'wo', { amount: '35.10', method: 'PIX', paidAt: '2026-01-01T10:00:00.000Z' });
+    const result = await new PaymentsService(prismaFor(tx)).create(principal, 'wo', { amount: '35.10', discount: '5.00', method: 'PIX', paidAt: '2026-01-01T10:00:00.000Z' });
 
-    expect(tx.payment.create).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ organizationId: 'org', workOrderId: 'wo', amount: '35.10', status: 'CONFIRMED' }) }));
-    expect(result).toMatchObject({ amount: '35.10', financial: { total: '100.00', paid: '35.10', balance: '64.90', status: 'PARTIAL' } });
+    expect(tx.payment.create).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ organizationId: 'org', workOrderId: 'wo', amount: '35.10', discount: '5.00', status: 'CONFIRMED' }) }));
+    expect(result).toMatchObject({ amount: '35.10', discount: '5.00', financial: { total: '100.00', paid: '35.10', discount: '5.00', balance: '59.90', status: 'PARTIAL' } });
   });
 
   it('derives PAID when confirmed Payments reach the exact Work Order total', async () => {

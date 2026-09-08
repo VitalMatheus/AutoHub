@@ -936,6 +936,7 @@ model Payment {
   organizationId String        @db.Uuid
   workOrderId    String        @db.Uuid
   amount         Decimal       @db.Decimal(12, 2)
+  discount       Decimal       @default(0) @db.Decimal(12, 2)
   method         PaymentMethod
   status         PaymentStatus @default(CONFIRMED)
   paidAt         DateTime?     @db.Timestamptz(3)

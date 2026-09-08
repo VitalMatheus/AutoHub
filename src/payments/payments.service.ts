@@ -44,18 +44,21 @@ export class PaymentsService {
   private async financialState(tx: Prisma.TransactionClient, organizationId: string, workOrderId: string) {
     const items = await tx.workOrderItem.findMany({ where: { organizationId, workOrderId }, select: { quantity: true, unitPrice: true } });
     const total = cents(sumTotals(items.map((item) => ({ quantity: item.quantity.toString(), unitPrice: item.unitPrice.toString() }))));
-    const payments = await tx.payment.findMany({ where: { organizationId, workOrderId, status: 'CONFIRMED' }, select: { amount: true } });
+    const payments = await tx.payment.findMany({ where: { organizationId, workOrderId, status: 'CONFIRMED' }, select: { amount: true, discount: true } });
     const paid = payments.reduce((sum, payment) => sum + cents(payment.amount.toString()), 0n);
-    const status = paid === 0n ? 'UNPAID' : paid < total ? 'PARTIAL' : 'PAID';
-    return { total, paid, balance: total - paid, status };
+    const discount = payments.reduce((sum, payment) => sum + cents(payment.discount?.toString() ?? '0.00'), 0n);
+    const settled = paid + discount;
+    const status = settled === 0n ? 'UNPAID' : settled < total ? 'PARTIAL' : 'PAID';
+    return { total, paid, discount, balance: total - settled, status };
   }
 
-  private format(payment: PaymentRecord, state: { total: bigint; paid: bigint; balance: bigint; status: string }) {
+  private format(payment: PaymentRecord, state: { total: bigint; paid: bigint; discount: bigint; balance: bigint; status: string }) {
     return {
       ...payment,
       amount: money(cents(payment.amount.toString())),
       paidAt: payment.paidAt instanceof Date ? payment.paidAt.toISOString() : payment.paidAt,
-      financial: { total: money(state.total), paid: money(state.paid), balance: money(state.balance), status: state.status },
+      discount: money(payment.discount ? cents(payment.discount.toString()) : 0n),
+      financial: { total: money(state.total), paid: money(state.paid), discount: money(state.discount), balance: money(state.balance), status: state.status },
     };
   }
 
@@ -66,9 +69,10 @@ export class PaymentsService {
       const state = await this.financialState(tx, organizationId, workOrderId);
       const status = dto.status ?? 'CONFIRMED';
       const requested = cents(dto.amount);
-      if (status === 'CONFIRMED' && requested > state.balance) throw new ConflictException({ code: 'PAYMENT_EXCEEDS_BALANCE', detail: 'Payment exceeds the Work Order balance.' });
+      const discount = cents(dto.discount ?? '0.00');
+      if (status === 'CONFIRMED' && requested + discount > state.balance) throw new ConflictException({ code: 'PAYMENT_EXCEEDS_BALANCE', detail: 'Payment and discount exceed the Work Order balance.' });
       const created = await tx.payment.create({
-        data: { organizationId, workOrderId, amount: dto.amount, method: dto.method, status, paidAt: new Date(dto.paidAt) },
+        data: { organizationId, workOrderId, amount: dto.amount, discount: dto.discount ?? '0.00', method: dto.method, status, paidAt: new Date(dto.paidAt) },
       });
       return { payment: created, state: await this.financialState(tx, organizationId, workOrderId) };
     });
@@ -85,7 +89,7 @@ export class PaymentsService {
       ]);
       return { payments, state };
     });
-    return { data: result.payments.map((payment) => this.format(payment, result.state)), financial: { total: money(result.state.total), paid: money(result.state.paid), balance: money(result.state.balance), status: result.state.status } };
+    return { data: result.payments.map((payment) => this.format(payment, result.state)), financial: { total: money(result.state.total), paid: money(result.state.paid), discount: money(result.state.discount), balance: money(result.state.balance), status: result.state.status } };
   }
 
   async cancel(principal: AuthenticatedPrincipal, workOrderId: string, paymentId: string) {
