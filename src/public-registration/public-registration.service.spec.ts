@@ -5,7 +5,7 @@ import { TurnstileService } from '../common/turnstile.service';
 import { PublicRegistrationService, REGISTRATION_NEUTRAL_MESSAGE } from './public-registration.service';
 import { AcquisitionFunnelStage } from '@prisma/client';
 
-const dto = { workshopName: ' Oficina Teste ', document: '529.982.247-25', phone: '(81) 99999-9999', responsibleName: ' Ana ', email: ' ANA@EXAMPLE.COM ', password: 'a-secure-password', termsAccepted: true, privacyAccepted: true, marketingConsent: false };
+const dto = { workshopName: ' Oficina Teste ', document: '529.982.247-25', phone: '(81) 99999-9999', responsibleName: ' Ana ', email: ' ANA@EXAMPLE.COM ', password: 'a-secure-password', termsAccepted: true, privacyAccepted: true };
 
 describe('PublicRegistrationService', () => {
   function setup(overrides: Record<string, unknown> = {}) {

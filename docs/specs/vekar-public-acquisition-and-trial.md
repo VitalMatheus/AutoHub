@@ -29,7 +29,7 @@ The change will be delivered without exposing Super Admin provisioning, trusting
 13. As a registrant, I want the short form to request only essential information, so that setup does not become a barrier.
 14. As a registrant, I want to create my password during registration, so that activation requires only e-mail confirmation.
 15. As a registrant, I want to review and accept the current Terms of Use and Privacy Policy, so that the agreement is explicit.
-16. As a registrant, I want promotional consent to be optional and separate, so that operational access does not depend on marketing permission.
+16. As a registrant, I want registration to request only operational and legal information, so that unnecessary marketing preferences do not add friction.
 17. As a registrant, I want a neutral response after submission, so that account identifiers cannot be enumerated by attackers.
 18. As a registrant affected by a retry or network failure, I want registration to be idempotent, so that duplicate workshops are not created.
 19. As a legitimate user with an existing record, I want safe routes to resend confirmation, recover my password, log in, or contact support, so that duplicate protection does not lock me out.
@@ -126,7 +126,7 @@ The short public form collects:
 - normalized e-mail;
 - password;
 - required acceptance of the current Terms of Use and Privacy Policy;
-- separate optional marketing consent, unchecked by default.
+- no promotional consent field during registration.
 
 Address and nonessential profile fields move to post-activation onboarding. The public request never accepts role, Organization identity, price, Plan identity, trial dates, billing day, or authorization claims.
 
@@ -176,7 +176,7 @@ Production records are not prefilled with fictional data. A future interactive d
 
 ### Communication and support
 
-Resend is the initial transactional e-mail provider behind a narrow internal boundary. It sends confirmation, password recovery, trial reminders, security messages, and billing notices. Development can capture messages without sending them externally. Promotional communication requires separate consent.
+Resend is the initial transactional e-mail provider behind a narrow internal boundary. It sends confirmation, password recovery, trial reminders, security messages, and billing notices. Development can capture messages without sending them externally. Promotional communication is not collected during registration and requires a future, separate consent flow.
 
 Public support offers e-mail and WhatsApp during stated business hours. WhatsApp opens a prepared conversation and does not replace Self-Service Registration. Product guidance points to a small help surface as content becomes available.
 

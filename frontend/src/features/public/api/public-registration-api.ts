@@ -9,7 +9,6 @@ export type RegistrationInput = {
   password: string;
   termsAccepted: boolean;
   privacyAccepted: boolean;
-  marketingConsent?: boolean;
 };
 
 export function submitRegistration(input: RegistrationInput) {
