@@ -41,7 +41,7 @@ export class DashboardService {
     if (principal.role !== 'ADMIN' || !principal.organizationId) throw new ForbiddenException('Organization Admin access required');
     const organizationId = principal.organizationId;
     const result = await this.prisma.$transaction(async (tx) => {
-      const [organization, customers, vehicles, quotes, workOrders, payments, expenses, directSales, subscription] = await Promise.all([
+      const [organization, customers, vehicles, quotes, workOrders, payments, expenses, directSales, subscription, recentCustomers, recentVehicles, recentQuotes, recentWorkOrders] = await Promise.all([
         tx.organization.findFirst({ where: { id: organizationId }, select: { id: true, name: true, phone: true, email: true, document: true } }),
         tx.customer.count({ where: { organizationId, active: true } }),
         tx.vehicle.count({ where: { organizationId, active: true } }),
@@ -55,24 +55,28 @@ export class DashboardService {
           orderBy: { createdAt: 'desc' },
           select: { trialEnabled: true, trialStartsAt: true, trialEndsAt: true },
         }),
+        tx.customer.findMany({ where: { organizationId }, orderBy: { createdAt: 'desc' }, take: 10, select: { id: true, name: true, createdAt: true } }),
+        tx.vehicle.findMany({ where: { organizationId }, orderBy: { createdAt: 'desc' }, take: 10, select: { id: true, plate: true, brand: true, model: true, createdAt: true } }),
+        tx.quote.findMany({ where: { organizationId }, orderBy: { updatedAt: 'desc' }, take: 10, select: { id: true, number: true, status: true, createdAt: true, updatedAt: true, customer: { select: { name: true } } } }),
+        tx.workOrder.findMany({ where: { organizationId }, orderBy: { updatedAt: 'desc' }, take: 10, select: { id: true, number: true, status: true, createdAt: true, updatedAt: true, customer: { select: { name: true } } } }),
       ]);
       if (!organization) throw new NotFoundException('Organization not found');
-      return { organization, customers, vehicles, quotes, workOrders, payments, expenses, directSales, subscription };
+      return { organization, customers, vehicles, quotes, workOrders, payments, expenses, directSales, subscription, recentCustomers, recentVehicles, recentQuotes, recentWorkOrders };
     });
     const trial = this.trialStatus(result.subscription, asOf);
+    const activities = [
+      ...result.recentCustomers.map((item) => ({ type: 'CUSTOMER_CREATED', label: 'Cliente cadastrado', description: item.name, occurredAt: item.createdAt.toISOString(), href: `/app/customers/${item.id}` })),
+      ...result.recentVehicles.map((item) => ({ type: 'VEHICLE_CREATED', label: 'Veículo cadastrado', description: `${item.brand} ${item.model} · ${item.plate}`, occurredAt: item.createdAt.toISOString(), href: `/app/vehicles/${item.id}` })),
+      ...result.recentQuotes.map((item) => ({ type: 'QUOTE_UPDATED', label: item.createdAt.getTime() === item.updatedAt.getTime() ? 'Orçamento aberto' : 'Orçamento atualizado', description: `Orçamento #${item.number} · ${item.customer.name}`, occurredAt: item.updatedAt.toISOString(), href: `/app/quotes/${item.id}` })),
+      ...result.recentWorkOrders.map((item) => ({ type: 'WORK_ORDER_UPDATED', label: ['COMPLETED', 'DELIVERED'].includes(item.status) ? 'OS encerrada' : 'OS atualizada', description: `OS #${item.number} · ${item.customer.name}`, occurredAt: item.updatedAt.toISOString(), href: `/app/work-orders/${item.id}` })),
+    ].sort((a, b) => new Date(b.occurredAt).getTime() - new Date(a.occurredAt).getTime()).slice(0, 7);
     return {
       referenceAt: asOf.toISOString(),
       timezone: 'America/Recife',
       organization: { id: result.organization.id, name: result.organization.name },
       trial,
-      checklist: [
-        { key: 'WORKSHOP_DETAILS', label: 'Complete os dados da oficina', completed: Boolean(result.organization.name.trim() && result.organization.phone?.trim() && result.organization.email?.trim()), href: '/app/settings' },
-        { key: 'FIRST_CUSTOMER', label: 'Cadastre seu primeiro Customer', completed: result.customers > 0, href: '/app/customers/new' },
-        { key: 'FIRST_VEHICLE', label: 'Cadastre seu primeiro Vehicle', completed: result.vehicles > 0, href: '/app/vehicles/new' },
-        { key: 'FIRST_QUOTE', label: 'Crie seu primeiro Quote', completed: result.quotes > 0, href: '/app/quotes/new' },
-        { key: 'FIRST_WORK_ORDER', label: 'Registre seu primeiro Work Order', completed: result.workOrders > 0, href: '/app/work-orders/new' },
-        { key: 'FIRST_FINANCE_RECORD', label: 'Registre sua primeira movimentação financeira', completed: result.payments > 0 || result.expenses > 0 || result.directSales > 0, href: '/app/finance' },
-      ],
+      metrics: { customers: result.customers, vehicles: result.vehicles, quotes: result.quotes, workOrders: result.workOrders },
+      activities,
     };
   }
 

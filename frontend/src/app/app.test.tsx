@@ -237,7 +237,7 @@ describe('Organization Admin frontend shell', () => {
     vi.spyOn(httpClient, 'post').mockResolvedValue({ data: { accessToken: 'restored-token', expiresIn: 900, tokenType: 'Bearer' } } as never);
     vi.spyOn(httpClient, 'get').mockImplementation((url) => {
       if (url === '/auth/me') return Promise.resolve({ data: principal }) as never;
-      if (url === '/customers') return Promise.resolve({ data: { data: [], meta: { page: 1, pageSize: 1, total: 7, totalPages: 7 } } }) as never;
+      if (url === '/account/dashboard') return Promise.resolve({ data: { metrics: { customers: 7, vehicles: 2, quotes: 1, workOrders: 1 }, activities: [] } }) as never;
       return Promise.resolve({ data: { data: [], meta: { page: 1, pageSize: 20, total: 0, totalPages: 0 } } }) as never;
     });
 
@@ -245,6 +245,8 @@ describe('Organization Admin frontend shell', () => {
     expect(await screen.findByRole('heading', { name: 'Sua oficina está pronta' })).toBeInTheDocument();
     expect(await screen.findByText('7')).toBeInTheDocument();
     expect(screen.getByRole('navigation', { name: 'Módulos da oficina' })).toBeInTheDocument();
+    const moduleLinks = Array.from(screen.getByRole('navigation', { name: 'Módulos da oficina' }).querySelectorAll('a'));
+    expect(moduleLinks[0]).toHaveAttribute('href', '/app/dashboard');
     expect(screen.getByRole('link', { name: 'Dashboard' })).toHaveAttribute('aria-current', 'page');
     await user.click(screen.getByRole('link', { name: 'Clientes' }));
 

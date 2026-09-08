@@ -15,16 +15,29 @@ describe('Organization User settings', () => {
   beforeEach(() => vi.restoreAllMocks());
 
   it('lists users from the real organization users endpoint', async () => {
-    const get = vi.spyOn(httpClient, 'get').mockResolvedValue({ data: [admin] } as never);
+    const get = vi.spyOn(httpClient, 'get').mockImplementation((url) => Promise.resolve({ data: url === '/organizations/users' ? [admin] : { cancellation: null } }) as never);
     renderPage();
     expect(await screen.findByText('Ana Admin')).toBeInTheDocument();
     expect(get).toHaveBeenCalledWith('/organizations/users');
     expect(screen.getByText('Organization Admin')).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'Encerrar Subscription' })).toBeInTheDocument();
+  });
+
+  it('requests subscription cancellation from settings', async () => {
+    const user = userEvent.setup();
+    vi.spyOn(httpClient, 'get').mockImplementation((url) => Promise.resolve({ data: url === '/organizations/users' ? [] : { cancellation: null } }) as never);
+    const post = vi.spyOn(httpClient, 'post').mockResolvedValue({ data: { message: 'Confirmação enviada.' } } as never);
+    renderPage();
+    await user.type(await screen.findByLabelText('Senha atual para cancelar'), 'a-secure-password');
+    await user.click(screen.getByRole('button', { name: 'Enviar confirmação' }));
+
+    await waitFor(() => expect(post).toHaveBeenCalledWith('/account/cancellation/request', { password: 'a-secure-password' }));
+    expect(await screen.findByRole('alert')).toHaveTextContent('Confirmação enviada.');
   });
 
   it('invites only with name and normalized email, never role or organizationId', async () => {
     const user = userEvent.setup();
-    vi.spyOn(httpClient, 'get').mockResolvedValue({ data: [] } as never);
+    vi.spyOn(httpClient, 'get').mockImplementation((url) => Promise.resolve({ data: url === '/organizations/users' ? [] : { cancellation: null } }) as never);
     const post = vi.spyOn(httpClient, 'post').mockResolvedValue({ data: { user: { ...admin, email: 'novo@example.com' }, activationToken: 'one-time-token' } } as never);
     renderPage();
     await user.type(await screen.findByLabelText('Nome do usuário'), 'Novo Admin');
@@ -39,7 +52,7 @@ describe('Organization User settings', () => {
   it('activates, deactivates and revokes sessions through explicit endpoints', async () => {
     const user = userEvent.setup();
     let current = admin;
-    vi.spyOn(httpClient, 'get').mockImplementation(() => Promise.resolve({ data: [current] }) as never);
+    vi.spyOn(httpClient, 'get').mockImplementation((url) => Promise.resolve({ data: url === '/organizations/users' ? [current] : { cancellation: null } }) as never);
     const post = vi.spyOn(httpClient, 'post').mockImplementation((url) => {
       current = { ...current, status: url.endsWith('/deactivate') ? 'DISABLED' : 'ACTIVE' };
       return Promise.resolve({ data: current }) as never;
@@ -56,7 +69,7 @@ describe('Organization User settings', () => {
   });
 
   it('shows generic feedback for API failures', async () => {
-    vi.spyOn(httpClient, 'get').mockRejectedValue(new ApiError({ status: 500, detail: 'database secret', code: 'HTTP_500' }));
+    vi.spyOn(httpClient, 'get').mockImplementation((url) => Promise.reject(new ApiError({ status: 500, detail: 'database secret', code: 'HTTP_500' })) as never);
     renderPage();
     expect(await screen.findByRole('alert')).toHaveTextContent('Não foi possível carregar os usuários.');
     expect(screen.getByRole('alert')).not.toHaveTextContent('database secret');

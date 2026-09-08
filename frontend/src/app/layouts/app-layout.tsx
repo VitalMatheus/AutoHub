@@ -5,8 +5,7 @@ import { useAuth } from '@/features/auth/auth-context';
 import { cn } from '@/shared/utils/cn';
 
 const navigation = [
-  { to: '/app/direct-sales', label: 'Vendas de balcão', icon: ShoppingCart },
-  { to: '/app/dashboard', label: 'Dashboard', icon: LayoutDashboard }, { to: '/app/customers', label: 'Clientes', icon: Users }, { to: '/app/vehicles', label: 'Veículos', icon: CarFront }, { to: '/app/quotes', label: 'Orçamentos', icon: ClipboardList }, { to: '/app/work-orders', label: 'Ordens de Serviço', icon: Wrench }, { to: '/app/products', label: 'Produtos', icon: Package }, { to: '/app/services', label: 'Serviços', icon: Tags }, { to: '/app/suppliers', label: 'Fornecedores', icon: Truck }, { to: '/app/purchases', label: 'Compras', icon: ShoppingCart }, { to: '/app/finance', label: 'Financeiro', icon: DollarSign }, { to: '/app/reports', label: 'Relatórios', icon: BarChart3 }, { to: '/app/settings', label: 'Configurações', icon: Settings },
+  { to: '/app/dashboard', label: 'Dashboard', icon: LayoutDashboard }, { to: '/app/customers', label: 'Clientes', icon: Users }, { to: '/app/vehicles', label: 'Veículos', icon: CarFront }, { to: '/app/quotes', label: 'Orçamentos', icon: ClipboardList }, { to: '/app/work-orders', label: 'Ordens de Serviço', icon: Wrench }, { to: '/app/products', label: 'Produtos', icon: Package }, { to: '/app/services', label: 'Serviços', icon: Tags }, { to: '/app/suppliers', label: 'Fornecedores', icon: Truck }, { to: '/app/purchases', label: 'Compras', icon: ShoppingCart }, { to: '/app/direct-sales', label: 'Vendas de balcão', icon: ShoppingCart }, { to: '/app/finance', label: 'Financeiro', icon: DollarSign }, { to: '/app/reports', label: 'Relatórios', icon: BarChart3 }, { to: '/app/settings', label: 'Configurações', icon: Settings },
 ];
 
 function Sidebar({ open, onClose, triggerRef }: { open: boolean; onClose: () => void; triggerRef: React.RefObject<HTMLButtonElement | null> }) {

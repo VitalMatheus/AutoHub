@@ -5,7 +5,8 @@ export type WorkshopDashboard = {
   timezone: string;
   organization: { id: string; name: string };
   trial: { status: 'ACTIVE' | 'EXPIRED'; endsAt: string; remainingDays: number; message: string } | null;
-  checklist: Array<{ key: string; label: string; completed: boolean; href: string }>;
+  metrics: { customers: number; vehicles: number; quotes: number; workOrders: number };
+  activities: Array<{ type: string; label: string; description: string; occurredAt: string; href: string }>;
 };
 
 export async function fetchWorkshopDashboard() {

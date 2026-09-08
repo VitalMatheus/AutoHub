@@ -21,6 +21,6 @@ export class DashboardController {
 export class AccountDashboardController {
   constructor(private readonly dashboard: DashboardService) {}
 
-  @Get() @ApiOperation({ summary: 'Return the authenticated Organization dashboard and Trial Period checklist.' }) @ApiOkResponse({ type: WorkshopDashboardResponseDto }) @ApiUnauthorizedResponse({ description: 'Authentication required.' }) @ApiForbiddenResponse({ description: 'Organization Admin access required.' })
+  @Get() @ApiOperation({ summary: 'Return the authenticated Organization dashboard metrics and recent activities.' }) @ApiOkResponse({ type: WorkshopDashboardResponseDto }) @ApiUnauthorizedResponse({ description: 'Authentication required.' }) @ApiForbiddenResponse({ description: 'Organization Admin access required.' })
   summary(@Req() request: AuthenticatedRequest) { return this.dashboard.workshopSummary(request.user!); }
 }

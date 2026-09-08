@@ -7,10 +7,18 @@ class TrialStatusDto {
   @ApiProperty() message!: string;
 }
 
-class WorkshopChecklistItemDto {
-  @ApiProperty({ enum: ['WORKSHOP_DETAILS', 'FIRST_CUSTOMER', 'FIRST_VEHICLE', 'FIRST_QUOTE', 'FIRST_WORK_ORDER', 'FIRST_FINANCE_RECORD'] }) key!: string;
+class WorkshopMetricDto {
+  @ApiProperty() customers!: number;
+  @ApiProperty() vehicles!: number;
+  @ApiProperty() quotes!: number;
+  @ApiProperty() workOrders!: number;
+}
+
+class WorkshopActivityDto {
+  @ApiProperty() type!: string;
   @ApiProperty() label!: string;
-  @ApiProperty() completed!: boolean;
+  @ApiProperty() description!: string;
+  @ApiProperty({ format: 'date-time' }) occurredAt!: string;
   @ApiProperty() href!: string;
 }
 
@@ -19,5 +27,6 @@ export class WorkshopDashboardResponseDto {
   @ApiProperty({ example: 'America/Recife' }) timezone!: string;
   @ApiProperty() organization!: { id: string; name: string };
   @ApiPropertyOptional({ type: TrialStatusDto, nullable: true }) trial!: TrialStatusDto | null;
-  @ApiProperty({ type: [WorkshopChecklistItemDto] }) checklist!: WorkshopChecklistItemDto[];
+  @ApiProperty({ type: WorkshopMetricDto }) metrics!: WorkshopMetricDto;
+  @ApiProperty({ type: [WorkshopActivityDto] }) activities!: WorkshopActivityDto[];
 }

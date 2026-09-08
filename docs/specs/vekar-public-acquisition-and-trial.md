@@ -38,7 +38,7 @@ The change will be delivered without exposing Super Admin provisioning, trusting
 22. As a workshop owner, I want the exact trial end date and time communicated, so that I can evaluate Vekar without ambiguity.
 23. As a trial user, I want all Basic Plan capabilities available for 14 days, so that the evaluation represents the paid product.
 24. As a trial user, I want reminders before expiry, so that I can decide whether to subscribe without losing momentum.
-25. As a first-time Organization Admin, I want a dismissible onboarding checklist, so that I can reach useful product actions quickly.
+25. As a first-time Organization Admin, I want the dashboard to show live operational metrics and recent activities, so that I can understand the workshop at a glance.
 26. As a new customer, I want to begin with clean production data, so that fictional demonstration records do not contaminate my operation.
 27. As an eligible workshop, I want one free trial, so that I can evaluate Vekar before paying.
 28. As the Vekar operator, I want repeated trials limited by normalized CPF/CNPJ and e-mail, so that the acquisition offer is not routinely abused.
@@ -161,16 +161,9 @@ An authorized Organization Admin can cancel inside the product with recent-passw
 
 The deletion design must retain only the minimum evidence needed to enforce Trial Eligibility, using a purpose-specific pseudonymous record rather than an active User or Organization record. Its legal basis, retention period, access controls, and response to data-subject requests require privacy review before release.
 
-### First-use onboarding
+### First-use dashboard
 
-After activation, a dismissible dashboard checklist guides the Organization Admin to:
-
-1. complete workshop details;
-2. create the first Customer;
-3. create the first Vehicle;
-4. create the first Quote;
-5. understand Work Orders;
-6. review finance.
+After activation, the dashboard shows live counts for active Customers and Vehicles and non-cancelled Quotes and Work Orders. It also lists the latest customer, vehicle, Quote, and Work Order activity with links to the corresponding records. Quick actions open the creation forms for the first Customer, Vehicle, Quote, and Work Order.
 
 Production records are not prefilled with fictional data. A future interactive demonstration must be clearly identified and removable.
 
@@ -213,7 +206,7 @@ Vekar remains provisional until an INPI similarity search, relevant-class review
 1. **Brand foundation:** validate name/domain, establish visual identity, and publish reviewed legal content.
 2. **Landing page:** public routes, responsive content, pricing, SEO, analytics, and CTAs.
 3. **Self-service:** public API, form, consent, e-mail confirmation, password recovery, idempotency, and abuse controls.
-4. **Trial and access:** exact dates, reminders, onboarding, read-only restriction, and export.
+4. **Trial and access:** exact dates, reminders, dashboard metrics, recent activities, read-only restriction, and export.
 5. **Conversion:** Basic Plan, Asaas sandbox integration, PIX, hosted card checkout, webhooks, renewal, delinquency, and cancellation.
 
 Each delivery updates OpenAPI, tests, glossary, relevant ADRs, and public copy. No phase weakens the existing Super Admin separation or tenant boundary.
@@ -231,7 +224,7 @@ Testing includes:
 - unit tests for exact 14-day boundaries, Trial Eligibility, commercial-access derivation, reminder timing, Plan Version limits, and normalization;
 - PostgreSQL integration tests for atomic signup activation, normalized uniqueness, eligibility persistence, Consent Records, concurrent activation, idempotency, one-open-charge enforcement, webhook replay, and retention transitions;
 - backend E2E tests for registration, neutral duplicate responses, confirmation, expiry, resend, password recovery, tenant isolation, trial access, Trial Expiry, read/export allowlists, mutation denial, checkout, settlement, Payment Block, restoration, cancellation, and existing-contract preservation;
-- frontend tests for public routing, CTA destinations, form validation, confirmation states, login/recovery links, onboarding checklist, trial banners, pricing disclosure, read-only presentation, checkout states, keyboard operation, and error recovery;
+- frontend tests for public routing, CTA destinations, form validation, confirmation states, login/recovery links, dashboard metrics and quick actions, trial banners, pricing disclosure, read-only presentation, checkout states, keyboard operation, and error recovery;
 - OpenAPI assertions for every new public, commercial, export, and webhook contract, including Problem Details responses and the absence of client-controlled tenant, role, price, Plan, or trial fields;
 - Asaas sandbox E2E checks for PIX, hosted card checkout, authoritative webhook confirmation, expired attempts, retries, reversal, chargeback, and duplicate delivery;
 - security tests for rate limits, Turnstile enforcement after suspicious activity, one-use hashed tokens, account-enumeration resistance, log/analytics redaction, and cross-Organization export denial;
