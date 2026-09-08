@@ -23,7 +23,7 @@ import { ProvisionCommercialAccountPage } from '@/features/platform/pages/provis
 import { FinanceExpensePage, FinanceIndexPage, FinancePage } from '@/features/finance/pages/finance-page';
 import { NewSupplierPage, SupplierDetailPage, SuppliersListPage } from '@/features/suppliers/pages/supplier-pages';
 import { NewPurchasePage, PurchaseDetailPage, PurchasesListPage } from '@/features/purchases/pages/purchase-pages';
-import { DirectSaleDetailPage, DirectSalesListPage, NewDirectSalePage } from '@/features/direct-sales/pages/direct-sale-pages';
+import { DirectSaleDetailPage, DirectSaleReceiptPage, DirectSalesListPage, NewDirectSalePage } from '@/features/direct-sales/pages/direct-sale-pages';
 import { PublicPage } from '@/features/public/public-pages';
 import { RegistrationPage } from '@/features/public/registration-page';
 import { ConfirmCancellationPage, ConfirmRegistrationPage, PasswordRecoveryPage, ResendConfirmationPage, ResetPasswordPage } from '@/features/public/confirmation-pages';
@@ -78,6 +78,7 @@ export function AppRouter() {
           <Route path="direct-sales" element={<DirectSalesListPage />} />
           <Route path="direct-sales/new" element={<NewDirectSalePage />} />
           <Route path="direct-sales/:id" element={<DirectSaleDetailPage />} />
+          <Route path="direct-sales/:id/receipt" element={<DirectSaleReceiptPage />} />
           <Route path="finance" element={<FinanceIndexPage />} />
           <Route path="finance/work-orders/:workOrderId" element={<FinancePage />} />
           <Route path="finance/expenses/:expenseId" element={<FinanceExpensePage />} />

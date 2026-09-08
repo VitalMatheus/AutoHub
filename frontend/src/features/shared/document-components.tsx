@@ -14,7 +14,8 @@ export { formatMoney };
 export const money = formatMoney;
 export const quoteStatusLabels: Record<string, string> = { DRAFT: 'Rascunho', PENDING: 'Pendente', APPROVED: 'Aprovado', REJECTED: 'Recusado', CANCELLED: 'Cancelado' };
 export const workOrderStatusLabels: Record<string, string> = { OPEN: 'Aberta', WAITING_APPROVAL: 'Aguardando aprovação', IN_PROGRESS: 'Em execução', WAITING_PARTS: 'Aguardando peças', COMPLETED: 'Concluída', DELIVERED: 'Entregue', CANCELLED: 'Cancelada' };
-export const statusLabels: Record<string, string> = { ...quoteStatusLabels, ...workOrderStatusLabels };
+export const directSaleStatusLabels: Record<string, string> = { DRAFT: 'Rascunho', CONFIRMED: 'Confirmada', CANCELLED: 'Cancelada', UNPAID: 'Em aberto', PARTIAL: 'Parcialmente paga', PAID: 'Paga' };
+export const statusLabels: Record<string, string> = { ...quoteStatusLabels, ...workOrderStatusLabels, ...directSaleStatusLabels };
 export function getStatusLabel(value: string): string { return statusLabels[value] ?? value; }
 export function Status({ value }: { value: string }) { return <span className="rounded-full bg-blue-50 px-2.5 py-1 text-xs font-semibold text-blue-700">{getStatusLabel(value)}</span>; }
 export function Pager({ page, totalPages, onPage }: { page: number; totalPages: number; onPage: (page: number) => void }) { return <div className="flex items-center justify-between border-t border-slate-100 pt-4 text-sm text-slate-500"><span>Página {page} de {Math.max(1, totalPages)}</span><div className="flex gap-2"><button disabled={page <= 1} onClick={() => onPage(page - 1)} className="rounded-lg border px-3 py-1.5 disabled:opacity-40">Anterior</button><button disabled={page >= totalPages} onClick={() => onPage(page + 1)} className="rounded-lg border px-3 py-1.5 disabled:opacity-40">Próxima</button></div></div>; }

@@ -1,12 +1,15 @@
 import { httpClient } from '@/shared/api/http';
 export type SaleItemInput = { productId: string; quantity: number; unitPrice: string; discount?: string };
 export type SaleInput = { customerId?: string; items: SaleItemInput[] };
-export type DirectSale = { id: string; number: number; customer?: { id: string; name: string } | null; status: 'DRAFT'|'CONFIRMED'|'CANCELLED'; total: string; items: Array<{ id: string; productName: string; quantity: number; unitPrice: string; discount: string; lineTotal: string }>; payments: Array<{ id: string; amount: string; method: string; status: string }>; financial: { total: string; paid: string; balance: string; status: string } };
+export type SalePaymentInput = { amount: string; method: string; status?: string; installmentDueDate?: string };
+export type DirectSale = { id: string; number: number; customer?: { id: string; name: string } | null; status: 'DRAFT'|'CONFIRMED'|'CANCELLED'; total: string; items: Array<{ id: string; productId: string; productName: string; quantity: number; unitPrice: string; discount: string; lineTotal: string }>; payments: Array<{ id: string; amount: string; method: string; status: string }>; financial: { total: string; paid: string; balance: string; status: string } };
 export type SaleList = { data: DirectSale[]; meta: { page: number; pageSize: number; total: number; totalPages: number } };
+export type DirectSaleReceipt = { type: 'DIRECT_SALE_RECEIPT'; fiscal: false; issuedAt: string; sale: DirectSale };
 export const listDirectSales = () => httpClient.get<SaleList>('/direct-sales', { params: { page: 1, pageSize: 100 } }).then(r => r.data);
 export const getDirectSale = (id: string) => httpClient.get<DirectSale>(`/direct-sales/${id}`).then(r => r.data);
+export const getDirectSaleReceipt = (id: string) => httpClient.get<DirectSaleReceipt>(`/direct-sales/${id}/receipt`).then(r => r.data);
 export const createDirectSale = (input: SaleInput) => httpClient.post<DirectSale>('/direct-sales', input).then(r => r.data);
 export const updateDirectSale = (id: string, input: SaleInput) => httpClient.patch<DirectSale>(`/direct-sales/${id}`, input).then(r => r.data);
-export const confirmDirectSale = (id: string) => httpClient.post<DirectSale>(`/direct-sales/${id}/confirm`, { payments: [] }).then(r => r.data);
+export const confirmDirectSale = (id: string, payments: SalePaymentInput[] = []) => httpClient.post<DirectSale>(`/direct-sales/${id}/confirm`, { payments }).then(r => r.data);
 export const addSalePayment = (id: string, input: { amount: string; method: string; status?: string; installmentDueDate?: string }) => httpClient.post<DirectSale>(`/direct-sales/${id}/payments`, input).then(r => r.data);
 export const cancelDirectSale = (id: string) => httpClient.post<DirectSale>(`/direct-sales/${id}/cancel`).then(r => r.data);
