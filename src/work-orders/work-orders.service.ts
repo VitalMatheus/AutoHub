@@ -81,7 +81,18 @@ export class WorkOrdersService {
           : null,
       } : null,
     }));
-    return { ...workOrder, items, stockAllocations: allocations, total: sumTotals(items) };
+    const stockOptions = (workOrder.stockOptions ?? []).map((entry: any) => ({
+      id: entry.id,
+      productId: entry.productId,
+      availableQuantity: entry.quantity - entry.consumedQuantity,
+      unitCost: entry.unitCost?.toString() ?? null,
+      purchaseDate: entry.purchaseDate.toISOString().slice(0, 10),
+      supplier: entry.supplier ? { id: entry.supplier.id, name: entry.supplier.name } : null,
+      purchase: entry.purchase ? { id: entry.purchase.id, documentNumber: entry.purchase.documentNumber } : null,
+      batchNumber: entry.batchNumber,
+      warrantyDays: entry.warrantyDays,
+    }));
+    return { ...workOrder, items, stockAllocations: allocations, stockOptions, total: sumTotals(items) };
   }
 
   async create(principal: AuthenticatedPrincipal, dto: CreateWorkOrderDto) {
@@ -243,7 +254,13 @@ export class WorkOrdersService {
     const organizationId = this.tenant(principal);
     const workOrder = await this.prisma.workOrder.findFirst({ where: { id, organizationId }, include: this.detailInclude() });
     if (!workOrder) throw new NotFoundException('Work Order not found');
-    return this.format(workOrder);
+    const productIds = [...new Set(workOrder.items.filter((item) => item.type === 'PRODUCT' && item.productId).map((item) => item.productId!))];
+    const stockOptions = productIds.length === 0 ? [] : await this.prisma.stockEntry.findMany({
+      where: { organizationId, productId: { in: productIds }, status: 'AVAILABLE', purchase: { status: 'CONFIRMED' } },
+      orderBy: [{ purchaseDate: 'asc' }, { createdAt: 'asc' }],
+      include: { supplier: { select: { id: true, name: true } }, purchase: { select: { id: true, documentNumber: true } } },
+    });
+    return this.format({ ...workOrder, stockOptions });
   }
 
   async update(principal: AuthenticatedPrincipal, id: string, dto: UpdateWorkOrderDto) {
@@ -446,7 +463,14 @@ export class WorkOrdersService {
       const consumed = await tx.stockEntry.aggregate({ where: { organizationId, productId, status: 'AVAILABLE' }, _sum: { consumedQuantity: true } });
       if (product.stockQuantity - ((availableEntries._sum.quantity ?? 0) - (consumed._sum.consumedQuantity ?? 0)) < opening) throw this.insufficientStock(productId);
     }
-    return requested.map((allocation) => ({ ...allocation, unitCost: allocation.stockEntryId ? byId.get(allocation.stockEntryId)!.unitCost : null }));
+    const automaticItems = items.filter((item) => item.type === 'PRODUCT' && item.productId && !totals.has(item.id));
+    const automaticAllocations = automaticItems.length > 0
+      ? await this.resolveFifoAllocations(tx, organizationId, automaticItems, required)
+      : [];
+    return [
+      ...requested.map((allocation) => ({ ...allocation, unitCost: allocation.stockEntryId ? byId.get(allocation.stockEntryId)!.unitCost : null })),
+      ...automaticAllocations,
+    ];
   }
 
   private insufficientStock(product: string): ConflictException { return new ConflictException({ code: 'INSUFFICIENT_STOCK', detail: `Insufficient stock for Product ${product}.` }); }
