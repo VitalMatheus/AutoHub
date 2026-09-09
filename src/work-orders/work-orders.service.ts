@@ -246,7 +246,8 @@ export class WorkOrdersService {
     };
     const include = { customer: { select: { name: true } }, vehicle: { select: { plate: true, brand: true, model: true } }, items: { orderBy: { createdAt: 'asc' as const } }, payments: { where: { organizationId }, select: { amount: true, discount: true, status: true } } };
     const all = await this.prisma.workOrder.findMany({ where, include, orderBy: [{ createdAt: 'desc' }, { id: 'desc' }] });
-    const filtered = all.map(formatFinancial).filter((entry) => query.financialStatus ? entry.financial.status === query.financialStatus : entry.financial.status !== 'PAID');
+    const formatted = all.map(formatFinancial);
+    const filtered = query.financialStatus ? formatted.filter((entry) => entry.financial.status === query.financialStatus) : formatted;
     const start = (page - 1) * pageSize;
     return { data: filtered.slice(start, start + pageSize), meta: { page, pageSize, total: filtered.length, totalPages: Math.ceil(filtered.length / pageSize) } };
   }

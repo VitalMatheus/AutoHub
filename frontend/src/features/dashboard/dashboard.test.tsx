@@ -23,7 +23,9 @@ describe('Dashboard', () => {
     expect(screen.getByText('Clientes cadastrados')).toBeInTheDocument();
     expect(screen.getByText('Veículos')).toBeInTheDocument();
     expect(screen.getByText('Orçamentos')).toBeInTheDocument();
+    expect(screen.getByText('Rascunhos e pendentes')).toBeInTheDocument();
     expect(screen.getByText('Ordens de serviço')).toBeInTheDocument();
+    expect(screen.getByText('Em aberto')).toBeInTheDocument();
     expect(screen.getByRole('link', { name: /Novo veículo/ })).toHaveAttribute('href', '/app/vehicles/new');
     expect(screen.getByRole('link', { name: /Novo orçamento/ })).toHaveAttribute('href', '/app/quotes/new');
     expect(screen.getByRole('link', { name: /Nova ordem de serviço/ })).toHaveAttribute('href', '/app/work-orders/new');

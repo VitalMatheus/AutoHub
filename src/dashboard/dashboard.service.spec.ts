@@ -62,5 +62,7 @@ describe('DashboardService', () => {
     ]));
     expect(tx.customer.count).toHaveBeenCalledWith({ where: { organizationId: 'org-1', active: true } });
     expect(tx.vehicle.count).toHaveBeenCalledWith({ where: { organizationId: 'org-1', active: true } });
+    expect(tx.quote.count).toHaveBeenCalledWith({ where: { organizationId: 'org-1', status: { in: ['DRAFT', 'PENDING'] } } });
+    expect(tx.workOrder.count).toHaveBeenCalledWith({ where: { organizationId: 'org-1', status: { in: ['OPEN', 'WAITING_APPROVAL', 'IN_PROGRESS', 'WAITING_PARTS'] } } });
   });
 });

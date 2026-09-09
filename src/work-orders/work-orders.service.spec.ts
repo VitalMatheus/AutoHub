@@ -166,6 +166,6 @@ describe('WorkOrdersService', () => {
     expect(findMany).toHaveBeenCalledWith(expect.objectContaining({ where: { organizationId: 'org' } }));
 
     const defaultResult = await new WorkOrdersService(prisma).listFinancial(principal, { page: 1, pageSize: 10 });
-    expect(defaultResult.data.map((entry) => entry.id)).toEqual(['wo-1', 'wo-2']);
+    expect(defaultResult.data.map((entry) => entry.id)).toEqual(['wo-1', 'wo-2', 'wo-3']);
   });
 });
