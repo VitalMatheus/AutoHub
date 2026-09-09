@@ -2,10 +2,10 @@ import '@testing-library/jest-dom/vitest';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { MemoryRouter } from 'react-router-dom';
+import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { httpClient } from '@/shared/api/http';
-import { WorkOrdersListPage } from './pages/work-order-pages';
+import { WorkOrderDetailPage, WorkOrdersListPage } from './pages/work-order-pages';
 
 const customer = { id: 'customer-1', name: 'Maria Silva', active: true };
 const vehicle = { id: 'vehicle-1', customerId: customer.id, plate: 'ABC1D23', brand: 'Toyota', model: 'Corolla' };
@@ -19,6 +19,11 @@ const workOrder = {
 function renderPage() {
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   return render(<QueryClientProvider client={queryClient}><MemoryRouter><WorkOrdersListPage /></MemoryRouter></QueryClientProvider>);
+}
+
+function renderDetail() {
+  const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  return render(<QueryClientProvider client={queryClient}><MemoryRouter initialEntries={['/app/work-orders/wo-1']}><Routes><Route path="/app/work-orders/:id" element={<WorkOrderDetailPage />} /></Routes></MemoryRouter></QueryClientProvider>);
 }
 
 describe('work orders operational list', () => {
@@ -110,5 +115,41 @@ describe('work orders operational list', () => {
 
     renderPage();
     expect(await screen.findByText('Nenhuma ordem encontrada.')).toBeInTheDocument();
+  });
+});
+
+describe('work order detail financial actions', () => {
+  beforeEach(() => {
+    vi.restoreAllMocks();
+    vi.spyOn(httpClient, 'get').mockImplementation((url) => {
+      if (url === '/work-orders/wo-1') return Promise.resolve({ data: { ...workOrder, status: 'COMPLETED' } }) as never;
+      if (url === '/services' || url === '/products') return Promise.resolve({ data: { data: [] } }) as never;
+      return Promise.reject(new Error(`Unexpected ${url}`));
+    });
+  });
+
+  it('hides the Financeiro da OS link before the order is completed', async () => {
+    vi.mocked(httpClient.get).mockImplementation((url) => {
+      if (url === '/work-orders/wo-1') return Promise.resolve({ data: { ...workOrder, status: 'IN_PROGRESS' } }) as never;
+      if (url === '/services' || url === '/products') return Promise.resolve({ data: { data: [] } }) as never;
+      return Promise.reject(new Error(`Unexpected ${url}`));
+    });
+
+    renderDetail();
+
+    await screen.findByRole('heading', { name: 'Ordem de Serviço #42' });
+    expect(screen.queryByRole('link', { name: 'Financeiro da OS' })).not.toBeInTheDocument();
+  });
+
+  it('does not open the payment prompt when marking a completed order as delivered', async () => {
+    const user = userEvent.setup();
+    vi.spyOn(httpClient, 'post').mockResolvedValue({ data: { ...workOrder, status: 'DELIVERED' } } as never);
+
+    renderDetail();
+    await screen.findByRole('heading', { name: 'Ordem de Serviço #42' });
+    await user.click(screen.getByRole('button', { name: 'Marcar como entregue' }));
+
+    await waitFor(() => expect(httpClient.post).toHaveBeenCalledWith('/work-orders/wo-1/deliver'));
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
   });
 });

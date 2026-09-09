@@ -93,6 +93,38 @@ describe('WorkOrdersService', () => {
     ]));
   });
 
+  it('lists every available purchased origin for each product, including links created through either endpoint', async () => {
+    const purchasedEntry = (id: string, productId: string, supplierId: string, quantity: number, consumedQuantity: number) => ({
+      id, productId, supplierId, quantity, consumedQuantity, status: 'AVAILABLE', unitCost: '120.00',
+      purchaseDate: new Date('2026-09-01'), warrantyDays: 90,
+      supplier: { id: supplierId, name: `Supplier ${supplierId}` },
+      purchase: { id: `purchase-${id}`, documentNumber: null, status: 'CONFIRMED' },
+    });
+    const findMany = jest.fn().mockResolvedValue([
+      purchasedEntry('entry-product-1', 'product-1', 'supplier-1', 2, 0),
+      purchasedEntry('entry-product-2', 'product-2', 'supplier-2', 3, 1),
+      purchasedEntry('entry-exhausted', 'product-1', 'supplier-3', 1, 1),
+    ]);
+    const prisma = {
+      workOrder: { findFirst: jest.fn().mockResolvedValue({ items: [
+        { id: 'item-1', type: 'PRODUCT', productId: 'product-1', description: 'Product 1', quantity: '1.000', unitPrice: '100.00' },
+        { id: 'item-2', type: 'PRODUCT', productId: 'product-2', description: 'Product 2', quantity: '1.000', unitPrice: '100.00' },
+      ], stockAllocations: [] }) },
+      stockEntry: { findMany },
+    } as never;
+
+    const result = await new WorkOrdersService(prisma).findOne(principal, 'wo');
+
+    expect(result.stockOptions).toEqual(expect.arrayContaining([
+      expect.objectContaining({ id: 'entry-product-1', productId: 'product-1', supplier: expect.objectContaining({ id: 'supplier-1' }) }),
+      expect.objectContaining({ id: 'entry-product-2', productId: 'product-2', supplier: expect.objectContaining({ id: 'supplier-2' }), availableQuantity: 2 }),
+    ]));
+    expect(result.stockOptions).not.toEqual(expect.arrayContaining([expect.objectContaining({ id: 'entry-exhausted' })]));
+    expect(findMany).toHaveBeenCalledWith(expect.objectContaining({
+      where: { organizationId: 'org', productId: { in: ['product-1', 'product-2'] }, status: 'AVAILABLE', purchase: { status: 'CONFIRMED' } },
+    }));
+  });
+
   it('returns a stable conflict for invalid transitions', async () => {
     const tx = { $queryRaw: jest.fn().mockResolvedValue([{ id: 'wo' }]), workOrder: { findFirst: jest.fn().mockResolvedValue({ id: 'wo', organizationId: 'org', status: 'DELIVERED', items: [] }) } };
     const prisma = { $transaction: jest.fn((cb: (value: unknown) => unknown) => cb(tx)) } as never;

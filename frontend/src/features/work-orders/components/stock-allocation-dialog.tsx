@@ -6,7 +6,7 @@ type Props = { workOrder: WorkOrder; pending?: boolean; onCancel: () => void; on
 export function StockAllocationDialog({ workOrder, pending = false, onCancel, onConfirm }: Props) {
   const productItems = workOrder.items.filter((item) => item.type === 'PRODUCT' && item.productId);
   const [sources, setSources] = useState<Record<string, string>>(() => Object.fromEntries(productItems.map((item) => [item.id, 'AUTO'])));
-  const options = workOrder.stockOptions ?? [];
+  const options = (workOrder.stockOptions ?? []).filter((option) => option.availableQuantity > 0);
   function confirm() {
     const selected = productItems.map((item) => ({ item, source: sources[item.id] ?? 'AUTO' }));
     const explicit = selected.filter(({ source }) => source !== 'AUTO');

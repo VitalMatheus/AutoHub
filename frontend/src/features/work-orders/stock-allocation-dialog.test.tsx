@@ -27,4 +27,12 @@ describe('StockAllocationDialog', () => {
     expect(onConfirm).toHaveBeenCalledWith([{ workOrderItemId: 'item-1', stockEntryId: 'entry-b', quantity: 1 }]);
     expect(screen.queryByRole('alert')).not.toBeInTheDocument();
   });
+
+  it('does not offer exhausted stock entries as supplier origins', () => {
+    const exhausted = { ...workOrder, stockOptions: [{ ...workOrder.stockOptions![0], id: 'entry-exhausted', availableQuantity: 0 }] } as unknown as WorkOrder;
+    render(<StockAllocationDialog workOrder={exhausted} onCancel={vi.fn()} onConfirm={vi.fn()} />);
+    expect(screen.getByText('0 origem(ns) disponível(is)')).toBeInTheDocument();
+    expect(screen.getByRole('option', { name: 'Automático (FIFO)' })).toBeInTheDocument();
+    expect(screen.queryByRole('option', { name: /Fornecedor B/ })).not.toBeInTheDocument();
+  });
 });

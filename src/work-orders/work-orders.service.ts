@@ -262,7 +262,8 @@ export class WorkOrdersService {
       orderBy: [{ purchaseDate: 'asc' }, { createdAt: 'asc' }],
       include: { supplier: { select: { id: true, name: true } }, purchase: { select: { id: true, documentNumber: true } } },
     });
-    return this.format({ ...workOrder, stockOptions });
+    const eligibleStockOptions = stockOptions.filter((entry) => entry.quantity > entry.consumedQuantity);
+    return this.format({ ...workOrder, stockOptions: eligibleStockOptions });
   }
 
   async update(principal: AuthenticatedPrincipal, id: string, dto: UpdateWorkOrderDto) {

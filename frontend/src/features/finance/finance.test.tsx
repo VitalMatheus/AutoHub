@@ -5,7 +5,7 @@ import userEvent from '@testing-library/user-event';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { httpClient } from '@/shared/api/http';
-import { FinanceIndexPage, FinancePage } from './pages/finance-page';
+import { FinanceExpensePage, FinanceIndexPage, FinancePage } from './pages/finance-page';
 import { cancelPayment, createPayment, listPayments } from './api/payments-api';
 
 const workOrder = { id: 'wo-1', number: 42, status: 'IN_PROGRESS', total: '100.00' };
@@ -13,6 +13,11 @@ const workOrder = { id: 'wo-1', number: 42, status: 'IN_PROGRESS', total: '100.0
 function renderPage() {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   return render(<QueryClientProvider client={client}><MemoryRouter initialEntries={['/app/finance/work-orders/wo-1']}><Routes><Route path="/app/finance/work-orders/:workOrderId" element={<FinancePage />} /></Routes></MemoryRouter></QueryClientProvider>);
+}
+
+function renderExpensePage() {
+  const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  return render(<QueryClientProvider client={client}><MemoryRouter initialEntries={['/app/finance/expenses/expense-1']}><Routes><Route path="/app/finance/expenses/:expenseId" element={<FinanceExpensePage />} /></Routes></MemoryRouter></QueryClientProvider>);
 }
 
 describe('Finance payment registration', () => {
@@ -126,5 +131,23 @@ describe('Finance Work Order list', () => {
     await waitFor(() => expect(post).toHaveBeenCalledWith('/expenses', { category: 'RENT', description: 'Aluguel', amount: '1200.00', dueDate: expect.any(String) }));
     expect(JSON.stringify(post.mock.calls)).not.toContain('organizationId');
     expect(get).toHaveBeenCalledWith('/expenses', { params: { page: 1, pageSize: 100 } });
+  });
+});
+
+describe('Finance Expense payments', () => {
+  beforeEach(() => vi.restoreAllMocks());
+
+  it('registers an Expense payment without the Work Order-only discount field', async () => {
+    const user = userEvent.setup();
+    vi.spyOn(httpClient, 'get').mockImplementation((url) => Promise.resolve({ data: url.endsWith('/payments') ? { data: [], financial: { total: '100.00', paid: '0.00', balance: '100.00', status: 'UNPAID' } } : { id: 'expense-1', description: 'Aluguel', category: 'RENT', amount: '100.00', paid: '0.00', balance: '100.00', financialStatus: 'UNPAID', status: 'OPEN', dueDate: '2026-01-10', payments: [] } }) as never);
+    const post = vi.spyOn(httpClient, 'post').mockResolvedValue({ data: { id: 'payment-1' } } as never);
+    renderExpensePage();
+
+    expect(await screen.findByRole('heading', { name: 'Aluguel' })).toBeInTheDocument();
+    expect(screen.queryByLabelText('Desconto')).not.toBeInTheDocument();
+    await user.type(screen.getByLabelText('Valor'), '100,00');
+    await user.click(screen.getByRole('button', { name: 'Registrar pagamento' }));
+
+    await waitFor(() => expect(post).toHaveBeenCalledWith('/expenses/expense-1/payments', { amount: '100.00', method: 'PIX', status: 'CONFIRMED', paidAt: expect.any(String) }));
   });
 });
