@@ -133,7 +133,7 @@ async function main(): Promise<void> {
         postalCode: '50000-000',
         operationalStatus: 'ACTIVE',
       },
-      select: { id: true },
+      select: { id: true, name: true },
     });
 
     let commercialAccount = await tx.commercialAccount.findFirst({ where: { organizations: { some: { id: organization.id } } }, select: { id: true } });
@@ -142,8 +142,35 @@ async function main(): Promise<void> {
       await tx.organization.update({ where: { id: organization.id }, data: { commercialAccountId: commercialAccount.id } });
     }
     const basicVersion = await tx.planVersion.findFirst({ where: { plan: { code: 'BASIC' }, status: 'PUBLISHED' }, orderBy: { version: 'desc' }, select: { id: true } });
-    if (basicVersion && !(await tx.subscription.findFirst({ where: { commercialAccountId: commercialAccount.id } }))) {
-      await tx.subscription.create({ data: { commercialAccountId: commercialAccount.id, planVersionId: basicVersion.id } });
+    if (basicVersion) {
+      const trialStartsAt = new Date();
+      const trialEndsAt = new Date(trialStartsAt.getTime() + 14 * 24 * 60 * 60 * 1000);
+      const subscription = await tx.subscription.findFirst({ where: { commercialAccountId: commercialAccount.id }, orderBy: { createdAt: 'desc' }, select: { id: true } });
+      if (subscription) {
+        await tx.subscription.update({
+          where: { id: subscription.id },
+          data: {
+            planVersionId: basicVersion.id,
+            status: 'SCHEDULED',
+            trialEnabled: true,
+            trialStartsAt,
+            trialEndsAt,
+            commercialStartAt: trialStartsAt,
+            firstPaymentReceivedAt: null,
+            firstPaidPeriodStartedAt: null,
+          },
+        });
+      } else {
+        await tx.subscription.create({ data: {
+          commercialAccountId: commercialAccount.id,
+          planVersionId: basicVersion.id,
+          status: 'SCHEDULED',
+          trialEnabled: true,
+          trialStartsAt,
+          trialEndsAt,
+          commercialStartAt: trialStartsAt,
+        } });
+      }
     }
 
     const existingUser = await tx.user.findUnique({ where: { email }, select: { role: true, organizationId: true } });
