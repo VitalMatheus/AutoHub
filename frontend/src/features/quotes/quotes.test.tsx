@@ -10,7 +10,7 @@ import { QuoteDetailPage, QuotesListPage } from './pages/quote-pages';
 
 const customer = { id: 'customer-1', name: 'Maria Silva', active: true };
 const vehicle = { id: 'vehicle-1', customerId: 'customer-1', plate: 'ABC1D23', brand: 'Toyota', model: 'Corolla', active: true };
-const quote = { id: 'quote-1', number: 42, customerId: customer.id, vehicleId: vehicle.id, status: 'APPROVED', notes: null, items: [{ id: 'item-1', type: 'MANUAL', serviceId: null, productId: null, description: 'Troca de óleo', quantity: '1.000', unitPrice: '150.00', total: '150.00' }], total: '150.00', createdAt: '2026-01-01T12:00:00.000Z', updatedAt: '2026-01-01T12:00:00.000Z' };
+const quote = { id: 'quote-1', number: 42, customerId: customer.id, vehicleId: vehicle.id, organization: { name: 'Oficina Central', document: '12.345.678/0001-90', phone: '(81) 99999-9999', email: 'oficina@example.com', city: 'Recife', state: 'PE' }, customer: { id: customer.id, name: customer.name, document: '123.456.789-09', phone: '(85) 99999-0000', email: 'maria@example.com' }, vehicle: { id: vehicle.id, plate: vehicle.plate, brand: vehicle.brand, model: vehicle.model, year: 2022 }, status: 'APPROVED', notes: null, items: [{ id: 'item-1', type: 'MANUAL', serviceId: null, productId: null, description: 'Troca de óleo', quantity: '1.000', unitPrice: '150.00', total: '150.00' }], total: '150.00', createdAt: '2026-01-01T12:00:00.000Z', updatedAt: '2026-01-01T12:00:00.000Z' };
 
 function renderPage(initialEntries = ['/app/quotes']) {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
@@ -96,6 +96,10 @@ describe('Quotes list', () => {
 
   it('keeps an approved quote visible after submit and approve', async () => {
     const user = userEvent.setup();
+    const createObjectURL = vi.fn(() => 'blob:quote-export');
+    const revokeObjectURL = vi.fn();
+    Object.assign(URL, { createObjectURL, revokeObjectURL });
+    const anchorClick = vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => undefined);
     let current = { ...quote, status: 'DRAFT' };
     vi.spyOn(httpClient, 'get').mockImplementation((url) => {
       if (url === '/quotes') return Promise.resolve({ data: { data: [current], meta: { page: 1, pageSize: 20, total: 1, totalPages: 1 } } }) as never;
@@ -112,6 +116,13 @@ describe('Quotes list', () => {
     const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
     render(<QueryClientProvider client={client}><MemoryRouter initialEntries={['/app/quotes/quote-1']}><Routes><Route path="/app/quotes" element={<QuotesListPage />} /><Route path="/app/quotes/:id" element={<QuoteDetailPage />} /></Routes></MemoryRouter></QueryClientProvider>);
 
+    await user.click(await screen.findByRole('button', { name: 'Exportar orçamento' }));
+    expect(createObjectURL).toHaveBeenCalledTimes(1);
+    expect(anchorClick).toHaveBeenCalledTimes(1);
+    expect(document.querySelector('a[download="orcamento-42.html"]')).not.toBeInTheDocument();
+    expect(screen.getByText('Oficina Central')).toBeInTheDocument();
+    expect(screen.getByText('Maria Silva')).toBeInTheDocument();
+    expect(screen.getAllByText('R$ 150,00').length).toBeGreaterThan(1);
     await user.click(await screen.findByRole('button', { name: 'Enviar para aprovação' }));
     await user.click(await screen.findByRole('button', { name: 'Aprovar' }));
     expect(await screen.findByText('Orçamento atualizado para Aprovado.')).toBeInTheDocument();

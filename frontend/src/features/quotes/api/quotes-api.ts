@@ -4,7 +4,7 @@ import { normalizeMoney } from '@/features/shared/money';
 export type ItemType = 'SERVICE' | 'PRODUCT' | 'MANUAL';
 export type DocumentItem = { id: string; type: ItemType; serviceId: string | null; productId: string | null; description: string; quantity: string; unitPrice: string; total?: string };
 export type QuoteStatus = 'DRAFT' | 'PENDING' | 'APPROVED' | 'REJECTED' | 'CANCELLED';
-export type Quote = { id: string; number: number; customerId: string; vehicleId: string; customer?: { name: string }; vehicle?: { plate: string; brand: string; model: string }; status: QuoteStatus; notes: string | null; items: DocumentItem[]; total: string; createdAt: string; updatedAt: string };
+export type Quote = { id: string; number: number; customerId: string; vehicleId: string; organization?: { name: string; document?: string | null; phone?: string | null; email?: string | null; addressLine1?: string | null; addressLine2?: string | null; city?: string | null; state?: string | null; postalCode?: string | null }; customer?: { id?: string; name: string; document?: string | null; phone?: string | null; email?: string | null }; vehicle?: { id?: string; plate: string; brand: string; model: string; year?: number | null }; status: QuoteStatus; notes: string | null; items: DocumentItem[]; total: string; createdAt: string; updatedAt: string };
 export type Page<T> = { data: T[]; meta: { page: number; pageSize: number; total: number; totalPages: number } };
 export type ItemInput = { type: ItemType; serviceId?: string; productId?: string; description?: string; quantity: string; unitPrice?: string };
 

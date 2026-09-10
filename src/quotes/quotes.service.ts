@@ -101,7 +101,37 @@ export class QuotesService {
 
   async findOne(principal: AuthenticatedPrincipal, id: string) {
     const organizationId = this.tenant(principal);
-    const quote = await this.prisma.quote.findFirst({ where: { id, organizationId }, include: { items: { orderBy: { createdAt: 'asc' } } } });
+    const quote = await this.prisma.quote.findFirst({
+      where: { id, organizationId },
+      select: {
+        id: true,
+        organizationId: true,
+        customerId: true,
+        vehicleId: true,
+        number: true,
+        status: true,
+        notes: true,
+        createdAt: true,
+        updatedAt: true,
+        organization: {
+          select: {
+            id: true,
+            name: true,
+            document: true,
+            phone: true,
+            email: true,
+            addressLine1: true,
+            addressLine2: true,
+            city: true,
+            state: true,
+            postalCode: true,
+          },
+        },
+        customer: { select: { id: true, name: true, document: true, phone: true, email: true } },
+        vehicle: { select: { id: true, plate: true, brand: true, model: true, year: true } },
+        items: { orderBy: { createdAt: 'asc' } },
+      },
+    });
     if (!quote) throw new NotFoundException('Quote not found');
     return this.format(quote);
   }
