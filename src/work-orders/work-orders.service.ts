@@ -76,6 +76,7 @@ export class WorkOrdersService {
         supplier: allocation.stockEntry.supplier ? { id: allocation.stockEntry.supplier.id, name: allocation.stockEntry.supplier.name } : null,
         purchase: allocation.stockEntry.purchase ? { id: allocation.stockEntry.purchase.id, documentNumber: allocation.stockEntry.purchase.documentNumber } : null,
         batchNumber: allocation.stockEntry.batchNumber,
+        purchaseDate: allocation.stockEntry.purchaseDate.toISOString().slice(0, 10),
         warrantyExpiry: allocation.stockEntry.warrantyDays && allocation.stockEntry.purchaseDate
           ? new Date(new Date(allocation.stockEntry.purchaseDate).getTime() + allocation.stockEntry.warrantyDays * 86400000).toISOString().slice(0, 10)
           : null,
@@ -86,7 +87,8 @@ export class WorkOrdersService {
       productId: entry.productId,
       availableQuantity: entry.quantity - entry.consumedQuantity,
       unitCost: entry.unitCost?.toString() ?? null,
-      purchaseDate: entry.purchaseDate.toISOString().slice(0, 10),
+      origin: entry.origin ?? 'PURCHASE',
+      purchaseDate: entry.purchaseDate ? entry.purchaseDate.toISOString().slice(0, 10) : null,
       supplier: entry.supplier ? { id: entry.supplier.id, name: entry.supplier.name } : null,
       purchase: entry.purchase ? { id: entry.purchase.id, documentNumber: entry.purchase.documentNumber } : null,
       batchNumber: entry.batchNumber,
@@ -257,13 +259,24 @@ export class WorkOrdersService {
     const workOrder = await this.prisma.workOrder.findFirst({ where: { id, organizationId }, include: this.detailInclude() });
     if (!workOrder) throw new NotFoundException('Work Order not found');
     const productIds = [...new Set(workOrder.items.filter((item) => item.type === 'PRODUCT' && item.productId).map((item) => item.productId!))];
-    const stockOptions = productIds.length === 0 ? [] : await this.prisma.stockEntry.findMany({
-      where: { organizationId, productId: { in: productIds }, status: 'AVAILABLE', purchase: { status: 'CONFIRMED' } },
-      orderBy: [{ purchaseDate: 'asc' }, { createdAt: 'asc' }],
-      include: { supplier: { select: { id: true, name: true } }, purchase: { select: { id: true, documentNumber: true } } },
-    });
+    if (productIds.length === 0) return this.format({ ...workOrder, stockOptions: [] });
+    const [stockOptions, products] = await Promise.all([
+      this.prisma.stockEntry.findMany({
+        where: { organizationId, productId: { in: productIds }, status: 'AVAILABLE', purchase: { status: 'CONFIRMED' } },
+        orderBy: [{ purchaseDate: 'asc' }, { createdAt: 'asc' }],
+        include: { supplier: { select: { id: true, name: true } }, purchase: { select: { id: true, documentNumber: true } } },
+      }),
+      this.prisma.product.findMany({ where: { organizationId, id: { in: productIds } }, select: { id: true, stockQuantity: true } }),
+    ]);
     const eligibleStockOptions = stockOptions.filter((entry) => entry.quantity > entry.consumedQuantity);
-    return this.format({ ...workOrder, stockOptions: eligibleStockOptions });
+    const openingOptions = products.flatMap((product) => {
+      const traceableAvailable = eligibleStockOptions
+        .filter((entry) => entry.productId === product.id)
+        .reduce((sum, entry) => sum + entry.quantity - entry.consumedQuantity, 0);
+      const availableQuantity = Math.max(0, product.stockQuantity - traceableAvailable);
+      return availableQuantity > 0 ? [{ id: `opening-${product.id}`, productId: product.id, quantity: availableQuantity, consumedQuantity: 0, origin: 'OPENING', unitCost: null, purchaseDate: null, supplier: null, purchase: null, batchNumber: null, warrantyDays: 0 }] : [];
+    });
+    return this.format({ ...workOrder, stockOptions: [...eligibleStockOptions, ...openingOptions] });
   }
 
   async update(principal: AuthenticatedPrincipal, id: string, dto: UpdateWorkOrderDto) {

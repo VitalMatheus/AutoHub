@@ -110,6 +110,7 @@ describe('WorkOrdersService', () => {
         { id: 'item-1', type: 'PRODUCT', productId: 'product-1', description: 'Product 1', quantity: '1.000', unitPrice: '100.00' },
         { id: 'item-2', type: 'PRODUCT', productId: 'product-2', description: 'Product 2', quantity: '1.000', unitPrice: '100.00' },
       ], stockAllocations: [] }) },
+      product: { findMany: jest.fn().mockResolvedValue([{ id: 'product-1', stockQuantity: 2 }, { id: 'product-2', stockQuantity: 2 }]) },
       stockEntry: { findMany },
     } as never;
 
@@ -123,6 +124,20 @@ describe('WorkOrdersService', () => {
     expect(findMany).toHaveBeenCalledWith(expect.objectContaining({
       where: { organizationId: 'org', productId: { in: ['product-1', 'product-2'] }, status: 'AVAILABLE', purchase: { status: 'CONFIRMED' } },
     }));
+  });
+
+  it('exposes remaining opening stock as an origin when no purchase entry exists', async () => {
+    const prisma = {
+      workOrder: { findFirst: jest.fn().mockResolvedValue({ items: [{ id: 'item-1', type: 'PRODUCT', productId: 'product-1', description: 'Vela', quantity: '1.000', unitPrice: '40.00' }], stockAllocations: [] }) },
+      product: { findMany: jest.fn().mockResolvedValue([{ id: 'product-1', stockQuantity: 3 }]) },
+      stockEntry: { findMany: jest.fn().mockResolvedValue([]) },
+    } as never;
+
+    const result = await new WorkOrdersService(prisma).findOne(principal, 'wo');
+
+    expect(result.stockOptions).toEqual(expect.arrayContaining([
+      expect.objectContaining({ id: 'opening-product-1', productId: 'product-1', origin: 'OPENING', availableQuantity: 3, supplier: null }),
+    ]));
   });
 
   it('returns a stable conflict for invalid transitions', async () => {
