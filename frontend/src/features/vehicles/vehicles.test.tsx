@@ -67,6 +67,13 @@ describe('Vehicle management through the routed application', () => {
     expect(screen.getByRole('link', { name: 'Editar veículo' })).toHaveAttribute('href', '/app/vehicles/vehicle-1/edit');
   });
 
+  it('does not send an update when editing without changes', async () => {
+    const user = userEvent.setup(); renderVehicles('/app/vehicles/vehicle-1/edit'); await screen.findByRole('heading', { name: 'Editar veículo' });
+    const patch = vi.spyOn(httpClient, 'patch'); await user.click(screen.getByRole('button', { name: 'Salvar veículo' }));
+    expect(await screen.findByRole('heading', { name: 'Toyota Corolla' })).toBeInTheDocument();
+    expect(screen.getByRole('status')).toHaveTextContent('Nenhuma alteração necessária.'); expect(patch).not.toHaveBeenCalled();
+  });
+
   it('loads the vehicle service history with translated fields and a work order link', async () => {
     const historyResponse = { data: [{ id: 'wo-1', number: 42, vehicleId: vehicle.id, customerId: customer.id, quoteId: null, status: 'DELIVERED', mileage: 43000, diagnosis: null, reportedProblem: null, items: [{ id: 'item-1', description: 'Troca de óleo', quantity: '1.000', unitPrice: '150.00', total: '150.00', type: 'MANUAL' }], total: '150.00', createdAt: '2026-02-01T12:00:00.000Z', updatedAt: '2026-02-01T12:00:00.000Z', expectedCompletionDate: null, notes: null }], meta: { page: 1, pageSize: 20, total: 1, totalPages: 1 } };
     renderVehicles('/app/vehicles/vehicle-1', historyResponse);

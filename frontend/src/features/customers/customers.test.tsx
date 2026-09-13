@@ -103,6 +103,13 @@ describe('Customer management through the routed application', () => {
     await waitFor(() => expect(patch).toHaveBeenCalledWith('/customers/customer-1', { email: '' }));
   });
 
+  it('does not send an update when editing without changes', async () => {
+    const user = userEvent.setup(); renderCustomers('/app/customers/customer-1/edit'); await screen.findByRole('heading', { name: 'Editar cliente' });
+    const patch = vi.spyOn(httpClient, 'patch'); await user.click(screen.getByRole('button', { name: 'Salvar cliente' }));
+    expect(await screen.findByRole('heading', { name: 'Maria Silva' })).toBeInTheDocument();
+    expect(screen.getByRole('status')).toHaveTextContent('Nenhuma alteração necessária.'); expect(patch).not.toHaveBeenCalled();
+  });
+
   it('shows Customer details and links to its Vehicle list without fabricated records', async () => { renderCustomers('/app/customers/customer-1'); expect(await screen.findByRole('heading', { name: 'Maria Silva' })).toBeInTheDocument(); expect(screen.getByText('Prefere contato pela manhã.')).toBeInTheDocument(); expect(screen.getByRole('link', { name: 'Ver veículos' })).toHaveAttribute('href', '/app/vehicles?customerId=customer-1'); });
 
   it('shows a loading skeleton while the customer list is pending', async () => {

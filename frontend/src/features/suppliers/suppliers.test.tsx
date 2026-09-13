@@ -37,6 +37,14 @@ describe('Suppliers', () => {
     vi.spyOn(httpClient, 'get').mockResolvedValue({ data: supplier } as never); const patch = vi.spyOn(httpClient, 'patch').mockResolvedValue({ data: { ...supplier, name: 'Distribuidora Atualizada' } } as never);
     render(<QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}><MemoryRouter initialEntries={['/app/suppliers/supplier-1']}><Routes><Route path="/app/suppliers/:id" element={<SupplierDetailPage />} /><Route path="/app/suppliers" element={<p>Lista de fornecedores</p>} /></Routes></MemoryRouter></QueryClientProvider>);
     await screen.findByDisplayValue('Distribuidora'); const name = screen.getAllByRole('textbox')[0]; await user.clear(name); await user.type(name, 'Distribuidora Atualizada'); await user.click(screen.getByRole('button', { name: 'Salvar fornecedor' }));
-    await waitFor(() => expect(patch).toHaveBeenCalledWith('/suppliers/supplier-1', { name: 'Distribuidora Atualizada', document: '12345678000190', phone: '81999999999' })); expect(await screen.findByText('Lista de fornecedores')).toBeInTheDocument();
+    await waitFor(() => expect(patch).toHaveBeenCalledWith('/suppliers/supplier-1', { name: 'Distribuidora Atualizada' })); expect(await screen.findByText('Lista de fornecedores')).toBeInTheDocument();
+  });
+
+  it('does not send an update when editing without changes', async () => {
+    const user = userEvent.setup(); const supplier = { id: 'supplier-1', name: 'Distribuidora', document: '12345678000190', email: null, phone: '81999999999', notes: null, active: true, createdAt: '2026-01-01T00:00:00.000Z', updatedAt: '2026-01-01T00:00:00.000Z' };
+    vi.spyOn(httpClient, 'get').mockResolvedValue({ data: supplier } as never); const patch = vi.spyOn(httpClient, 'patch');
+    render(<QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}><MemoryRouter initialEntries={['/app/suppliers/supplier-1']}><Routes><Route path="/app/suppliers/:id" element={<SupplierDetailPage />} /></Routes></MemoryRouter></QueryClientProvider>);
+    await screen.findByDisplayValue('Distribuidora'); await user.click(screen.getByRole('button', { name: 'Salvar fornecedor' }));
+    expect(screen.getByRole('status')).toHaveTextContent('Nenhuma alteração necessária.'); expect(patch).not.toHaveBeenCalled();
   });
 });
