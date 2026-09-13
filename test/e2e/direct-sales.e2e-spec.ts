@@ -13,6 +13,17 @@ describe('Direct Sales (e2e)', () => {
   const auth = () => ({ Authorization: `Bearer ${token}` });
   it('confirms a simple paid sale and derives payment balance without OS', async () => { const draft = await request(app.getHttpServer()).post('/api/v1/direct-sales').set(auth()).send({ items: [{ productId, quantity: 1, unitPrice: '120.00', discount: '10.00' }] }).expect(201); expect(draft.body).toMatchObject({ status: 'DRAFT', total: '110.00' }); const sale = await request(app.getHttpServer()).post(`/api/v1/direct-sales/${draft.body.id}/confirm`).set(auth()).send({ payments: [{ amount: '110.00', method: 'PIX' }] }).expect(201); expect(sale.body.financial).toMatchObject({ total: '110.00', paid: '110.00', balance: '0.00', status: 'PAID' }); expect((await prisma.product.findUniqueOrThrow({ where: { id: productId } })).stockQuantity).toBe(2); const receipt = await request(app.getHttpServer()).get(`/api/v1/direct-sales/${draft.body.id}/receipt`).set(auth()).expect(200); expect(receipt.body.fiscal).toBe(false); });
   it('rejects cross-tenant product access', async () => { const other = await prisma.product.create({ data: { organizationId: otherOrganizationId, name: 'Other', sku: `OTHER-${suffix}`, salePrice: '10.00' } }); await request(app.getHttpServer()).post('/api/v1/direct-sales').set(auth()).send({ items: [{ productId: other.id, quantity: 1, unitPrice: '10.00' }] }).expect(404); });
+  it('reports insufficient stock with a stable code and keeps the draft unchanged', async () => {
+    const product = await prisma.product.create({ data: { organizationId, name: 'Pastilha sem estoque', sku: `EMPTY-${suffix}`, salePrice: '50.00', stockQuantity: 1 } });
+    const draft = await request(app.getHttpServer()).post('/api/v1/direct-sales').set(auth()).send({ items: [{ productId: product.id, quantity: 2, unitPrice: '50.00' }] }).expect(201);
+    await request(app.getHttpServer()).post(`/api/v1/direct-sales/${draft.body.id}/confirm`).set(auth()).send({ payments: [{ amount: '100.00', method: 'PIX' }] }).expect(409).expect((response) => {
+      expect(response.body.code).toBe('INSUFFICIENT_STOCK');
+      expect(response.body.detail).toContain('EMPTY-');
+    });
+    expect((await prisma.product.findUniqueOrThrow({ where: { id: product.id } })).stockQuantity).toBe(1);
+    expect((await prisma.directSale.findUniqueOrThrow({ where: { id: draft.body.id } })).status).toBe('DRAFT');
+    expect(await prisma.salePayment.count({ where: { directSaleId: draft.body.id } })).toBe(0);
+  });
   it('confirms a sale only once when confirmation requests arrive concurrently', async () => {
     const product = await prisma.product.create({ data: { organizationId, name: 'Pastilha', sku: `RACE-${suffix}`, salePrice: '50.00', stockQuantity: 3 } });
     const draft = await request(app.getHttpServer()).post('/api/v1/direct-sales').set(auth()).send({ items: [{ productId: product.id, quantity: 1, unitPrice: '50.00' }] }).expect(201);

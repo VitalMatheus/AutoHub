@@ -48,6 +48,7 @@ const LEGACY_ERROR_TRANSLATIONS: Record<string, string> = {
 };
 
 const CODE_ERROR_TRANSLATIONS: Record<string, string> = {
+  INSUFFICIENT_STOCK: 'Não há estoque suficiente para concluir a venda.',
   PAYMENT_EXCEEDS_BALANCE: 'O pagamento excede o saldo da ordem de serviço.',
   PAYMENT_ALREADY_CANCELLED: 'O pagamento já está cancelado.',
   WORK_ORDER_CANCELLED: 'Ordens de serviço canceladas não podem receber pagamentos.',

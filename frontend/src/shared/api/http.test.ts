@@ -99,6 +99,7 @@ describe('HTTP error presentation', () => {
   it.each([
     ['QUOTE_NOT_APPROVED', 'Only approved Quotes can be converted into Work Orders.', 'Apenas orçamentos aprovados podem ser convertidos em ordens de serviço.'],
     ['WORK_ORDER_INVALID_TRANSITION', 'Work Order cannot complete from OPEN.', 'A transição solicitada para a ordem de serviço não é permitida.'],
+    ['INSUFFICIENT_STOCK', 'Insufficient stock for Product EMPTY-1.', 'Não há estoque suficiente para concluir a venda.'],
     ['HTTP_409', 'Product SKU already exists in this Organization', 'O SKU do produto já existe nesta oficina.'],
     ['HTTP_404', 'Service not found', 'Serviço não encontrado.'],
   ])('translates %s API errors without exposing the original detail', (code, detail, expected) => {

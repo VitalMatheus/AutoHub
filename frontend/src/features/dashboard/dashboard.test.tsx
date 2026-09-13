@@ -1,6 +1,6 @@
 import '@testing-library/jest-dom/vitest';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { render, screen } from '@testing-library/react';
+import { fireEvent, render, screen } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { AppHomePage } from '@/app/pages/app-home-page';
@@ -9,6 +9,18 @@ import { httpClient } from '@/shared/api/http';
 
 describe('Dashboard', () => {
   beforeEach(() => vi.restoreAllMocks());
+
+  it('shows the trial notice in Portuguese and dismisses it for the current day', async () => {
+    localStorage.clear();
+    vi.spyOn(httpClient, 'get').mockResolvedValue({ data: { referenceAt: '2026-01-20T12:00:00.000Z', timezone: 'America/Recife', organization: { id: 'org-1', name: 'Oficina' }, trial: { status: 'ACTIVE', endsAt: '2026-01-25T12:00:00.000Z', remainingDays: 5, message: 'Trial Period ends in 5 days' }, metrics: { customers: 0, vehicles: 0, quotes: 0, workOrders: 0 }, activities: [] } } as never);
+    const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    render(<QueryClientProvider client={queryClient}><MemoryRouter><AppHomePage /></MemoryRouter></QueryClientProvider>);
+
+    expect(await screen.findByText('Seu período de teste termina em 5 dias.')).toBeInTheDocument();
+    expect(screen.queryByText('Trial Period ends in 5 days')).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Fechar aviso do período de teste' }));
+    expect(screen.queryByRole('region', { name: 'Status do período de teste' })).not.toBeInTheDocument();
+  });
 
   it('shows live operational metrics, recent activities and quick-action links', async () => {
     vi.spyOn(httpClient, 'get').mockResolvedValue({ data: { metrics: { customers: 8, vehicles: 5, quotes: 3, workOrders: 2 }, activities: [{ type: 'CUSTOMER_CREATED', label: 'Cliente cadastrado', description: 'Maria', occurredAt: '2026-01-20T12:00:00.000Z', href: '/app/customers/customer-1' }] } } as never);
