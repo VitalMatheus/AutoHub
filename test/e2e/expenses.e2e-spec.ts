@@ -39,6 +39,15 @@ describe('Expenses (e2e)', () => {
     await request(app.getHttpServer()).post(`/api/v1/expenses/${otherExpenseId}/payments`).set(auth()).send({ amount: '1.00', method: 'CASH', paidAt: '2026-01-03T10:00:00.000Z' }).expect(404);
   });
 
+  it('lists the newest expenses first', async () => {
+    const older = await request(app.getHttpServer()).post('/api/v1/expenses').set(auth()).send({ category: 'RENT', description: 'Despesa antiga', amount: '100.00', dueDate: '2026-01-10' }).expect(201);
+    const newer = await request(app.getHttpServer()).post('/api/v1/expenses').set(auth()).send({ category: 'RENT', description: 'Despesa nova', amount: '100.00', dueDate: '2026-02-10' }).expect(201);
+
+    const listed = await request(app.getHttpServer()).get('/api/v1/expenses?page=1&pageSize=20').set(auth()).expect(200);
+    const expenseIds = listed.body.data.map((expense: { id: string }) => expense.id);
+    expect(expenseIds.indexOf(newer.body.id)).toBeLessThan(expenseIds.indexOf(older.body.id));
+  });
+
   it('preserves confirmed payments and rejects editing or cancelling a paid Expense', async () => {
     const created = await request(app.getHttpServer()).post('/api/v1/expenses').set(auth()).send({ category: 'MAINTENANCE', description: 'Manutenção', amount: '50.00', dueDate: '2026-01-10' }).expect(201);
     const payment = await request(app.getHttpServer()).post(`/api/v1/expenses/${created.body.id}/payments`).set(auth()).send({ amount: '20.00', method: 'PIX', paidAt: '2026-01-04T10:00:00.000Z' }).expect(201);
