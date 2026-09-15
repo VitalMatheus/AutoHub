@@ -20,7 +20,7 @@ import { NewSubscriptionChargePage, SubscriptionChargeDetailPage, SubscriptionCh
 import { PlanDetailPage, PlansListPage } from '@/features/platform/pages/plan-pages';
 import { AuditEventsPage } from '@/features/platform/pages/audit-event-pages';
 import { ProvisionCommercialAccountPage } from '@/features/platform/pages/provision-commercial-account-pages';
-import { FinanceExpensePage, FinanceIndexPage, FinancePage } from '@/features/finance/pages/finance-page';
+import { FinanceExpensePage, FinanceExpensesPage, FinanceIndexPage, FinancePage, FinanceReceivablesPage, NewFinanceExpensePage } from '@/features/finance/pages/finance-page';
 import { NewSupplierPage, SupplierDetailPage, SuppliersListPage } from '@/features/suppliers/pages/supplier-pages';
 import { NewPurchasePage, PurchaseDetailPage, PurchasesListPage } from '@/features/purchases/pages/purchase-pages';
 import { DirectSaleDetailPage, DirectSaleReceiptPage, DirectSalesListPage, NewDirectSalePage } from '@/features/direct-sales/pages/direct-sale-pages';
@@ -80,6 +80,9 @@ export function AppRouter() {
           <Route path="direct-sales/:id" element={<DirectSaleDetailPage />} />
           <Route path="direct-sales/:id/receipt" element={<DirectSaleReceiptPage />} />
           <Route path="finance" element={<FinanceIndexPage />} />
+          <Route path="finance/receivables" element={<FinanceReceivablesPage />} />
+          <Route path="finance/expenses" element={<FinanceExpensesPage />} />
+          <Route path="finance/expenses/new" element={<NewFinanceExpensePage />} />
           <Route path="finance/work-orders/:workOrderId" element={<FinancePage />} />
           <Route path="finance/expenses/:expenseId" element={<FinanceExpensePage />} />
           <Route path="reports" element={<ReportsPage />} />

@@ -5,7 +5,7 @@ import userEvent from '@testing-library/user-event';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { httpClient } from '@/shared/api/http';
-import { FinanceExpensePage, FinanceIndexPage, FinancePage } from './pages/finance-page';
+import { FinanceExpensePage, FinanceIndexPage, FinancePage, FinanceReceivablesPage, NewFinanceExpensePage } from './pages/finance-page';
 import { cancelPayment, createPayment, listPayments } from './api/payments-api';
 
 const workOrder = { id: 'wo-1', number: 42, status: 'IN_PROGRESS', total: '100.00' };
@@ -90,8 +90,8 @@ describe('Finance Work Order list', () => {
   beforeEach(() => vi.restoreAllMocks());
 
   it('loads operational and financial fields through the dedicated endpoint', async () => {
-    vi.spyOn(httpClient, 'get').mockImplementation((url) => Promise.resolve({ data: url === '/expenses' ? { data: [], meta: { page: 1, pageSize: 100, total: 0, totalPages: 0 } } : { data: [{ ...workOrder, customer: { name: 'Maria Silva' }, vehicle: { brand: 'Toyota', model: 'Corolla', plate: 'ABC1D23' }, financial: { total: '100.00', paid: '35.10', balance: '64.90', status: 'PARTIAL' } }], meta: { page: 1, pageSize: 100, total: 1, totalPages: 1 } } }) as never);
-    render(<QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}><MemoryRouter><FinanceIndexPage /></MemoryRouter></QueryClientProvider>);
+    vi.spyOn(httpClient, 'get').mockResolvedValue({ data: { data: [{ ...workOrder, customer: { name: 'Maria Silva' }, vehicle: { brand: 'Toyota', model: 'Corolla', plate: 'ABC1D23' }, financial: { total: '100.00', paid: '35.10', balance: '64.90', status: 'PARTIAL' } }], meta: { page: 1, pageSize: 20, total: 1, totalPages: 1 } } } as never);
+    render(<QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}><MemoryRouter initialEntries={['/app/finance/receivables']}><Routes><Route path="/app/finance/receivables" element={<FinanceReceivablesPage />} /></Routes></MemoryRouter></QueryClientProvider>);
 
     expect(await screen.findByText('#42')).toBeInTheDocument();
     expect(screen.getByText('Maria Silva')).toBeInTheDocument();
@@ -101,28 +101,28 @@ describe('Finance Work Order list', () => {
     expect(screen.getByText('R$ 35,10')).toBeInTheDocument();
     expect(screen.getByText('R$ 64,90')).toBeInTheDocument();
     expect(screen.getAllByText('Parcial')).toHaveLength(2);
-    expect(httpClient.get).toHaveBeenCalledWith('/work-orders/financial', { params: { page: 1, pageSize: 100 } });
+    expect(httpClient.get).toHaveBeenCalledWith('/work-orders/financial', { params: { page: 1, pageSize: 20 } });
   });
 
   it('filters Work Orders by financial status and customer, vehicle or number', async () => {
     const user = userEvent.setup();
-    const get = vi.spyOn(httpClient, 'get').mockImplementation((url) => Promise.resolve({ data: url === '/expenses' ? { data: [], meta: { page: 1, pageSize: 100, total: 0, totalPages: 0 } } : { data: [], meta: { page: 1, pageSize: 100, total: 0, totalPages: 0 } } }) as never);
-    render(<QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}><MemoryRouter><FinanceIndexPage /></MemoryRouter></QueryClientProvider>);
+    const get = vi.spyOn(httpClient, 'get').mockResolvedValue({ data: { data: [], meta: { page: 1, pageSize: 20, total: 0, totalPages: 0 } } } as never);
+    render(<QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}><MemoryRouter initialEntries={['/app/finance/receivables']}><Routes><Route path="/app/finance/receivables" element={<FinanceReceivablesPage />} /></Routes></MemoryRouter></QueryClientProvider>);
 
     const search = await screen.findByLabelText('Buscar por número, cliente ou veículo');
     fireEvent.change(search, { target: { value: 'Maria' } });
     await user.selectOptions(await screen.findByLabelText('Filtrar por situação financeira'), 'PARTIAL');
 
-    await waitFor(() => expect(get).toHaveBeenCalledWith('/work-orders/financial', { params: { page: 1, pageSize: 100, financialStatus: 'PARTIAL', search: 'Maria' } }));
+    await waitFor(() => expect(get).toHaveBeenLastCalledWith('/work-orders/financial', { params: { page: 1, pageSize: 20, financialStatus: 'PARTIAL', search: 'Maria' } }));
   });
 
   it('creates an Expense from the Finance page without tenant data', async () => {
     const user = userEvent.setup();
-    const get = vi.spyOn(httpClient, 'get').mockImplementation((url) => Promise.resolve({ data: url === '/expenses' ? { data: [], meta: { page: 1, pageSize: 100, total: 0, totalPages: 0 } } : { data: [], meta: { page: 1, pageSize: 100, total: 0, totalPages: 0 } } }) as never);
+    const get = vi.spyOn(httpClient, 'get').mockResolvedValue({ data: { data: [], meta: { page: 1, pageSize: 20, total: 0, totalPages: 0 } } } as never);
     const post = vi.spyOn(httpClient, 'post').mockResolvedValue({ data: { id: 'expense-1' } } as never);
-    render(<QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}><MemoryRouter><FinanceIndexPage /></MemoryRouter></QueryClientProvider>);
+    render(<QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}><MemoryRouter initialEntries={['/app/finance/expenses/new']}><Routes><Route path="/app/finance/expenses/new" element={<NewFinanceExpensePage />} /><Route path="/app/finance/expenses/:expenseId" element={<div />} /></Routes></MemoryRouter></QueryClientProvider>);
 
-    await screen.findByRole('heading', { name: 'Nova despesa' });
+    await screen.findByRole('heading', { name: 'Nova despesa', level: 1 });
     await user.selectOptions(screen.getByLabelText('Categoria da despesa'), 'RENT');
     await user.type(screen.getByLabelText('Descrição da despesa'), 'Aluguel');
     await user.type(screen.getByLabelText('Valor da despesa'), '1200,00');
@@ -130,7 +130,7 @@ describe('Finance Work Order list', () => {
 
     await waitFor(() => expect(post).toHaveBeenCalledWith('/expenses', { category: 'RENT', description: 'Aluguel', amount: '1200.00', dueDate: expect.any(String) }));
     expect(JSON.stringify(post.mock.calls)).not.toContain('organizationId');
-    expect(get).toHaveBeenCalledWith('/expenses', { params: { page: 1, pageSize: 100 } });
+    expect(get).not.toHaveBeenCalled();
   });
 });
 

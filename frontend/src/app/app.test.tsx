@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/react';
+import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { AppProviders } from './providers/app-providers';
@@ -255,9 +255,11 @@ describe('Organization Admin frontend shell', () => {
     expect(screen.getByRole('link', { name: 'Dashboard' })).not.toHaveAttribute('aria-current');
     expect(screen.getByRole('link', { name: 'Clientes' })).toHaveAttribute('aria-current', 'page');
     await user.click(screen.getByRole('link', { name: 'Financeiro' }));
-    expect(await screen.findByRole('heading', { name: 'Ordens de serviço', level: 2 })).toBeInTheDocument();
+    await waitFor(() => expect(screen.getAllByRole('heading', { name: 'Financeiro', level: 1 })).toHaveLength(2));
     expect(screen.getAllByRole('heading', { name: 'Financeiro', level: 1 })).toHaveLength(2);
-    expect(httpClient.get).toHaveBeenCalledWith('/work-orders/financial', { params: { page: 1, pageSize: 100 } });
+    await user.click(screen.getByRole('link', { name: 'Consultar recebimentos' }));
+    expect(await screen.findByRole('heading', { name: 'Contas a receber', level: 1 })).toBeInTheDocument();
+    expect(httpClient.get).toHaveBeenCalledWith('/work-orders/financial', { params: { page: 1, pageSize: 20 } });
     expect(screen.queryByText('Em breve')).not.toBeInTheDocument();
   });
 
