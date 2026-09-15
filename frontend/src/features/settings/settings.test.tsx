@@ -19,8 +19,12 @@ describe('Organization User settings', () => {
     renderPage();
     expect(await screen.findByText('Ana Admin')).toBeInTheDocument();
     expect(get).toHaveBeenCalledWith('/organizations/users');
-    expect(screen.getByText('Organization Admin')).toBeInTheDocument();
-    expect(screen.getByRole('heading', { name: 'Encerrar Subscription' })).toBeInTheDocument();
+    expect(screen.getByText('Administrador da oficina')).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'Encerrar assinatura' })).toBeInTheDocument();
+    const headings = screen.getAllByRole('heading', { level: 2 }).map((heading) => heading.textContent);
+    expect(headings.at(-1)).toBe('Assinatura e cancelamento');
+    expect(screen.queryByText('Subscription')).not.toBeInTheDocument();
+    expect(screen.queryByText('Organization Admin')).not.toBeInTheDocument();
   });
 
   it('requests subscription cancellation from settings', async () => {
@@ -47,6 +51,34 @@ describe('Organization User settings', () => {
     expect(post.mock.calls[0][1]).not.toHaveProperty('role');
     expect(post.mock.calls[0][1]).not.toHaveProperty('organizationId');
     expect(await screen.findByRole('alert')).toHaveTextContent('one-time-token');
+  });
+
+  it('shows the server reason when the workshop reached its administrator limit', async () => {
+    const user = userEvent.setup();
+    vi.spyOn(httpClient, 'get').mockImplementation((url) => Promise.resolve({ data: url === '/organizations/users' ? [] : { cancellation: null } }) as never);
+    vi.spyOn(httpClient, 'post').mockRejectedValue(new ApiError({ status: 409, detail: 'The Commercial Account allows at most 3 non-disabled Users.', code: 'PLAN_USER_LIMIT_REACHED' }));
+    renderPage();
+    await user.type(await screen.findByLabelText('Nome do usuário'), 'Novo Admin');
+    await user.type(screen.getByLabelText('E-mail do usuário'), 'novo@example.com');
+    await user.click(screen.getByRole('button', { name: 'Convidar administrador' }));
+
+    expect(await screen.findByRole('alert')).toHaveTextContent('O limite de administradores da sua assinatura foi atingido.');
+  });
+
+  it('keeps the invitation successful when refreshing the user list fails', async () => {
+    const user = userEvent.setup();
+    let usersRequest = 0;
+    vi.spyOn(httpClient, 'get').mockImplementation((url) => {
+      if (url === '/organizations/users' && usersRequest++ > 0) return Promise.reject(new Error('refresh failed')) as never;
+      return Promise.resolve({ data: url === '/organizations/users' ? [] : { cancellation: null } }) as never;
+    });
+    vi.spyOn(httpClient, 'post').mockResolvedValue({ data: { user: { ...admin, email: 'novo@example.com' }, activationToken: 'one-time-token' } } as never);
+    renderPage();
+    await user.type(await screen.findByLabelText('Nome do usuário'), 'Novo Admin');
+    await user.type(screen.getByLabelText('E-mail do usuário'), 'novo@example.com');
+    await user.click(screen.getByRole('button', { name: 'Convidar administrador' }));
+
+    expect(await screen.findByText((text) => text.includes('Convite criado para novo@example.com.'))).toBeInTheDocument();
   });
 
   it('activates, deactivates and revokes sessions through explicit endpoints', async () => {

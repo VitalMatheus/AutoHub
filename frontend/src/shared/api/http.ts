@@ -53,6 +53,7 @@ const CODE_ERROR_TRANSLATIONS: Record<string, string> = {
   PAYMENT_ALREADY_CANCELLED: 'O pagamento já está cancelado.',
   WORK_ORDER_CANCELLED: 'Ordens de serviço canceladas não podem receber pagamentos.',
   CONFLICT: 'Não foi possível concluir porque este registro já existe.',
+  PLAN_USER_LIMIT_REACHED: 'O limite de administradores da sua assinatura foi atingido.',
 };
 const SAFE_DETAILS = new Set([...Object.values(LEGACY_ERROR_TRANSLATIONS), ...Object.values(CODE_ERROR_TRANSLATIONS)]);
 

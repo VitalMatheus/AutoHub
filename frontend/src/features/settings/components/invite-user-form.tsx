@@ -1,4 +1,5 @@
 import { FormEvent, useState } from 'react';
+import { ApiError, getUserFacingError } from '@/shared/api/http';
 import type { InviteUserInput } from '../api/organization-users-api';
 
 type Props = { submitting?: boolean; onSubmit: (input: InviteUserInput) => Promise<unknown> };
@@ -18,8 +19,8 @@ export function InviteUserForm({ submitting = false, onSubmit }: Props) {
     try {
       await onSubmit({ name, email });
       setValue({ name: '', email: '' });
-    } catch {
-      setError('Não foi possível enviar o convite agora.');
+    } catch (error) {
+      setError(error instanceof ApiError ? getUserFacingError(error.problem, 'Não foi possível enviar o convite agora.') : 'Não foi possível enviar o convite agora.');
     }
   }
 
